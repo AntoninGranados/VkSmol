@@ -1,15 +1,19 @@
 #include "physicalDevice.hpp"
 
 #include "./instance.hpp"
+#include "./queueFamily.hpp"
 #include "./utils.hpp"
 
 #include <map>
+
+PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) : physicalDevice(physicalDevice) {}
+PhysicalDevice::PhysicalDevice() {}
 
 void PhysicalDevice::init(Instance instance) {
     init(instance, PhysicalDevice::scoreDeviceDefault);
 }
 
-void PhysicalDevice::init(Instance instance, std::function<int(VkPhysicalDevice)> scoringFunction) {
+void PhysicalDevice::init(Instance instance, std::function<int(PhysicalDevice)> scoringFunction) {
     // Find all the GPUs connected
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance.get(), &deviceCount, nullptr);
@@ -20,8 +24,8 @@ void PhysicalDevice::init(Instance instance, std::function<int(VkPhysicalDevice)
 
     // Score all the GPUs
     std::multimap<int, VkPhysicalDevice> candidates;
-    for (const VkPhysicalDevice& device : devices) {
-        int score = scoringFunction(device);
+    for (VkPhysicalDevice& device : devices) {
+        int score = scoringFunction(PhysicalDevice(device));
         candidates.insert(std::make_pair(score, device));
     }
     
@@ -32,10 +36,16 @@ void PhysicalDevice::init(Instance instance, std::function<int(VkPhysicalDevice)
         throw std::runtime_error("Failed to locate a suitable GPU");
 }
 
-int PhysicalDevice::scoreDeviceDefault(VkPhysicalDevice device) {
+int PhysicalDevice::scoreDeviceDefault(PhysicalDevice device) {
     // VkPhysicalDeviceProperties deviceProperties;
     // vkGetPhysicalDeviceProperties(device, &deviceProperties);
     // VkPhysicalDeviceFeatures deviceFeatures;
     // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-    return 1;
+
+    int score = 0;
+
+    QueueFamilyIndices indices = findQueueFamilies(device);
+    if (indices.isComplete()) score++;
+    
+    return score;
 }

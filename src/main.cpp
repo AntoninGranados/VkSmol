@@ -4,7 +4,6 @@
 #include <print>
 #include <stdexcept>
 #include <cstdlib>
-#include <algorithm>
 #include <vector>
 
 #include "./engine/instance.hpp"
@@ -93,7 +92,6 @@ private:
         
         return requiredExtensions;
     }
-
 
     /*
     ============== RUN TIME ==============

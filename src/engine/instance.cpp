@@ -47,9 +47,8 @@ void Instance::destroy() {
 void Instance::checkExtensionSupport(std::vector<const char*> extensions) {
     // Find all the supported extensions
     uint32_t extensionCount;
-    std::vector<VkExtensionProperties> supportedExtensions;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-    supportedExtensions.resize(extensionCount);
+    std::vector<VkExtensionProperties> supportedExtensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, supportedExtensions.data());
     
     // Check if all extensions in `extensions` are supported
@@ -69,9 +68,8 @@ void Instance::checkExtensionSupport(std::vector<const char*> extensions) {
 void Instance::checkValidationLayerSupport(std::vector<const char*> validationLayers) {
     // Find all the supported validation layers
     uint32_t layerCount;
-    std::vector<VkLayerProperties> supportedLayers;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-    supportedLayers.resize(layerCount);
+    std::vector<VkLayerProperties> supportedLayers(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, supportedLayers.data());
 
     // Check if all validation layers in `validationLayers` are supported
