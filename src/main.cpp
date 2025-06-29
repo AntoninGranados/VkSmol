@@ -6,10 +6,10 @@
 #include <cstdlib>
 #include <algorithm>
 #include <vector>
-#include <map>
 
 #include "./engine/instance.hpp"
 #include "./engine/debugMessenger.hpp"
+#include "./engine/physicalDevice.hpp"
 #include "./engine/utils.hpp"
 
 const uint32_t WIDTH = 800;
@@ -45,7 +45,7 @@ private:
 
     Instance instance;
     DebugMessenger debugMessenger;
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    PhysicalDevice physicalDevice;
 
     /*
     ============== INITIALISATION ==============
@@ -77,7 +77,7 @@ private:
         );
 
         debugMessenger.init(instance);
-        pickPhysicalDevice();
+        physicalDevice.init(instance);
     }
 
     std::vector<const char*> getRequiredExtensions() {
@@ -94,28 +94,6 @@ private:
         return requiredExtensions;
     }
 
-
-    void pickPhysicalDevice() {
-        uint32_t deviceCount = 0;
-        vkEnumeratePhysicalDevices(instance.get(), &deviceCount, nullptr);
-        if (deviceCount == 0)
-            throw std::runtime_error("Failed to locate a GPU with Vulkan support");
-        
-        std::vector<VkPhysicalDevice> devices(deviceCount);
-        vkEnumeratePhysicalDevices(instance.get(), &deviceCount, devices.data());
-
-        std::multimap<int, VkPhysicalDevice> candidates;
-
-        for (const VkPhysicalDevice& device : devices) {
-            int score = rateDeviceSuitability(device);
-            candidates.insert(std::make_pair(score, device));
-        }
-        
-        if (candidates.rbegin()->first > 0)
-            physicalDevice = candidates.rbegin()->second;
-        else
-            throw std::runtime_error("Failed to locate a suitable GPU");
-    }
 
     /*
     ============== RUN TIME ==============
@@ -137,20 +115,6 @@ private:
 
         glfwDestroyWindow(window);
         glfwTerminate();
-    }
-
-    /*
-    ============== CHECKS ==============
-    */
-
-    // No special need for the GPU
-    int rateDeviceSuitability(VkPhysicalDevice device) {
-        // VkPhysicalDeviceProperties deviceProperties;
-        // vkGetPhysicalDeviceProperties(device, &deviceProperties);
-        // VkPhysicalDeviceFeatures deviceFeatures;
-        // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
-        return 100;
     }
 };
 

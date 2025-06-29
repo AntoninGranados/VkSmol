@@ -8,12 +8,13 @@ void Instance::init(
     std::vector<const char*> extensions,
     std::vector<const char*> validationLayers
 ) {
+    // Extra checks in debug mode
     #ifndef NDEBUG
         Instance::checkExtensionSupport(extensions);
         Instance::checkValidationLayerSupport(validationLayers);
     #endif
 
-    VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
+    // Fill the creation info struct
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
@@ -24,6 +25,7 @@ void Instance::init(
         createInfo.ppEnabledLayerNames = validationLayers.data();
 
         // to debug the `vkCreateInstance` and `vkDestroyInstance` functions
+        VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
         DebugMessenger::populateCreateInfo(debugMessengerCreateInfo);
         createInfo.pNext = &debugMessengerCreateInfo;
     #else
@@ -43,13 +45,14 @@ void Instance::destroy() {
 
 
 void Instance::checkExtensionSupport(std::vector<const char*> extensions) {
+    // Find all the supported extensions
     uint32_t extensionCount;
     std::vector<VkExtensionProperties> supportedExtensions;
-
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     supportedExtensions.resize(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, supportedExtensions.data());
-        
+    
+    // Check if all extensions in `extensions` are supported
     for (const char* extension : extensions) {
         if (!std::any_of(
             supportedExtensions.begin(),
@@ -64,13 +67,14 @@ void Instance::checkExtensionSupport(std::vector<const char*> extensions) {
 }
 
 void Instance::checkValidationLayerSupport(std::vector<const char*> validationLayers) {
+    // Find all the supported validation layers
     uint32_t layerCount;
     std::vector<VkLayerProperties> supportedLayers;
-
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
     supportedLayers.resize(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, supportedLayers.data());
 
+    // Check if all validation layers in `validationLayers` are supported
     for (const char* layer : validationLayers) {
         if (!std::any_of(
             supportedLayers.begin(),

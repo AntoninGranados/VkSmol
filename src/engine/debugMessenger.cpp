@@ -4,6 +4,7 @@
 #include "./utils.hpp"
 
 void DebugMessenger::init(Instance instance) {
+    // Only init the debug messenger if we are in debug mode
     #ifndef NDEBUG
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
         populateCreateInfo(createInfo);
@@ -37,6 +38,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessenger::callback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData
 ) {
+    // Log the message based on it's severity
     switch (messageSeverity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT :    std::fprintf(stderr, "[%sERROR%s] %s\n", MSG_RED_B, MSG_RESET, pCallbackData->pMessage); break;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT :  std::fprintf(stderr, "[%sWARNING%s] %s\n", MSG_YELLOW_B, MSG_RESET, pCallbackData->pMessage); break;
@@ -47,6 +49,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessenger::callback(
     return VK_FALSE;
 }
 
+// Find the `vkCreateDebugUtilsMessengerEXT` function
 VkResult DebugMessenger::CreateDebugUtilsMessengerEXT(
     Instance instance,
     const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -59,6 +62,7 @@ VkResult DebugMessenger::CreateDebugUtilsMessengerEXT(
     return func(instance.get(), pCreateInfo, pAllocator, pDebugMessenger);
 }
 
+// Find the `vkDestroyDebugUtilsMessengerEXT` function
 void DebugMessenger::DestroyDebugUtilsMessengerEXT(Instance instance,
     VkDebugUtilsMessengerEXT debugMessenger, const
     VkAllocationCallbacks* pAllocator
