@@ -1,6 +1,7 @@
 #include "queue.hpp"
 
 #include "./physicalDevice.hpp"
+#include "./logicalDevice.hpp"
 
 QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice) {
     QueueFamilyIndices indices;
@@ -20,4 +21,9 @@ QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice) {
     }
 
     return indices;
+}
+
+
+void Queue::init(LogicalDevice device, uint32_t queueFamilyIndex) {
+    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &queue);
 }

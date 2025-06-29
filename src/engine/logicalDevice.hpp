@@ -10,7 +10,8 @@ class PhysicalDevice;
 class LogicalDevice {
 public:
     void init(
-        PhysicalDevice physicakDevice,
+        PhysicalDevice physicalDevice,
+        uint32_t queueFamilyIndex,
         std::vector<const char*> extensions,
         std::vector<const char*> validationLayers
     );

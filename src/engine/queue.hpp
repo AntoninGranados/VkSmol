@@ -7,6 +7,7 @@
 #include <vector>
 
 class PhysicalDevice;
+class LogicalDevice;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
@@ -15,3 +16,14 @@ struct QueueFamilyIndices {
 };
 
 QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice);
+
+
+class Queue {
+public:
+    void init(LogicalDevice device, uint32_t queueFamilyIndex);
+    // void destroy();
+    VkQueue get() { return queue; };
+
+private:
+    VkQueue queue;
+};

@@ -6,15 +6,15 @@
 
 void LogicalDevice::init(
     PhysicalDevice physicalDevice,
+    uint32_t queueFamilyIndex,
     std::vector<const char*> extensions,
     std::vector<const char*> validationLayers
 ) {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
     VkDeviceQueueCreateInfo queueCreateInfo{};
     queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+    queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
     queueCreateInfo.queueCount = 1;
+
     float queuePriority = 1.0f;
     queueCreateInfo.pQueuePriorities = &queuePriority;
 
