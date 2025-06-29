@@ -1,7 +1,7 @@
 #include "physicalDevice.hpp"
 
 #include "./instance.hpp"
-#include "./queueFamily.hpp"
+#include "./queue.hpp"
 #include "./utils.hpp"
 
 #include <map>

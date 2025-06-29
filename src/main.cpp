@@ -9,11 +9,12 @@
 #include "./engine/instance.hpp"
 #include "./engine/debugMessenger.hpp"
 #include "./engine/physicalDevice.hpp"
+#include "./engine/queue.hpp"
+#include "./engine/logicalDevice.hpp"
 #include "./engine/utils.hpp"
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
-
 
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
@@ -22,6 +23,10 @@ const std::vector<const char*> instanceExtensions = {
 #ifndef NDEBUG
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
+};
+
+const std::vector<const char*> deviceExtensions = {
+    "VK_KHR_portability_subset",
 };
 
 // only used if NDEBUG is not defined
@@ -45,6 +50,7 @@ private:
     Instance instance;
     DebugMessenger debugMessenger;
     PhysicalDevice physicalDevice;
+    LogicalDevice device;
 
     /*
     ============== INITIALISATION ==============
@@ -77,6 +83,12 @@ private:
 
         debugMessenger.init(instance);
         physicalDevice.init(instance);
+        
+        device.init(
+            physicalDevice,
+            deviceExtensions,
+            validationLayers
+        );
     }
 
     std::vector<const char*> getRequiredExtensions() {
@@ -108,6 +120,7 @@ private:
     */
 
     void cleanup() {
+        device.destroy();
         debugMessenger.destroy(instance);
         instance.destroy();
 
