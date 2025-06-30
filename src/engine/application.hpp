@@ -7,8 +7,9 @@
 #include "./debugMessenger.hpp"
 #include "./surface.hpp"
 #include "./physicalDevice.hpp"
-#include "./queue.hpp"
 #include "./logicalDevice.hpp"
+#include "./queue.hpp"
+#include "./swapChain.hpp"
 #include "./utils.hpp"
 
 

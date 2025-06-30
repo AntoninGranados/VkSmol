@@ -59,7 +59,7 @@ void Instance::checkExtensionSupport(std::vector<const char*> extensions) {
             [&](VkExtensionProperties& properties) { return strcmp(extension, properties.extensionName) == 0; })
         ) {
             char buf[MAX_MSG_SIZE];
-            snprintf(buf, sizeof(buf), "Extension %s%s%s is not supported", MSG_RED_B, extension, MSG_RESET);
+            snprintf(buf, sizeof(buf), "Instance Extension [%s%s%s] is not supported", MSG_RED_B, extension, MSG_RESET);
             throw std::runtime_error(buf);
         }
     }
@@ -80,7 +80,7 @@ void Instance::checkValidationLayerSupport(std::vector<const char*> validationLa
             [&](VkLayerProperties& properties) { return strcmp(layer, properties.layerName) == 0; })
         ) {
             char buf[MAX_MSG_SIZE];
-            std::snprintf(buf, sizeof(buf), "Layer %s%s%s is not supported", MSG_RED_B, layer, MSG_RESET);
+            std::snprintf(buf, sizeof(buf), "Validation Layer [%s%s%s] is not supported", MSG_RED_B, layer, MSG_RESET);
             throw std::runtime_error(buf);
         }
     }

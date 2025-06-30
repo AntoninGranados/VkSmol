@@ -3,6 +3,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <set>
+#include <vector>
+
 // Message formating
 #define MAX_MSG_SIZE 256u
 #define MSG_RED "\033[31m"

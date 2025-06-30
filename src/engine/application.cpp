@@ -13,6 +13,7 @@ const std::vector<const char*> instanceExtensions = {
 };
 
 const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     "VK_KHR_portability_subset",
 };
 
@@ -85,15 +86,8 @@ void Application::initVulkan() {
         device,
         queueFamilyIndices.presentFamily.value()
     );
-}
 
-int Application::scoreDevice(PhysicalDevice device) {
-    // Checks if all the  queue families are available
-    int score = 0;
-    QueueFamilyIndices indices = findQueueFamilies(device, surface);
-    if (indices.isComplete()) score++;
-    
-    return score;
+    querySwapChainSupport(physicalDevice, surface);
 }
 
 
@@ -110,6 +104,38 @@ std::vector<const char*> Application::getRequiredExtensions() {
     
     return requiredExtensions;
 }
+
+int Application::scoreDevice(PhysicalDevice device) {
+    // Check if all the  queue families are available
+    QueueFamilyIndices indices = findQueueFamilies(device, surface);
+    if (!indices.isComplete())
+        return 0;
+
+    // TODO: the extension check might be better after the scoring -> support would be mandatory
+    // Check if all extensions are supported by the GPU
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, nullptr);
+    std::vector<VkExtensionProperties> supportedExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, supportedExtensions.data());
+
+    for (const char* extension : deviceExtensions) {
+        if (!std::any_of(
+            supportedExtensions.begin(),
+            supportedExtensions.end(),
+            [&](VkExtensionProperties& properties) { return strcmp(extension, properties.extensionName) == 0; })
+        )
+            return 0;
+    }
+
+    // Check swap chain support
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
+    if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
+        return 0;
+    
+    return 1;
+}
+
+
 
 void Application::mainLoop() {
     while (!glfwWindowShouldClose(window)) {
