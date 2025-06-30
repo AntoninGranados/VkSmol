@@ -27,16 +27,23 @@ public:
     void destroy(LogicalDevice device);
     VkSwapchainKHR get() { return swapchain; };
 
+    std::vector<VkImage> getImages() { return images; };
+    uint32_t getImageCount() { return imageCount; };
+
 private:
     VkSwapchainKHR swapchain;
+    
+    std::vector<VkImage> images;
+    std::vector<VkImageView> imageViews;
+    uint32_t imageCount;
+    VkFormat imageFormat;
+    VkExtent2D extent;
 
+    void initImages(LogicalDevice device);
+    void initImageViews(LogicalDevice device);
+    void destroyImageViews(LogicalDevice device);
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
-
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-        const std::vector<VkSurfaceFormatKHR>& availableFormats
-    );
-
-    VkPresentModeKHR chooseSwapPresentMode(
-        const std::vector<VkPresentModeKHR>& availablePresentModes
-    );
 };

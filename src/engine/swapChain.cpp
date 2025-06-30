@@ -34,11 +34,12 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window) {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
 
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, window);
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+    extent = chooseSwapExtent(swapChainSupport.capabilities, window);
+    imageFormat = surfaceFormat.format;
 
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    imageCount = swapChainSupport.capabilities.minImageCount + 1;
     if (swapChainSupport.capabilities.maxImageCount != 0)
         imageCount = std::min(imageCount, swapChainSupport.capabilities.maxImageCount);
 
@@ -75,10 +76,74 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     createInfo.oldSwapchain = VK_NULL_HANDLE;   // In case we need to recreate the swap chain, we need to supply the old one
 
     vkCheck(vkCreateSwapchainKHR(device.get(), &createInfo, nullptr, &swapchain), "Failed to create the swap chain");
+
+    initImages(device);
+    initImageViews(device);
 }
 
 void Swapchain::destroy(LogicalDevice device) {
+    destroyImageViews(device);
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
+}
+
+void Swapchain::initImages(LogicalDevice device) {
+    vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, nullptr);
+    images.resize(imageCount);
+    vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, images.data());
+}
+
+void Swapchain::initImageViews(LogicalDevice device) {
+    imageViews.resize(imageCount);
+
+    for (size_t i = 0; i < imageCount; i++) {
+        VkImageViewCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = images[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = imageFormat;
+        
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        vkCheck(vkCreateImageView(device.get(), &createInfo, nullptr, &imageViews[i]), "Failed to create image views");
+    }
+}
+
+void Swapchain::destroyImageViews(LogicalDevice device) {
+    for (size_t i = 0; i < imageCount; i++) {
+        vkDestroyImageView(device.get(), imageViews[i], nullptr);
+    }
+}
+
+VkSurfaceFormatKHR Swapchain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+    // Find if the SRGB non-linear color space and that BRGA (8bit) format are available
+    for (const VkSurfaceFormatKHR& format : availableFormats) {
+        if (format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && format.format == VK_FORMAT_B8G8R8A8_SRGB)
+            return format;
+    }
+
+    // Settle for the first one if our prefered color space/format are not available
+    return availableFormats[0];
+}
+
+VkPresentModeKHR Swapchain::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+    // Find if the mailbox present mode is available
+    // Mailbox : display the images as fast as possible while avoiding tearing
+    for (const VkPresentModeKHR& presentMode : availablePresentModes) {
+        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            return presentMode;
+    }
+
+    // This mode is guaranted
+    return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window) {
@@ -105,31 +170,4 @@ VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
     );
 
     return extent;
-}
-
-VkSurfaceFormatKHR Swapchain::chooseSwapSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR>& availableFormats
-) {
-    // Find if the SRGB non-linear color space and that BRGA (8bit) format are available
-    for (const VkSurfaceFormatKHR& format : availableFormats) {
-        if (format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && format.format == VK_FORMAT_B8G8R8A8_SRGB)
-            return format;
-    }
-
-    // Settle for the first one if our prefered color space/format are not available
-    return availableFormats[0];
-}
-
-VkPresentModeKHR Swapchain::chooseSwapPresentMode(
-    const std::vector<VkPresentModeKHR>& availablePresentModes
-) {
-    // Find if the mailbox present mode is available
-    // Mailbox : display the images as fast as possible while avoiding tearing
-    for (const VkPresentModeKHR& presentMode : availablePresentModes) {
-        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-            return presentMode;
-    }
-
-    // This mode is guaranted
-    return VK_PRESENT_MODE_FIFO_KHR;
 }
