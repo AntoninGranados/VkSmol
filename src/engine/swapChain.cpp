@@ -1,7 +1,10 @@
-#include "swapChain.hpp"
+#include "swapchain.hpp"
 
 #include "./physicalDevice.hpp"
+#include "./logicalDevice.hpp"
+#include "./queue.hpp"
 #include "./surface.hpp"
+#include "./utils.hpp"
 
 #include <print>
 
@@ -25,4 +28,108 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
     }
 
     return details;
+}
+
+
+void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window) {
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
+
+    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, window);
+    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    if (swapChainSupport.capabilities.maxImageCount != 0)
+        imageCount = std::min(imageCount, swapChainSupport.capabilities.maxImageCount);
+
+    VkSwapchainCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = surface.get();
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;    // If we want to do post processing, we should use `VK_IMAGE_USAGE_TRANSFER_DST_BIT`
+
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+    // In the case where the two families are different
+    // we have to tell the GPU that the images will be shared accross mulitple families
+    if (indices.graphicsFamily != indices.presentFamily) {
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        // createInfo.queueFamilyIndexCount = static_cast<uint32_t>(indices.getIndices().size());
+        // createInfo.pQueueFamilyIndices = indices.getIndices().data();
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    } else {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 0;
+        createInfo.pQueueFamilyIndices = nullptr;
+    }
+
+    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;   // No added transformation
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;  // For an opaque window
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;   // Pixel behind other window will be clipped
+    createInfo.oldSwapchain = VK_NULL_HANDLE;   // In case we need to recreate the swap chain, we need to supply the old one
+
+    vkCheck(vkCreateSwapchainKHR(device.get(), &createInfo, nullptr, &swapchain), "Failed to create the swap chain");
+}
+
+void Swapchain::destroy(LogicalDevice device) {
+    vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
+}
+
+VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window) {
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
+    VkExtent2D extent = {
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+
+    extent.width = std::clamp(
+        extent.width,
+        capabilities.minImageExtent.width,
+        capabilities.maxImageExtent.width
+    );
+    extent.height = std::clamp(
+        extent.height,
+        capabilities.minImageExtent.height,
+        capabilities.maxImageExtent.height
+    );
+
+    return extent;
+}
+
+VkSurfaceFormatKHR Swapchain::chooseSwapSurfaceFormat(
+    const std::vector<VkSurfaceFormatKHR>& availableFormats
+) {
+    // Find if the SRGB non-linear color space and that BRGA (8bit) format are available
+    for (const VkSurfaceFormatKHR& format : availableFormats) {
+        if (format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && format.format == VK_FORMAT_B8G8R8A8_SRGB)
+            return format;
+    }
+
+    // Settle for the first one if our prefered color space/format are not available
+    return availableFormats[0];
+}
+
+VkPresentModeKHR Swapchain::chooseSwapPresentMode(
+    const std::vector<VkPresentModeKHR>& availablePresentModes
+) {
+    // Find if the mailbox present mode is available
+    // Mailbox : display the images as fast as possible while avoiding tearing
+    for (const VkPresentModeKHR& presentMode : availablePresentModes) {
+        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            return presentMode;
+    }
+
+    // This mode is guaranted
+    return VK_PRESENT_MODE_FIFO_KHR;
 }

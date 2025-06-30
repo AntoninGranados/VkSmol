@@ -9,7 +9,7 @@
 #include "./physicalDevice.hpp"
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
-#include "./swapChain.hpp"
+#include "./swapchain.hpp"
 #include "./utils.hpp"
 
 
@@ -28,6 +28,8 @@ private:
     PhysicalDevice physicalDevice;
     LogicalDevice device;
     Queue graphicsQueue, presentQueue;
+
+    Swapchain swapchain;
 
     void initWindow();
     void initVulkan();

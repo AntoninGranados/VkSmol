@@ -3,6 +3,8 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+// TODO: replace the NDEBUG checks with a variable, because the #define can not propagate correctly otherwise
+
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -87,7 +89,12 @@ void Application::initVulkan() {
         queueFamilyIndices.presentFamily.value()
     );
 
-    querySwapChainSupport(physicalDevice, surface);
+    swapchain.init(
+        device,
+        physicalDevice,
+        surface,
+        window
+    );
 }
 
 
@@ -144,6 +151,7 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+    swapchain.destroy(device);
     device.destroy();
     surface.destroy(instance);
     debugMessenger.destroy(instance);
