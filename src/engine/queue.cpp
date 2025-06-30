@@ -1,9 +1,11 @@
 #include "queue.hpp"
 
+#include "./surface.hpp"
 #include "./physicalDevice.hpp"
 #include "./logicalDevice.hpp"
 
-QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice) {
+// Search for the graphics queue and the present queue
+QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surface) {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
@@ -13,10 +15,15 @@ QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice) {
 
     int i = 0;
     for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.graphicsFamily = i;
-            break;
-        }
+        
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.get(), i, surface.get(), &presentSupport);
+        if (presentSupport)
+            indices.presentFamily = i;
+
+        if (indices.isComplete()) break;
         i++;
     }
 

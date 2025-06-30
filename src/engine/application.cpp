@@ -26,7 +26,9 @@ const std::vector<const char*> validationLayers = {
 void Application::run() {
     initWindow();
     initVulkan();
+
     mainLoop();
+    
     cleanup();
 }
 
@@ -61,19 +63,37 @@ void Application::initVulkan() {
     );
 
     debugMessenger.init(instance);
-    physicalDevice.init(instance);
+
+    surface.init(instance, window);
+
+    std::function<int(PhysicalDevice)> scoring = [this] (PhysicalDevice device) { return scoreDevice(device); };
+    physicalDevice.init(instance, scoring);
     
-    uint32_t queueFamilyIndex = findQueueFamilies(physicalDevice).graphicsFamily.value();
+    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
     device.init(
         physicalDevice,
-        queueFamilyIndex,
+        queueFamilyIndices.getIndices(),
         deviceExtensions,
         validationLayers
     );
+
     graphicsQueue.init(
         device,
-        queueFamilyIndex
+        queueFamilyIndices.graphicsFamily.value()
     );
+    presentQueue.init(
+        device,
+        queueFamilyIndices.presentFamily.value()
+    );
+}
+
+int Application::scoreDevice(PhysicalDevice device) {
+    // Checks if all the  queue families are available
+    int score = 0;
+    QueueFamilyIndices indices = findQueueFamilies(device, surface);
+    if (indices.isComplete()) score++;
+    
+    return score;
 }
 
 
@@ -99,6 +119,7 @@ void Application::mainLoop() {
 
 void Application::cleanup() {
     device.destroy();
+    surface.destroy(instance);
     debugMessenger.destroy(instance);
     instance.destroy();
 

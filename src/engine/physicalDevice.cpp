@@ -36,16 +36,11 @@ void PhysicalDevice::init(Instance instance, std::function<int(PhysicalDevice)> 
         throw std::runtime_error("Failed to locate a suitable GPU");
 }
 
+// Scores every device with no difference
 int PhysicalDevice::scoreDeviceDefault(PhysicalDevice device) {
     // VkPhysicalDeviceProperties deviceProperties;
     // vkGetPhysicalDeviceProperties(device, &deviceProperties);
     // VkPhysicalDeviceFeatures deviceFeatures;
     // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
-    int score = 0;
-
-    QueueFamilyIndices indices = findQueueFamilies(device);
-    if (indices.isComplete()) score++;
-    
-    return score;
+    return 1;
 }

@@ -6,16 +6,21 @@
 #include <optional>
 #include <vector>
 
+class Surface;
 class PhysicalDevice;
 class LogicalDevice;
 
 struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> graphicsFamily; // queue for graphics
+    std::optional<uint32_t> presentFamily;  // queue for prensenting surface to the screen
 
-    bool isComplete() { return graphicsFamily.has_value(); }
+    bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
+    std::vector<uint32_t> getIndices() {
+        return std::vector<uint32_t> { graphicsFamily.value(), presentFamily.value() };
+    }
 };
 
-QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice);
+QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surface);
 
 
 class Queue {
