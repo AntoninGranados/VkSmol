@@ -97,9 +97,20 @@ void Application::initVulkan() {
     createPipeline();
 }
 
+#include <iostream>
 void Application::createPipeline() {
-    const char* vertSpirV = compileShader("./shader/vert.glsl", VK_SHADER_STAGE_VERTEX_BIT);
-    const char* fragSpirV = compileShader("./shader/frag.glsl", VK_SHADER_STAGE_FRAGMENT_BIT);
+    Shader vertShader, fragShader;
+
+    vertShader.init(device, Shader::compile("./shader/vert.glsl", VK_SHADER_STAGE_VERTEX_BIT));
+    fragShader.init(device, Shader::compile("./shader/frag.glsl", VK_SHADER_STAGE_FRAGMENT_BIT));
+
+    VkPipelineShaderStageCreateInfo shaderStages[2];
+    shaderStages[0] = vertShader.getShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = fragShader.getShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
+    vertShader.destroy(device);
+    fragShader.destroy(device);
 }
 
 
