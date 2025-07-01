@@ -3,8 +3,6 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-// TODO: replace the NDEBUG checks with a variable, because the #define can not propagate correctly otherwise
-
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -95,6 +93,13 @@ void Application::initVulkan() {
         surface,
         window
     );
+
+    createPipeline();
+}
+
+void Application::createPipeline() {
+    const char* vertSpirV = compileShader("./shader/vert.glsl", VK_SHADER_STAGE_VERTEX_BIT);
+    const char* fragSpirV = compileShader("./shader/frag.glsl", VK_SHADER_STAGE_FRAGMENT_BIT);
 }
 
 
@@ -118,7 +123,6 @@ int Application::scoreDevice(PhysicalDevice device) {
     if (!indices.isComplete())
         return 0;
 
-    // TODO: the extension check might be better after the scoring -> support would be mandatory
     // Check if all extensions are supported by the GPU
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, nullptr);

@@ -4,6 +4,8 @@
 #include "./physicalDevice.hpp"
 #include "./utils.hpp"
 
+#include <print>
+
 void LogicalDevice::init(
     PhysicalDevice physicalDevice,
     std::vector<uint32_t> queueFamilyIndices,

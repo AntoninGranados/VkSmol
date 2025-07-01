@@ -10,6 +10,7 @@
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
 #include "./swapchain.hpp"
+#include "./shader.hpp"
 #include "./utils.hpp"
 
 
@@ -34,6 +35,8 @@ private:
     void initWindow();
     void initVulkan();
     std::vector<const char*> getRequiredExtensions();
+
+    void createPipeline();
 
     int scoreDevice(PhysicalDevice device);
 

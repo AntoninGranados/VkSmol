@@ -30,7 +30,7 @@ void Instance::init(
         createInfo.pNext = &debugMessengerCreateInfo;
     #else
         createInfo.enabledLayerCount = 0;
-        createInfo.pNext = nullptre;
+        createInfo.pNext = nullptr;
     #endif
     #ifdef __APPLE__
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
