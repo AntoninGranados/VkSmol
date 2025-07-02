@@ -32,6 +32,8 @@ private:
 
     Swapchain swapchain;
 
+    VkPipelineLayout pipelineLayout;
+
     void initWindow();
     void initVulkan();
     std::vector<const char*> getRequiredExtensions();

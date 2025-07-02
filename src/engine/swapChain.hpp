@@ -28,7 +28,10 @@ public:
     VkSwapchainKHR get() { return swapchain; };
 
     std::vector<VkImage> getImages() { return images; };
+    std::vector<VkImageView> getImageViews() { return imageViews; };
     uint32_t getImageCount() { return imageCount; };
+    VkFormat getImageFormat() { return imageFormat; };
+    VkExtent2D getExtent() { return extent; };
 
 private:
     VkSwapchainKHR swapchain;
