@@ -11,8 +11,10 @@
 #include "./queue.hpp"
 #include "./swapchain.hpp"
 #include "./shader.hpp"
+#include "./renderPass.hpp"
 #include "./utils.hpp"
 
+// TODO: remove error checking (everywhere) when using NDEBUG
 
 class Application {
 public:
@@ -32,12 +34,14 @@ private:
 
     Swapchain swapchain;
 
+    RenderPass renderPass;
     VkPipelineLayout pipelineLayout;
 
     void initWindow();
     void initVulkan();
     std::vector<const char*> getRequiredExtensions();
 
+    void createRenderPass();
     void createPipeline();
 
     int scoreDevice(PhysicalDevice device);

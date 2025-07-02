@@ -94,10 +94,31 @@ void Application::initVulkan() {
         window
     );
 
+    createRenderPass();
     createPipeline();
 }
 
-#include <iostream>
+void Application::createRenderPass() {
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = swapchain.getImageFormat();
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    
+    renderPass.addSubpass(
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        std::vector<size_t>{ 0 }
+    );
+    
+    renderPass.init(device);
+}
+
 void Application::createPipeline() {
     Shader vertShader, fragShader;
 
@@ -243,6 +264,7 @@ void Application::mainLoop() {
 
 void Application::cleanup() {
     vkDestroyPipelineLayout(device.get(), pipelineLayout, nullptr);
+    renderPass.destroy(device);
 
     swapchain.destroy(device);
     device.destroy();
