@@ -204,6 +204,22 @@ void Application::createPipeline() {
 
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create pipeline layout");
 
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 1;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = renderPass.get();
+    pipelineInfo.subpass = 0;
+
+    vkCheck(vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline), "Failed to create graphic pipeline");
 
     // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
     vertShader.destroy(device);
@@ -263,6 +279,7 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+    vkDestroyPipeline(device.get(), graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device.get(), pipelineLayout, nullptr);
     renderPass.destroy(device);
 
