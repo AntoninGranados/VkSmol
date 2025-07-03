@@ -12,6 +12,7 @@
 #include "./swapchain.hpp"
 #include "./shader.hpp"
 #include "./renderPass.hpp"
+#include "./pipeline/graphicsPipeline.hpp"
 #include "./utils.hpp"
 
 // TODO: remove error checking (everywhere) when using NDEBUG
@@ -35,8 +36,7 @@ private:
     Swapchain swapchain;
 
     RenderPass renderPass;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+    GraphicsPipeline graphicsPipeline;
 
     void initWindow();
     void initVulkan();
