@@ -36,7 +36,7 @@ public:
     VkFormat getImageFormat() { return imageFormat; };
     VkExtent2D getExtent() { return extent; };
 
-    uint32_t getNextFrameIndex(LogicalDevice device, Semaphore semaphore);
+    uint32_t getNextImageIndex(LogicalDevice device, Semaphore semaphore);
 
 private:
     VkSwapchainKHR swapchain;

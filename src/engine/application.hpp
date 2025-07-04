@@ -50,11 +50,12 @@ private:
     GraphicsPipeline graphicsPipeline;
 
     CommandPool commandPool;
-    CommandBuffer commandBuffer;
+    std::vector<CommandBuffer> commandBuffers;
 
-    Semaphore imageAvailableSemaphore;
-    std::vector<Semaphore> renderFinishedSemaphores;    // One semaphore per image in the swap chain
-    Fence inFlightFence;
+    std::vector<Semaphore> imageAvailableSemaphores;
+    std::vector<std::vector<Semaphore> > renderFinishedSemaphores;    // One semaphore per image in the swap chain
+    std::vector<Fence> inFlightFences;
+    uint32_t currentFrame = 0;
 
     void initWindow();
     void initVulkan();

@@ -3,6 +3,8 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
+
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -113,14 +115,21 @@ void Application::initVulkan() {
     framebuffer.init(device, swapchain, renderPass);
 
     commandPool.init(device, queueFamilyIndices.graphicsFamily.value());
-    commandBuffer.allocate(device, commandPool);
+    commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
+    for (CommandBuffer& commandBuffer : commandBuffers)
+        commandBuffer.allocate(device, commandPool);
 
     // Synchronization Objects
-    imageAvailableSemaphore.init(device);
-    renderFinishedSemaphores.resize(swapchain.getImageCount());
-    for (Semaphore& semaphore : renderFinishedSemaphores)
-        semaphore.init(device);
-    inFlightFence.init(device, true);
+    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        imageAvailableSemaphores[i].init(device);
+        renderFinishedSemaphores[i].resize(swapchain.getImageCount());
+        for (Semaphore& semaphore : renderFinishedSemaphores[i])
+            semaphore.init(device);
+        inFlightFences[i].init(device, true);
+    }
 }
 
 
@@ -168,13 +177,13 @@ int Application::scoreDevice(PhysicalDevice device) {
 }
 
 
-void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t frameIndex) {
+void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
     commandBuffer.beginRecording();
     {
         renderPass.begin(
             commandBuffer,
             swapchain,
-            framebuffer.getFrame(frameIndex),
+            framebuffer.getFrame(imageIndex),
             {{{0.0f, 0.0f, 0.0f, 1.0f}}}
         );
         graphicsPipeline.bind(commandBuffer);
@@ -209,30 +218,34 @@ void Application::mainLoop() {
 }
 
 void Application::drawFrame() {
-    inFlightFence.wait(device);
-    inFlightFence.reset(device);
+    inFlightFences[currentFrame].wait(device);
+    inFlightFences[currentFrame].reset(device);
 
-    uint32_t frameIndex = swapchain.getNextFrameIndex(device, imageAvailableSemaphore);
+    uint32_t imageIndex = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
 
-    commandBuffer.reset();
-    recordCommandBuffer(commandBuffer, frameIndex);
+    commandBuffers[currentFrame].reset();
+    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
     graphicsQueue.submit(
-        { commandBuffer },
-        inFlightFence,
-        { imageAvailableSemaphore }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
-        { renderFinishedSemaphores[frameIndex] }
+        { commandBuffers[currentFrame] },
+        inFlightFences[currentFrame],
+        { imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
+        { renderFinishedSemaphores[currentFrame][imageIndex] }
     );
 
-    presentQueue.present({ swapchain }, { frameIndex }, { renderFinishedSemaphores[frameIndex] });
+    presentQueue.present({ swapchain }, { imageIndex }, { renderFinishedSemaphores[currentFrame][imageIndex] });
+
+    currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
 void Application::cleanup() {
     device.waitIdle();
     
-    imageAvailableSemaphore.destroy(device);
-    for (Semaphore& semaphore : renderFinishedSemaphores)
-        semaphore.destroy(device);
-    inFlightFence.destroy(device);
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        imageAvailableSemaphores[i].destroy(device);
+        for (Semaphore& semaphore : renderFinishedSemaphores[i])
+            semaphore.destroy(device);
+        inFlightFences[i].destroy(device);
+    }
 
     commandPool.destroy(device);
 

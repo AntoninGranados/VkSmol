@@ -87,7 +87,7 @@ void Swapchain::destroy(LogicalDevice device) {
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
 }
 
-uint32_t Swapchain::getNextFrameIndex(LogicalDevice device, Semaphore semaphore) {
+uint32_t Swapchain::getNextImageIndex(LogicalDevice device, Semaphore semaphore) {
     uint32_t frameIndex;
     vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
     return frameIndex;
