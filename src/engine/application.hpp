@@ -13,6 +13,7 @@
 #include "./shader.hpp"
 #include "./renderPass.hpp"
 #include "./pipeline/graphicsPipeline.hpp"
+#include "./framebuffer.hpp"
 #include "./utils.hpp"
 
 // TODO: remove error checking (everywhere) when using NDEBUG
@@ -34,6 +35,7 @@ private:
     Queue graphicsQueue, presentQueue;
 
     Swapchain swapchain;
+    Framebuffer framebuffer;
 
     RenderPass renderPass;
     GraphicsPipeline graphicsPipeline;
@@ -41,9 +43,6 @@ private:
     void initWindow();
     void initVulkan();
     std::vector<const char*> getRequiredExtensions();
-
-    void createRenderPass();
-    void createPipeline();
 
     int scoreDevice(PhysicalDevice device);
 

@@ -57,11 +57,7 @@ void Application::initVulkan() {
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_4;
     
-    instance.init(
-        appInfo,
-        getRequiredExtensions(),
-        validationLayers
-    );
+    instance.init(appInfo, getRequiredExtensions(), validationLayers);
 
     debugMessenger.init(instance);
 
@@ -78,27 +74,12 @@ void Application::initVulkan() {
         validationLayers
     );
 
-    graphicsQueue.init(
-        device,
-        queueFamilyIndices.graphicsFamily.value()
-    );
-    presentQueue.init(
-        device,
-        queueFamilyIndices.presentFamily.value()
-    );
+    graphicsQueue.init(device, queueFamilyIndices.graphicsFamily.value());
+    presentQueue.init(device, queueFamilyIndices.presentFamily.value());
 
-    swapchain.init(
-        device,
-        physicalDevice,
-        surface,
-        window
-    );
+    swapchain.init(device, physicalDevice, surface, window);
 
-    createRenderPass();
-    createPipeline();
-}
-
-void Application::createRenderPass() {
+    // Render Pass
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = swapchain.getImageFormat();
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -110,34 +91,22 @@ void Application::createRenderPass() {
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    
-    renderPass.addSubpass(
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        { 0 }
-    );
-    
+    renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
     renderPass.init(device);
-}
-
-void Application::createPipeline() {
+    
+    // Graphics Pipeline
     Shader vertShader, fragShader;
-
     vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
     fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
 
-    graphicsPipeline.init(
-        device,
-        renderPass,
-        { vertShader, fragShader }
-    );
+    graphicsPipeline.init(device, renderPass, { vertShader, fragShader });
 
     // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
     vertShader.destroy(device);
     fragShader.destroy(device);
 
-    // TODO: make a wrapper for the viewport
-    // TODO: not sure that a wrapper is useful for the scissor
     /*
+    // TODO: make a wrapper for the viewport
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -150,6 +119,8 @@ void Application::createPipeline() {
     scissor.offset = {0, 0};
     scissor.extent = swapchain.getExtent();
     */
+
+    framebuffer.init(device, swapchain, renderPass);
 }
 
 
@@ -205,10 +176,13 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+    framebuffer.destroy(device);
+
     graphicsPipeline.destroy(device);
     renderPass.destroy(device);
 
     swapchain.destroy(device);
+    
     device.destroy();
     surface.destroy(instance);
 
