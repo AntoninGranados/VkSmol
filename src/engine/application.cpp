@@ -113,7 +113,7 @@ void Application::createRenderPass() {
     
     renderPass.addSubpass(
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        std::vector<size_t>{ 0 }
+        { 0 }
     );
     
     renderPass.init(device);
@@ -122,18 +122,13 @@ void Application::createRenderPass() {
 void Application::createPipeline() {
     Shader vertShader, fragShader;
 
-    // TODO: compile the shader in `init` so it can keep track of it stages without passing it multiple time
-    vertShader.init(device, Shader::compile("./shader/vert.glsl", VK_SHADER_STAGE_VERTEX_BIT));
-    fragShader.init(device, Shader::compile("./shader/frag.glsl", VK_SHADER_STAGE_FRAGMENT_BIT));
-
-    std::vector<VkPipelineShaderStageCreateInfo> shaderStages(2);
-    shaderStages[0] = vertShader.getShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT);
-    shaderStages[1] = fragShader.getShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT);
+    vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
+    fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
 
     graphicsPipeline.init(
         device,
         renderPass,
-        shaderStages
+        { vertShader, fragShader }
     );
 
     // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
@@ -141,7 +136,7 @@ void Application::createPipeline() {
     fragShader.destroy(device);
 
     // TODO: make a wrapper for the viewport
-    // TODO: not sure that a wrapper is useful
+    // TODO: not sure that a wrapper is useful for the scissor
     /*
     VkViewport viewport{};
     viewport.x = 0.0f;

@@ -16,7 +16,7 @@ public:
     void init(
         LogicalDevice device,
         RenderPass renderPass,
-        std::vector<VkPipelineShaderStageCreateInfo> shaderStages
+        std::vector<Shader> shaders
         // VkViewport viewport, VkRect2D scissor,
     );
     void destroy(LogicalDevice device);

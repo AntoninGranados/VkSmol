@@ -8,7 +8,7 @@
 void GraphicsPipeline::init(
     LogicalDevice device,
     RenderPass renderPass,
-    std::vector<VkPipelineShaderStageCreateInfo> shaderStages
+    std::vector<Shader> shaders
     // VkViewport viewport, VkRect2D scissor
 ) {
     // Vertex Input State
@@ -77,6 +77,10 @@ void GraphicsPipeline::init(
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create pipeline layout");
+
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+    for (Shader shader : shaders)
+        shaderStages.emplace_back(shader.getShaderStageCreateInfo());
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
