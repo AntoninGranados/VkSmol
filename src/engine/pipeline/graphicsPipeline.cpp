@@ -7,19 +7,11 @@
 #include "../utils.hpp"
 
 void GraphicsPipeline::init(
-    LogicalDevice device,
-    RenderPass renderPass,
-    std::vector<Shader> shaders
+    LogicalDevice device, RenderPass renderPass,
+    std::vector<Shader> shaders,
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo
     // VkViewport viewport, VkRect2D scissor
 ) {
-    // Vertex Input State
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.pVertexBindingDescriptions = nullptr;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
-
     // Input Assembly State
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

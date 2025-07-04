@@ -3,6 +3,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "glm/glm.hpp"
+
+#include "./window.hpp"
+
 #include "./instance.hpp"
 #include "./debugMessenger.hpp"
 #include "./surface.hpp"
@@ -17,6 +21,8 @@
 #include "./shader.hpp"
 #include "./renderPass.hpp"
 #include "./pipeline/graphicsPipeline.hpp"
+#include "./pipeline/vertexInput.hpp"
+
 #include "./command/commandPool.hpp"
 #include "./command/commandBuffer.hpp"
 
@@ -27,13 +33,17 @@
 
 // TODO: remove error checking (everywhere) when using NDEBUG
 // TODO: clear every vector when using destroy in a function (in case we want to recreate the object by recalling init)
+struct Vertex {
+    glm::vec2 position;
+    glm::vec3 color;
+};
 
 class Application {
 public:
     void run();
 
 private:
-    GLFWwindow* window;
+    Window window;
 
     Instance instance;
     DebugMessenger debugMessenger;
@@ -59,8 +69,7 @@ private:
 
     bool framebufferResized = false;
 
-    void initWindow();
-    void initVulkan();
+    void init();
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     std::vector<const char*> getRequiredExtensions();

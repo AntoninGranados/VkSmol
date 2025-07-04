@@ -1,5 +1,6 @@
 #include "swapchain.hpp"
 
+#include "./window.hpp"
 #include "./physicalDevice.hpp"
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
@@ -34,12 +35,12 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 }
 
 
-void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, std::optional<Swapchain> oldSwapChain) {
+void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, std::optional<Swapchain> oldSwapChain) {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    extent = chooseSwapExtent(swapChainSupport.capabilities, window);
+    extent = chooseSwapExtent(swapChainSupport.capabilities, window.get());
     imageFormat = surfaceFormat.format;
 
     imageCount = swapChainSupport.capabilities.minImageCount + 1;
@@ -98,7 +99,7 @@ void Swapchain::destroy(LogicalDevice device) {
 }
 
 // TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
-void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, RenderPass renderPass) {
+void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, RenderPass renderPass) {
     device.waitIdle();
 
     destroy(device);

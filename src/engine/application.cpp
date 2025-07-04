@@ -27,11 +27,8 @@ const std::vector<const char*> validationLayers = {
 
 
 void Application::run() {
-    initWindow();
-    initVulkan();
-
+    init();
     mainLoop();
-    
     cleanup();
 }
 
@@ -39,20 +36,11 @@ void Application::run() {
 ============== INITIALISATION ==============
 */
 
-void Application::initWindow() {
+void Application::init() {
     glfwInit();
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    window.init(WIDTH, HEIGHT, "Application", framebufferResizeCallback);
 
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Application", nullptr, nullptr);
-    if (!window) throw std::runtime_error("Could not create GLFW window");
-
-    glfwSetWindowUserPointer(window, this);
-    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-}
-
-void Application::initVulkan() {
     // Application informations
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -85,35 +73,43 @@ void Application::initVulkan() {
     swapchain.init(device, physicalDevice, surface, window);
 
     // Render Pass
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapchain.getImageFormat();
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
-    renderPass.addDepedency(
-        VK_SUBPASS_EXTERNAL, 0,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-    );
-    renderPass.init(device);
+    {
+        VkAttachmentDescription colorAttachment{};
+        colorAttachment.format = swapchain.getImageFormat();
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    
+        renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
+        renderPass.addDepedency(
+            VK_SUBPASS_EXTERNAL, 0,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+        );
+        renderPass.init(device);
+    }
     
     // Graphics Pipeline
-    Shader vertShader, fragShader;
-    vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
-    fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
-
-    graphicsPipeline.init(device, renderPass, { vertShader, fragShader });
-
-    // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
-    vertShader.destroy(device);
-    fragShader.destroy(device);
+    {
+        Shader vertShader, fragShader;
+        vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
+        fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
+    
+        VertexInput<Vertex> vertexInput;
+        vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position));
+        vertexInput.addAttributeDescription(VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color));
+    
+        graphicsPipeline.init(device, renderPass, { vertShader, fragShader }, vertexInput.get());
+    
+        // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
+        vertShader.destroy(device);
+        fragShader.destroy(device);
+    }
 
     swapchain.initFramebuffer(device, renderPass);
 
@@ -184,7 +180,9 @@ int Application::scoreDevice(PhysicalDevice device) {
     return 1;
 }
 
-
+/*
+============== INITIALISATION ==============
+*/
 void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
     commandBuffer.beginRecording();
     {
@@ -219,7 +217,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
 }
 
 void Application::mainLoop() {
-    while (!glfwWindowShouldClose(window)) {
+    while (!window.shouldClose()) {
         glfwPollEvents();
         drawFrame();
     }
@@ -255,14 +253,9 @@ void Application::drawFrame() {
 
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 
-    // Stall the application when it is minimized
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwWaitEvents();
-    }
+    window.pauseWhileMinimized();
 }
+
 
 void Application::cleanup() {
     device.waitIdle();
@@ -288,6 +281,6 @@ void Application::cleanup() {
     debugMessenger.destroy(instance);
     instance.destroy();
 
-    glfwDestroyWindow(window);
+    window.destroy();
     glfwTerminate();
 }

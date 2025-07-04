@@ -10,6 +10,7 @@
 
 #include "./framebuffer.hpp"
 
+class Window;
 class PhysicalDevice;
 class LogicalDevice;
 class Surface;
@@ -27,12 +28,12 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 
 class Swapchain {
 public:
-    void init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, std::optional<Swapchain> oldSwapChain = std::nullopt);
+    void init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, std::optional<Swapchain> oldSwapChain = std::nullopt);
     void initFramebuffer(LogicalDevice device, RenderPass renderPass);
     void destroy(LogicalDevice device);
     // Does not currently support using the old swapchain
     // Recreate the swapchain (and its associated framebuffer)
-    void recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, RenderPass renderPass);
+    void recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, RenderPass renderPass);
     VkSwapchainKHR get() { return swapchain; };
     Framebuffer getFramebuffer() { return framebuffer; };
 

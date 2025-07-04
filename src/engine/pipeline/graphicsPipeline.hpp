@@ -15,9 +15,9 @@ class CommandBuffer;
 class GraphicsPipeline {
 public:
     void init(
-        LogicalDevice device,
-        RenderPass renderPass,
-        std::vector<Shader> shaders
+        LogicalDevice device, RenderPass renderPass,
+        std::vector<Shader> shaders,
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo
         // VkViewport viewport, VkRect2D scissor,
     );
     void destroy(LogicalDevice device);
