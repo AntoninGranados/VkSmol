@@ -8,6 +8,7 @@
 class LogicalDevice;
 class Shader;
 class RenderPass;
+class CommandBuffer;
 
 // TODO: make it work with component (there are default values, but we can add/change components)
 // TODO: keep track of the shader modules (in case we want to rebuild the pipeline with the same ones)
@@ -20,6 +21,12 @@ public:
         // VkViewport viewport, VkRect2D scissor,
     );
     void destroy(LogicalDevice device);
+    VkPipeline get() { return pipeline; };
+
+    void bind(CommandBuffer commandBuffer);
+    void setViewport(CommandBuffer commandBuffer, VkViewport viewport); // In case it is set to be dynamic
+    void setScissor(CommandBuffer commandBuffer, VkRect2D scissor);     // In case it is set to be dynamic
+    void draw(CommandBuffer commandBuffer);
 
 private:
     VkPipeline pipeline;

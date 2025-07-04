@@ -14,6 +14,8 @@
 #include "./renderPass.hpp"
 #include "./pipeline/graphicsPipeline.hpp"
 #include "./framebuffer.hpp"
+#include "./command/commandPool.hpp"
+#include "./command/commandBuffer.hpp"
 #include "./utils.hpp"
 
 // TODO: remove error checking (everywhere) when using NDEBUG
@@ -40,11 +42,16 @@ private:
     RenderPass renderPass;
     GraphicsPipeline graphicsPipeline;
 
+    CommandPool commandPool;
+    CommandBuffer commandBuffer;
+
     void initWindow();
     void initVulkan();
-    std::vector<const char*> getRequiredExtensions();
 
+    std::vector<const char*> getRequiredExtensions();
     int scoreDevice(PhysicalDevice device);
+
+    void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
 
     void mainLoop();
 

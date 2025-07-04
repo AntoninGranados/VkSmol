@@ -1,6 +1,8 @@
 #include "renderPass.hpp"
 
+#include "./command/commandBuffer.hpp"
 #include "./logicalDevice.hpp"
+#include "./swapchain.hpp"
 #include "./utils.hpp"
 
 void RenderPass::init(LogicalDevice device) {
@@ -37,6 +39,24 @@ void RenderPass::addSubpass(
         subpass.colorAttachmentRefs.push_back(getAttachmentRef(idx));
     subpasses.push_back(subpass);
 }
+
+void RenderPass::begin(CommandBuffer commandBuffer, Swapchain swapchain, VkFramebuffer frame, VkClearValue clearValue) {
+    VkRenderPassBeginInfo renderPassBegin{};
+    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBegin.renderPass = renderPass;
+    renderPassBegin.framebuffer = frame;
+    renderPassBegin.renderArea.offset = { 0, 0 };
+    renderPassBegin.renderArea.extent = swapchain.getExtent();
+    renderPassBegin.clearValueCount = 1;
+    renderPassBegin.pClearValues = &clearValue;
+
+    vkCmdBeginRenderPass(commandBuffer.get(), &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void RenderPass::end(CommandBuffer commandBuffer) {
+    vkCmdEndRenderPass(commandBuffer.get());
+}
+
 
 VkAttachmentReference RenderPass::getAttachmentRef(size_t attachmentIndex) {
     if (attachmentIndex >= attachments.size())

@@ -105,22 +105,10 @@ void Application::initVulkan() {
     vertShader.destroy(device);
     fragShader.destroy(device);
 
-    /*
-    // TODO: make a wrapper for the viewport
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)swapchain.getExtent().width;
-    viewport.height = (float)swapchain.getExtent().height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor;
-    scissor.offset = {0, 0};
-    scissor.extent = swapchain.getExtent();
-    */
-
     framebuffer.init(device, swapchain, renderPass);
+
+    commandPool.init(device, queueFamilyIndices.graphicsFamily.value());
+    commandBuffer.allocate(device, commandPool);
 }
 
 
@@ -168,6 +156,37 @@ int Application::scoreDevice(PhysicalDevice device) {
 }
 
 
+void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t frameIdx) {
+    commandBuffer.beginRecording();
+    {
+        renderPass.begin(
+            commandBuffer,
+            swapchain,
+            framebuffer.getFrame(frameIdx),
+            {{{1.0f, 0.0f, 0.0f, 1.0f}}}
+        );
+        graphicsPipeline.bind(commandBuffer);
+    
+        // TODO: make a wrapper for the viewport
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)swapchain.getExtent().width;
+        viewport.height = (float)swapchain.getExtent().height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        graphicsPipeline.setViewport(commandBuffer, viewport);
+    
+        VkRect2D scissor;
+        scissor.offset = {0, 0};
+        scissor.extent = swapchain.getExtent();
+        graphicsPipeline.setScissor(commandBuffer, scissor);
+
+        graphicsPipeline.draw(commandBuffer);
+
+        renderPass.end(commandBuffer);
+    }
+}
 
 void Application::mainLoop() {
     while (!glfwWindowShouldClose(window)) {
@@ -176,13 +195,15 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+    commandPool.destroy(device);
+
     framebuffer.destroy(device);
 
     graphicsPipeline.destroy(device);
     renderPass.destroy(device);
 
     swapchain.destroy(device);
-    
+
     device.destroy();
     surface.destroy(instance);
 

@@ -6,6 +6,8 @@
 #include <vector>
 
 class LogicalDevice;
+class CommandBuffer;
+class Swapchain;
 
 // TODO: add other attachements
 struct SubpassInfo {
@@ -25,6 +27,9 @@ public:
         VkPipelineBindPoint bindPoint,
         std::vector<size_t> colorAttachmentIndices
     );  //! Only supports color attachements for now
+
+    void begin(CommandBuffer commandBuffer, Swapchain swapchain, VkFramebuffer frame, VkClearValue clearValue);
+    void end(CommandBuffer commandBuffer);
 
 private:
     VkRenderPass renderPass;

@@ -1,5 +1,6 @@
 #include "graphicsPipeline.hpp"
 
+#include "../command/commandBuffer.hpp"
 #include "../logicalDevice.hpp"
 #include "../shader.hpp"
 #include "../renderPass.hpp"
@@ -107,4 +108,20 @@ void GraphicsPipeline::init(
 void GraphicsPipeline::destroy(LogicalDevice device) {
     vkDestroyPipeline(device.get(), pipeline, nullptr);
     vkDestroyPipelineLayout(device.get(), pipelineLayout, nullptr);
+}
+
+void GraphicsPipeline::bind(CommandBuffer commandBuffer) {
+    vkCmdBindPipeline(commandBuffer.get(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+}
+
+void GraphicsPipeline::setViewport(CommandBuffer commandBuffer, VkViewport viewport) {
+    vkCmdSetViewport(commandBuffer.get(), 0, 1, &viewport);
+}
+
+void GraphicsPipeline::setScissor(CommandBuffer commandBuffer, VkRect2D scissor) {
+    vkCmdSetScissor(commandBuffer.get(), 0, 1, &scissor);
+}
+
+void GraphicsPipeline::draw(CommandBuffer commandBuffer) {
+    vkCmdDraw(commandBuffer.get(), 3, 1, 0, 0);
 }
