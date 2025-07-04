@@ -6,16 +6,23 @@
 #include "./instance.hpp"
 #include "./debugMessenger.hpp"
 #include "./surface.hpp"
+
 #include "./physicalDevice.hpp"
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
+
 #include "./swapchain.hpp"
+#include "./framebuffer.hpp"
+
 #include "./shader.hpp"
 #include "./renderPass.hpp"
 #include "./pipeline/graphicsPipeline.hpp"
-#include "./framebuffer.hpp"
 #include "./command/commandPool.hpp"
 #include "./command/commandBuffer.hpp"
+
+#include "./sync/semaphore.hpp"
+#include "./sync/fence.hpp"
+
 #include "./utils.hpp"
 
 // TODO: remove error checking (everywhere) when using NDEBUG
@@ -45,6 +52,9 @@ private:
     CommandPool commandPool;
     CommandBuffer commandBuffer;
 
+    Semaphore imageAvailableSemaphore, renderFinishedSemaphore;
+    Fence inFlightFence;
+
     void initWindow();
     void initVulkan();
 
@@ -54,6 +64,7 @@ private:
     void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
 
     void mainLoop();
+    void drawFrame();
 
     void cleanup();
 };

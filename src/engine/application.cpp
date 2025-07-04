@@ -109,6 +109,11 @@ void Application::initVulkan() {
 
     commandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     commandBuffer.allocate(device, commandPool);
+
+    // Synchronization Objects
+    imageAvailableSemaphore.init(device);
+    renderFinishedSemaphore.init(device);
+    inFlightFence.init(device, true);
 }
 
 
@@ -191,10 +196,20 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t fram
 void Application::mainLoop() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        drawFrame();
     }
 }
 
+void Application::drawFrame() {
+    inFlightFence.wait(device);
+    inFlightFence.reset(device);
+}
+
 void Application::cleanup() {
+    imageAvailableSemaphore.destroy(device);
+    renderFinishedSemaphore.destroy(device);
+    inFlightFence.destroy(device);
+
     commandPool.destroy(device);
 
     framebuffer.destroy(device);
