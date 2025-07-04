@@ -26,6 +26,7 @@
 #include "./utils.hpp"
 
 // TODO: remove error checking (everywhere) when using NDEBUG
+// TODO: clear every vector when using destroy in a function (in case we want to recreate the object by recalling init)
 
 class Application {
 public:
@@ -44,7 +45,6 @@ private:
     Queue graphicsQueue, presentQueue;
 
     Swapchain swapchain;
-    Framebuffer framebuffer;
 
     RenderPass renderPass;
     GraphicsPipeline graphicsPipeline;
@@ -57,9 +57,12 @@ private:
     std::vector<Fence> inFlightFences;
     uint32_t currentFrame = 0;
 
+    bool framebufferResized = false;
+
     void initWindow();
     void initVulkan();
 
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     std::vector<const char*> getRequiredExtensions();
     int scoreDevice(PhysicalDevice device);
 

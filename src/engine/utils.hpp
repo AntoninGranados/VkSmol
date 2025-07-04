@@ -6,6 +6,10 @@
 #include <set>
 #include <vector>
 
+// TODO: use Smol/SMOL_ or something similar to start the defines and the functions
+
+#define RECREATE_SWAPCHAIN ~(0u)
+
 // Message formating
 #define MAX_MSG_SIZE 256u
 #define MSG_RED "\033[31m"

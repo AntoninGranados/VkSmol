@@ -4,6 +4,8 @@
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
 #include "./surface.hpp"
+#include "./renderPass.hpp"
+#include "./framebuffer.hpp"
 #include "./sync/semaphore.hpp"
 #include "./utils.hpp"
 
@@ -32,7 +34,7 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 }
 
 
-void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window) {
+void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, std::optional<Swapchain> oldSwapChain) {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -74,7 +76,7 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;  // For an opaque window
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;   // Pixel behind other window will be clipped
-    createInfo.oldSwapchain = VK_NULL_HANDLE;   // In case we need to recreate the swap chain, we need to supply the old one
+    createInfo.oldSwapchain = oldSwapChain == std::nullopt ? VK_NULL_HANDLE : oldSwapChain.value().get();
 
     vkCheck(vkCreateSwapchainKHR(device.get(), &createInfo, nullptr, &swapchain), "Failed to create the swap chain");
 
@@ -82,14 +84,39 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     initImageViews(device);
 }
 
+void Swapchain::initFramebuffer(LogicalDevice device, RenderPass renderPass) {
+    framebuffer.init(device, *this, renderPass);
+}
+
 void Swapchain::destroy(LogicalDevice device) {
+    framebuffer.destroy(device);
     destroyImageViews(device);
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
+
+    images.clear();
+    imageViews.clear();
+}
+
+// TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
+void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, GLFWwindow* window, RenderPass renderPass) {
+    device.waitIdle();
+
+    destroy(device);
+    framebuffer.destroy(device);
+
+    init(device, physicalDevice, surface, window);
+    framebuffer.init(device, *this, renderPass);
 }
 
 uint32_t Swapchain::getNextImageIndex(LogicalDevice device, Semaphore semaphore) {
     uint32_t frameIndex;
-    vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
+
+    VkResult result = vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        return RECREATE_SWAPCHAIN;
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swapchain image");
+
     return frameIndex;
 }
 

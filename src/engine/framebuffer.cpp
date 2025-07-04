@@ -27,4 +27,6 @@ void Framebuffer::init(LogicalDevice device, Swapchain swapchain, RenderPass ren
 void Framebuffer::destroy(LogicalDevice device) {
     for (VkFramebuffer framebuffer : framebuffers)
         vkDestroyFramebuffer(device.get(), framebuffer, nullptr);
+
+    framebuffers.clear();
 }

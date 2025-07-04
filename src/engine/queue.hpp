@@ -39,7 +39,8 @@ public:
         std::vector<Semaphore> waitSemaphores, std::vector<VkPipelineStageFlags> waitStages,
         std::vector<Semaphore> signalSemaphores
     );
-    void present(
+    // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
+    uint32_t present(
         std::vector<Swapchain> swapchains,
         std::vector<uint32_t> frameIndices,
         std::vector<Semaphore> waitSemaphores

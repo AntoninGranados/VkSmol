@@ -10,6 +10,7 @@ class Swapchain;
 class RenderPass;
 
 // This is not a wrapper for VkFramebuffer, this represent the array of VkFramebuffer for a given Swapchain
+// This class if used in Swapchain and should not be instanciated manually
 class Framebuffer {
 public:
     void init(LogicalDevice device, Swapchain swapchain, RenderPass renderPass);

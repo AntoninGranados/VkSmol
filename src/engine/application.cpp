@@ -43,10 +43,13 @@ void Application::initWindow() {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     window = glfwCreateWindow(WIDTH, HEIGHT, "Application", nullptr, nullptr);
     if (!window) throw std::runtime_error("Could not create GLFW window");
+
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
 
 void Application::initVulkan() {
@@ -112,7 +115,7 @@ void Application::initVulkan() {
     vertShader.destroy(device);
     fragShader.destroy(device);
 
-    framebuffer.init(device, swapchain, renderPass);
+    swapchain.initFramebuffer(device, renderPass);
 
     commandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
@@ -132,6 +135,11 @@ void Application::initVulkan() {
     }
 }
 
+
+void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    Application* pApp = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+    pApp->framebufferResized = true;
+}
 
 std::vector<const char*> Application::getRequiredExtensions() {
     // Extensions needed by GLFW
@@ -183,7 +191,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
         renderPass.begin(
             commandBuffer,
             swapchain,
-            framebuffer.getFrame(imageIndex),
+            swapchain.getFramebuffer().getFrame(imageIndex),
             {{{0.0f, 0.0f, 0.0f, 1.0f}}}
         );
         graphicsPipeline.bind(commandBuffer);
@@ -219,9 +227,16 @@ void Application::mainLoop() {
 
 void Application::drawFrame() {
     inFlightFences[currentFrame].wait(device);
-    inFlightFences[currentFrame].reset(device);
 
-    uint32_t imageIndex = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
+    uint32_t result;
+    result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
+    if (result == RECREATE_SWAPCHAIN) {
+        swapchain.recreate(device, physicalDevice, surface, window, renderPass);
+        return;
+    }
+
+    inFlightFences[currentFrame].reset(device);
+    uint32_t imageIndex = result;
 
     commandBuffers[currentFrame].reset();
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
@@ -232,9 +247,21 @@ void Application::drawFrame() {
         { renderFinishedSemaphores[currentFrame][imageIndex] }
     );
 
-    presentQueue.present({ swapchain }, { imageIndex }, { renderFinishedSemaphores[currentFrame][imageIndex] });
+    result = presentQueue.present({ swapchain }, { imageIndex }, { renderFinishedSemaphores[currentFrame][imageIndex] });
+    if (result == RECREATE_SWAPCHAIN || framebufferResized) {
+        framebufferResized = false;
+        swapchain.recreate(device, physicalDevice, surface, window, renderPass);
+    }
 
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
+
+    // Stall the application when it is minimized
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
 }
 
 void Application::cleanup() {
@@ -249,12 +276,11 @@ void Application::cleanup() {
 
     commandPool.destroy(device);
 
-    framebuffer.destroy(device);
-
+    swapchain.destroy(device);
+    
     graphicsPipeline.destroy(device);
     renderPass.destroy(device);
 
-    swapchain.destroy(device);
 
     device.destroy();
     surface.destroy(instance);

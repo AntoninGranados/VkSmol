@@ -69,7 +69,7 @@ void Queue::submit(
     vkCheck(vkQueueSubmit(queue, 1, &submitInfo, fence.get()), "Failed to submit queue");
 }
 
-void Queue::present(
+uint32_t Queue::present(
     std::vector<Swapchain> swapchains,
     std::vector<uint32_t> frameIndices,
     std::vector<Semaphore> waitSemaphores
@@ -90,5 +90,11 @@ void Queue::present(
     presentInfo.pSwapchains = vkSwapchain.data();
     presentInfo.pImageIndices = frameIndices.data();
 
-    vkQueuePresentKHR(queue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(queue, &presentInfo);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        return RECREATE_SWAPCHAIN;
+    else if (result != VK_SUCCESS)
+        throw std::runtime_error("Failed to present the queue");
+
+    return 0;
 }
