@@ -11,6 +11,7 @@
 class PhysicalDevice;
 class LogicalDevice;
 class Surface;
+class Semaphore;
 
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -34,6 +35,8 @@ public:
     uint32_t getImageCount() { return imageCount; };
     VkFormat getImageFormat() { return imageFormat; };
     VkExtent2D getExtent() { return extent; };
+
+    uint32_t getNextFrameIndex(LogicalDevice device, Semaphore semaphore);
 
 private:
     VkSwapchainKHR swapchain;

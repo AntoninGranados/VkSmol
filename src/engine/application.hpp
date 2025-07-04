@@ -52,7 +52,8 @@ private:
     CommandPool commandPool;
     CommandBuffer commandBuffer;
 
-    Semaphore imageAvailableSemaphore, renderFinishedSemaphore;
+    Semaphore imageAvailableSemaphore;
+    std::vector<Semaphore> renderFinishedSemaphores;    // One semaphore per image in the swap chain
     Fence inFlightFence;
 
     void initWindow();

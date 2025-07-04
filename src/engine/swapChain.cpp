@@ -4,6 +4,7 @@
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
 #include "./surface.hpp"
+#include "./sync/semaphore.hpp"
 #include "./utils.hpp"
 
 #include <print>
@@ -85,6 +86,14 @@ void Swapchain::destroy(LogicalDevice device) {
     destroyImageViews(device);
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
 }
+
+uint32_t Swapchain::getNextFrameIndex(LogicalDevice device, Semaphore semaphore) {
+    uint32_t frameIndex;
+    vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
+    return frameIndex;
+}
+
+
 
 void Swapchain::initImages(LogicalDevice device) {
     vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, nullptr);

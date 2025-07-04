@@ -3,6 +3,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <vector>
+
 class LogicalDevice;
 class CommandPool;
 
@@ -14,6 +16,7 @@ public:
 
     void beginRecording();
     void endRecording();
+    void reset();
 
 private:
     VkCommandBuffer commandBuffer;

@@ -15,6 +15,8 @@ void RenderPass::init(LogicalDevice device) {
     renderPassInfo.pAttachments = attachments.data();
     renderPassInfo.subpassCount = static_cast<uint32_t>(subpasseDescriptions.size());
     renderPassInfo.pSubpasses = subpasseDescriptions.data();
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
 
     vkCheck(vkCreateRenderPass(device.get(), &renderPassInfo, nullptr, &renderPass), "Failed to create render pass");
 }
@@ -24,20 +26,35 @@ void RenderPass::destroy(LogicalDevice device) {
 }
 
 void RenderPass::addAttachment(VkAttachmentDescription attachment, VkImageLayout subpassLayout) {
-    attachments.push_back(attachment);
-    subpassLayouts.push_back(subpassLayout);
+    attachments.emplace_back(attachment);
+    subpassLayouts.emplace_back(subpassLayout);
 }
 
 void RenderPass::addSubpass(
     VkPipelineBindPoint bindPoint,
     std::vector<size_t> colorAttachmentIndices
 ) {
-    subpassBindPoints.push_back(bindPoint);
+    subpassBindPoints.emplace_back(bindPoint);
 
     SubpassInfo subpass{};
     for (size_t idx : colorAttachmentIndices)
-        subpass.colorAttachmentRefs.push_back(getAttachmentRef(idx));
-    subpasses.push_back(subpass);
+        subpass.colorAttachmentRefs.emplace_back(getAttachmentRef(idx));
+    subpasses.emplace_back(subpass);
+}
+
+void RenderPass::addDepedency(
+    uint32_t srcSubpass, uint32_t dstSubpass,
+    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
+    VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask
+) {
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = srcSubpass;
+    dependency.dstSubpass = dstSubpass;
+    dependency.srcStageMask = srcStageMask;
+    dependency.dstStageMask = dstStageMask;
+    dependency.srcAccessMask = srcAccessMask;
+    dependency.dstAccessMask = dstAccessMask;
+    dependencies.emplace_back(dependency);
 }
 
 void RenderPass::begin(CommandBuffer commandBuffer, Swapchain swapchain, VkFramebuffer frame, VkClearValue clearValue) {

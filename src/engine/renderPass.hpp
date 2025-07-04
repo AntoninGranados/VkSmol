@@ -27,6 +27,12 @@ public:
         VkPipelineBindPoint bindPoint,
         std::vector<size_t> colorAttachmentIndices
     );  //! Only supports color attachements for now
+    // Needs to be called befor init()
+    void addDepedency(
+        uint32_t srcSubpass, uint32_t dstSubpass,
+        VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
+        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask
+    );
 
     void begin(CommandBuffer commandBuffer, Swapchain swapchain, VkFramebuffer frame, VkClearValue clearValue);
     void end(CommandBuffer commandBuffer);
@@ -39,6 +45,8 @@ private:
     std::vector<SubpassInfo> subpasses;
     std::vector<VkPipelineBindPoint> subpassBindPoints;
     std::vector<VkSubpassDescription> subpasseDescriptions;
+
+    std::vector<VkSubpassDependency> dependencies;
 
     VkAttachmentReference getAttachmentRef(size_t attachmentIndex);
     VkSubpassDescription getSubpassDescription(size_t subpassIndex);

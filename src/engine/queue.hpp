@@ -9,6 +9,10 @@
 class Surface;
 class PhysicalDevice;
 class LogicalDevice;
+class CommandBuffer;
+class Swapchain;
+class Semaphore;
+class Fence;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily; // queue for graphics
@@ -22,12 +26,24 @@ struct QueueFamilyIndices {
 
 QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surface);
 
-
 class Queue {
 public:
     void init(LogicalDevice device, uint32_t queueFamilyIndex);
     // void destroy();
     VkQueue get() { return queue; };
+
+    // Should be able to generate multiple VkSubmitInfo and submit them
+    void submit(
+        std::vector<CommandBuffer> commandBuffers,
+        Fence fence,
+        std::vector<Semaphore> waitSemaphores, std::vector<VkPipelineStageFlags> waitStages,
+        std::vector<Semaphore> signalSemaphores
+    );
+    void present(
+        std::vector<Swapchain> swapchains,
+        std::vector<uint32_t> frameIndices,
+        std::vector<Semaphore> waitSemaphores
+    );
 
 private:
     VkQueue queue;

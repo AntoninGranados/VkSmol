@@ -24,3 +24,7 @@ void CommandBuffer::beginRecording() {
 void CommandBuffer::endRecording() {
     vkCheck(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer");
 }
+
+void CommandBuffer::reset() {
+    vkResetCommandBuffer(commandBuffer, 0);
+}

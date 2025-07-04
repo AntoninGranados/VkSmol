@@ -92,6 +92,11 @@ void Application::initVulkan() {
 
     renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
+    renderPass.addDepedency(
+        VK_SUBPASS_EXTERNAL, 0,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    );
     renderPass.init(device);
     
     // Graphics Pipeline
@@ -112,7 +117,9 @@ void Application::initVulkan() {
 
     // Synchronization Objects
     imageAvailableSemaphore.init(device);
-    renderFinishedSemaphore.init(device);
+    renderFinishedSemaphores.resize(swapchain.getImageCount());
+    for (Semaphore& semaphore : renderFinishedSemaphores)
+        semaphore.init(device);
     inFlightFence.init(device, true);
 }
 
@@ -161,14 +168,14 @@ int Application::scoreDevice(PhysicalDevice device) {
 }
 
 
-void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t frameIdx) {
+void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t frameIndex) {
     commandBuffer.beginRecording();
     {
         renderPass.begin(
             commandBuffer,
             swapchain,
-            framebuffer.getFrame(frameIdx),
-            {{{1.0f, 0.0f, 0.0f, 1.0f}}}
+            framebuffer.getFrame(frameIndex),
+            {{{0.0f, 0.0f, 0.0f, 1.0f}}}
         );
         graphicsPipeline.bind(commandBuffer);
     
@@ -191,6 +198,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t fram
 
         renderPass.end(commandBuffer);
     }
+    commandBuffer.endRecording();
 }
 
 void Application::mainLoop() {
@@ -203,11 +211,27 @@ void Application::mainLoop() {
 void Application::drawFrame() {
     inFlightFence.wait(device);
     inFlightFence.reset(device);
+
+    uint32_t frameIndex = swapchain.getNextFrameIndex(device, imageAvailableSemaphore);
+
+    commandBuffer.reset();
+    recordCommandBuffer(commandBuffer, frameIndex);
+    graphicsQueue.submit(
+        { commandBuffer },
+        inFlightFence,
+        { imageAvailableSemaphore }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
+        { renderFinishedSemaphores[frameIndex] }
+    );
+
+    presentQueue.present({ swapchain }, { frameIndex }, { renderFinishedSemaphores[frameIndex] });
 }
 
 void Application::cleanup() {
+    device.waitIdle();
+    
     imageAvailableSemaphore.destroy(device);
-    renderFinishedSemaphore.destroy(device);
+    for (Semaphore& semaphore : renderFinishedSemaphores)
+        semaphore.destroy(device);
     inFlightFence.destroy(device);
 
     commandPool.destroy(device);

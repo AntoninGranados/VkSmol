@@ -48,3 +48,7 @@ void LogicalDevice::init(
 void LogicalDevice::destroy() {
     vkDestroyDevice(device, nullptr);
 }
+
+void LogicalDevice::waitIdle() {
+    vkDeviceWaitIdle(device);
+}

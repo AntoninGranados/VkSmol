@@ -19,6 +19,8 @@ public:
     void destroy();
     VkDevice get() { return device; };
 
+    void waitIdle();
+
 private:
     VkDevice device;
 };
