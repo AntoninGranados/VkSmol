@@ -25,6 +25,12 @@ const std::vector<const char*> validationLayers = {
 };
 
 
+const std::vector<Vertex> vertices = {
+    { { 0.0f,-0.5f}, {0.0f, 0.0f, 0.0f} },
+    { { 0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} },
+    { {-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f} }
+};
+
 
 void Application::run() {
     init();
@@ -118,6 +124,10 @@ void Application::init() {
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.allocate(device, commandPool);
 
+    vertexBuffer.init(device, sizeof(Vertex)*vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    vertexBuffer.alloc(device, physicalDevice);
+    vertexBuffer.fill(device, (void*)vertices.data());
+
     // Synchronization Objects
     imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
     renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
@@ -180,9 +190,7 @@ int Application::scoreDevice(PhysicalDevice device) {
     return 1;
 }
 
-/*
-============== INITIALISATION ==============
-*/
+
 void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
     commandBuffer.beginRecording();
     {
@@ -193,6 +201,8 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
             {{{0.0f, 0.0f, 0.0f, 1.0f}}}
         );
         graphicsPipeline.bind(commandBuffer);
+
+        vertexBuffer.bindVertex(commandBuffer);
     
         // TODO: make a wrapper for the viewport
         VkViewport viewport{};
@@ -266,6 +276,9 @@ void Application::cleanup() {
             semaphore.destroy(device);
         inFlightFences[i].destroy(device);
     }
+
+    vertexBuffer.free(device);
+    vertexBuffer.destroy(device);
 
     commandPool.destroy(device);
 

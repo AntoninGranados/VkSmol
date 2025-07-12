@@ -115,5 +115,5 @@ void GraphicsPipeline::setScissor(CommandBuffer commandBuffer, VkRect2D scissor)
 }
 
 void GraphicsPipeline::draw(CommandBuffer commandBuffer) {
-    vkCmdDraw(commandBuffer.get(), 4, 1, 0, 0);
+    vkCmdDraw(commandBuffer.get(), 3, 1, 0, 0);
 }

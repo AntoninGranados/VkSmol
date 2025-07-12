@@ -21,7 +21,10 @@ private:
     void initAttributeDescriptions(uint32_t binding);
 };
 
-// Implementation
+
+/*
+============== IMPLEMENTATION ==============
+*/
 
 template <typename T>
 void VertexInput<T>::initBindingDescription(uint32_t binding) {

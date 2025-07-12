@@ -26,6 +26,8 @@
 #include "./command/commandPool.hpp"
 #include "./command/commandBuffer.hpp"
 
+#include "./memory/buffer.hpp"
+
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
 
@@ -61,6 +63,8 @@ private:
 
     CommandPool commandPool;
     std::vector<CommandBuffer> commandBuffers;
+
+    Buffer vertexBuffer;
 
     std::vector<Semaphore> imageAvailableSemaphores;
     std::vector<std::vector<Semaphore> > renderFinishedSemaphores;    // One semaphore per image in the swap chain
