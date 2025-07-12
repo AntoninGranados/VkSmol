@@ -2,7 +2,9 @@
 
 #include "../physicalDevice.hpp"
 #include "../logicalDevice.hpp"
+#include "../command/commandPool.hpp"
 #include "../command/commandBuffer.hpp"
+#include "../queue.hpp"
 #include "../utils.hpp"
 
 void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage) {
@@ -18,7 +20,7 @@ void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage) {
     vkCheck(vkCreateBuffer(device.get(), &createInfo, nullptr, &m_Buffer), "Failed to create buffer");
 }
 
-void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice) {
+void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device.get(), m_Buffer, &memRequirements);
 
@@ -28,7 +30,7 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice) {
     allocInfo.memoryTypeIndex = findMemoryType(
         physicalDevice,
         memRequirements.memoryTypeBits,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        properties
     );
 
     vkCheck(vkAllocateMemory(device.get(), &allocInfo, nullptr, &m_BufferMemory), "Failed to allocate buffer memory");
@@ -52,8 +54,29 @@ void Buffer::fill(LogicalDevice device, void* data) {
     vkUnmapMemory(device.get(), m_BufferMemory);
 }
 
+void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
+    if (srcBuffer.getSize() != dstBuffer.getSize())
+        throw std::runtime_error("Buffers don't have the same size");
+
+    CommandBuffer temporaryCommandBuffer;
+    temporaryCommandBuffer.alloc(device, transferCommandPool);
+    temporaryCommandBuffer.beginRecording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.size = srcBuffer.getSize();
+    vkCmdCopyBuffer(temporaryCommandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 1, &copyRegion);
+
+    temporaryCommandBuffer.endRecording();
+
+    transferQueue.submit({ temporaryCommandBuffer });
+    transferQueue.wait();
+
+    temporaryCommandBuffer.free(device, transferCommandPool);
+}
+
+
 void Buffer::bindVertex(CommandBuffer commandBuffer) {
-    if (m_Usage != VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+    if (!(m_Usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
         throw std::runtime_error("Trying to bind a buffer as a vertex buffer when it is not");
     
     VkBuffer buffers[] = { m_Buffer };

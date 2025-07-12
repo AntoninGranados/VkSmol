@@ -35,6 +35,8 @@
 
 // TODO: remove error checking (everywhere) when using NDEBUG
 // TODO: clear every vector when using destroy in a function (in case we want to recreate the object by recalling init)
+// TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
+
 struct Vertex {
     glm::vec2 position;
     glm::vec3 color;
@@ -54,14 +56,14 @@ private:
     
     PhysicalDevice physicalDevice;
     LogicalDevice device;
-    Queue graphicsQueue, presentQueue;
+    Queue graphicsQueue, presentQueue, transferQueue;
 
     Swapchain swapchain;
 
     RenderPass renderPass;
     GraphicsPipeline graphicsPipeline;
 
-    CommandPool commandPool;
+    CommandPool graphicsCommandPool, transferCommandPool;
     std::vector<CommandBuffer> commandBuffers;
 
     Buffer vertexBuffer;

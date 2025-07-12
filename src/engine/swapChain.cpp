@@ -58,19 +58,14 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;    // If we want to do post processing, we should use `VK_IMAGE_USAGE_TRANSFER_DST_BIT`
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
-    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
     // In the case where the two families are different
     // we have to tell the GPU that the images will be shared accross mulitple families
-    if (indices.graphicsFamily != indices.presentFamily) {
+    if (!indices.sameFamilies()) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        // createInfo.queueFamilyIndexCount = static_cast<uint32_t>(indices.getIndices().size());
-        // createInfo.pQueueFamilyIndices = indices.getIndices().data();
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        createInfo.queueFamilyIndexCount = static_cast<uint32_t>(indices.getIndices().size());
+        createInfo.pQueueFamilyIndices = indices.getIndices().data();
     } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = nullptr;
     }
 
     createInfo.preTransform = swapChainSupport.capabilities.currentTransform;   // No added transformation

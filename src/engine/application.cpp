@@ -75,6 +75,7 @@ void Application::init() {
 
     graphicsQueue.init(device, queueFamilyIndices.graphicsFamily.value());
     presentQueue.init(device, queueFamilyIndices.presentFamily.value());
+    transferQueue.init(device, queueFamilyIndices.transferFamily.value());
 
     swapchain.init(device, physicalDevice, surface, window);
 
@@ -119,14 +120,26 @@ void Application::init() {
 
     swapchain.initFramebuffer(device, renderPass);
 
-    commandPool.init(device, queueFamilyIndices.graphicsFamily.value());
+    graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
+    transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
     commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
     for (CommandBuffer& commandBuffer : commandBuffers)
-        commandBuffer.allocate(device, commandPool);
+        commandBuffer.alloc(device, graphicsCommandPool);
 
-    vertexBuffer.init(device, sizeof(Vertex)*vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    vertexBuffer.alloc(device, physicalDevice);
-    vertexBuffer.fill(device, (void*)vertices.data());
+    // Buffers
+    size_t size = sizeof(Vertex)*vertices.size();
+    Buffer stagingBuffer;
+    stagingBuffer.init(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    stagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    stagingBuffer.fill(device, (void*)vertices.data());
+
+    vertexBuffer.init(device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    vertexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    Buffer::copy(stagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
+
+    stagingBuffer.free(device);
+    stagingBuffer.destroy(device);
 
     // Synchronization Objects
     imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
@@ -280,13 +293,15 @@ void Application::cleanup() {
     vertexBuffer.free(device);
     vertexBuffer.destroy(device);
 
-    commandPool.destroy(device);
+    for (CommandBuffer& commandBuffer : commandBuffers)
+        commandBuffer.free(device, graphicsCommandPool);
+    graphicsCommandPool.destroy(device);
+    transferCommandPool.destroy(device);
 
     swapchain.destroy(device);
     
     graphicsPipeline.destroy(device);
     renderPass.destroy(device);
-
 
     device.destroy();
     surface.destroy(instance);

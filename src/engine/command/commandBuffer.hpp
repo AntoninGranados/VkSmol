@@ -10,14 +10,15 @@ class CommandPool;
 
 class CommandBuffer {
 public:
-    void allocate(LogicalDevice device, CommandPool pool);
+    void alloc(LogicalDevice device, CommandPool pool);
+    void free(LogicalDevice device, CommandPool pool);
     // void free(LogicalDevice device);
-    VkCommandBuffer get() { return commandBuffer; };
+    VkCommandBuffer get() { return m_CommandBuffer; };
 
-    void beginRecording();
+    void beginRecording(VkCommandBufferUsageFlagBits flags = (VkCommandBufferUsageFlagBits)0);
     void endRecording();
     void reset();
 
 private:
-    VkCommandBuffer commandBuffer;
+    VkCommandBuffer m_CommandBuffer;
 };
