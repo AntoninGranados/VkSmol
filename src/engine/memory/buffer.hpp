@@ -22,9 +22,10 @@ public:
     void fill(LogicalDevice device, void* data);
     static void copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
 
-    // TODO: make a statice version to bind multiple buffer
-    // TODO: remove error checking if NDBUG
+    // TODO: make a static version to bind multiple buffer
+    // TODO: remove error checking if NDEBUG
     void bindVertex(CommandBuffer commandBuffer);
+    void bindIndex(CommandBuffer commandBuffer, VkIndexType indexType);
 
 private:
     VkBuffer m_Buffer;

@@ -21,14 +21,16 @@ public:
         // VkViewport viewport, VkRect2D scissor,
     );
     void destroy(LogicalDevice device);
-    VkPipeline get() { return pipeline; };
+    VkPipeline get() { return m_Pipeline; };
 
     void bind(CommandBuffer commandBuffer);
     void setViewport(CommandBuffer commandBuffer, VkViewport viewport); // In case it is set to be dynamic
     void setScissor(CommandBuffer commandBuffer, VkRect2D scissor);     // In case it is set to be dynamic
-    void draw(CommandBuffer commandBuffer);
+    
+    void draw(CommandBuffer commandBuffer, size_t vertexCount);
+    void drawIndexed(CommandBuffer commandBuffer, size_t indexCount);
 
 private:
-    VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
+    VkPipeline m_Pipeline;
+    VkPipelineLayout m_PipelineLayout;
 };

@@ -36,6 +36,7 @@
 // TODO: remove error checking (everywhere) when using NDEBUG
 // TODO: clear every vector when using destroy in a function (in case we want to recreate the object by recalling init)
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
+// TODO: allow the use of a single buffer for better caching and use the offset parameters
 
 struct Vertex {
     glm::vec2 position;
@@ -66,7 +67,7 @@ private:
     CommandPool graphicsCommandPool, transferCommandPool;
     std::vector<CommandBuffer> commandBuffers;
 
-    Buffer vertexBuffer;
+    Buffer vertexBuffer, indexBuffer;
 
     std::vector<Semaphore> imageAvailableSemaphores;
     std::vector<std::vector<Semaphore> > renderFinishedSemaphores;    // One semaphore per image in the swap chain

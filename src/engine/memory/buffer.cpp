@@ -84,6 +84,14 @@ void Buffer::bindVertex(CommandBuffer commandBuffer) {
     vkCmdBindVertexBuffers(commandBuffer.get(), 0, 1, buffers, offsets);
 }
 
+void Buffer::bindIndex(CommandBuffer commandBuffer, VkIndexType indexType) {
+if (!(m_Usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
+        throw std::runtime_error("Trying to bind a buffer as an index buffer when it is not");
+    
+    vkCmdBindIndexBuffer(commandBuffer.get(), m_Buffer, 0, indexType);
+}
+
+
 uint32_t Buffer::findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice.get(), &memProperties);

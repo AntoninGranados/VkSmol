@@ -26,9 +26,14 @@ const std::vector<const char*> validationLayers = {
 
 
 const std::vector<Vertex> vertices = {
-    { { 0.0f,-0.5f}, {0.0f, 0.0f, 0.0f} },
-    { { 0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} },
-    { {-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f} }
+    { {-0.5f,-0.5f}, {0.0f, 0.0f, 0.0f} },
+    { { 0.5f,-0.5f}, {1.0f, 0.0f, 0.0f} },
+    { { 0.5f, 0.5f}, {1.0f, 1.0f, 0.0f} },
+    { {-0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} }
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0
 };
 
 
@@ -126,20 +131,33 @@ void Application::init() {
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.alloc(device, graphicsCommandPool);
 
-    // Buffers
-    size_t size = sizeof(Vertex)*vertices.size();
-    Buffer stagingBuffer;
-    stagingBuffer.init(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    stagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer.fill(device, (void*)vertices.data());
+    // Vertex Buffers
+    Buffer vertexStagingBuffer;
+    size_t vertexBufferSize = sizeof(Vertex)*vertices.size();
+    vertexStagingBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vertexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    vertexStagingBuffer.fill(device, (void*)vertices.data());
 
-    vertexBuffer.init(device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    vertexBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     vertexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    Buffer::copy(vertexStagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
 
-    Buffer::copy(stagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
+    vertexStagingBuffer.free(device);
+    vertexStagingBuffer.destroy(device);
 
-    stagingBuffer.free(device);
-    stagingBuffer.destroy(device);
+    // Index Buffer
+    Buffer indexStagingBuffer;
+    size_t indexBufferSize = sizeof(indices[0])*indices.size();
+    indexStagingBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    indexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    indexStagingBuffer.fill(device, (void*)indices.data());
+
+    indexBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    indexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    Buffer::copy(indexStagingBuffer, indexBuffer, device, transferCommandPool, transferQueue);
+
+    indexStagingBuffer.free(device);
+    indexStagingBuffer.destroy(device);
 
     // Synchronization Objects
     imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
@@ -216,6 +234,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
         graphicsPipeline.bind(commandBuffer);
 
         vertexBuffer.bindVertex(commandBuffer);
+        indexBuffer.bindIndex(commandBuffer, VK_INDEX_TYPE_UINT16);
     
         // TODO: make a wrapper for the viewport
         VkViewport viewport{};
@@ -232,7 +251,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
         scissor.extent = swapchain.getExtent();
         graphicsPipeline.setScissor(commandBuffer, scissor);
 
-        graphicsPipeline.draw(commandBuffer);
+        graphicsPipeline.drawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()));
 
         renderPass.end(commandBuffer);
     }
@@ -292,6 +311,8 @@ void Application::cleanup() {
 
     vertexBuffer.free(device);
     vertexBuffer.destroy(device);
+    indexBuffer.free(device);
+    indexBuffer.destroy(device);
 
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.free(device, graphicsCommandPool);
