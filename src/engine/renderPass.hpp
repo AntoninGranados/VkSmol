@@ -28,7 +28,7 @@ public:
         std::vector<size_t> colorAttachmentIndices
     );  //! Only supports color attachements for now
     // Needs to be called befor init()
-    void addDepedency(
+    void addDependency(
         uint32_t srcSubpass, uint32_t dstSubpass,
         VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
         VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask

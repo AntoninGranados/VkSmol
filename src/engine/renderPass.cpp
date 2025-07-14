@@ -42,7 +42,7 @@ void RenderPass::addSubpass(
     subpasses.emplace_back(subpass);
 }
 
-void RenderPass::addDepedency(
+void RenderPass::addDependency(
     uint32_t srcSubpass, uint32_t dstSubpass,
     VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
     VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask

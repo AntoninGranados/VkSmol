@@ -94,11 +94,11 @@ void Application::init() {
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     
         renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
-        renderPass.addDepedency(
+        renderPass.addDependency(
             VK_SUBPASS_EXTERNAL, 0,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
@@ -139,6 +139,8 @@ void Application::init() {
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.alloc(device, graphicsCommandPool);
 
+    initImgui();
+    
     // Buffers
     {
         // Vertex Buffer
@@ -195,15 +197,88 @@ void Application::init() {
     {
         imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
         renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-        inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
+        uiFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+        renderInFlightFences.resize(MAX_FRAME_IN_FLIGHT);
+        uiInFlightFences.resize(MAX_FRAME_IN_FLIGHT);
         for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
             imageAvailableSemaphores[i].init(device);
+
             renderFinishedSemaphores[i].resize(swapchain.getImageCount());
             for (Semaphore& semaphore : renderFinishedSemaphores[i])
                 semaphore.init(device);
-            inFlightFences[i].init(device, true);
+
+            uiFinishedSemaphores[i].resize(swapchain.getImageCount());
+            for (Semaphore& semaphore : uiFinishedSemaphores[i])
+                semaphore.init(device);
+
+            renderInFlightFences[i].init(device, true);
+            uiInFlightFences[i].init(device, true);
         }
     }
+}
+
+void Application::initImgui() {
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+
+    uiCommandPool.init(device, indices.graphicsFamily.value());
+    uiCommandBuffers.resize(MAX_FRAME_IN_FLIGHT);
+    for (CommandBuffer& commandBuffer : uiCommandBuffers)
+        commandBuffer.alloc(device, uiCommandPool);
+
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = swapchain.getImageFormat();
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    uiRenderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    uiRenderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
+    uiRenderPass.addDependency(
+        VK_SUBPASS_EXTERNAL, 0,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    );
+    uiRenderPass.init(device);
+    
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    ImGui::StyleColorsDark();
+    ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.95f);
+    ImGui::GetStyle().Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+    ImGui_ImplGlfw_InitForVulkan(window.get(), true);
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance = instance.get();
+    initInfo.PhysicalDevice = physicalDevice.get();
+    initInfo.Device = device.get();
+    initInfo.QueueFamily = indices.graphicsFamily.value();
+    initInfo.Queue = graphicsQueue.get();
+
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_SAMPLER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000);
+    uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100);
+    uiDescriptorPool.init(device);
+
+    initInfo.DescriptorPool = uiDescriptorPool.get();
+    initInfo.RenderPass = uiRenderPass.get();
+    initInfo.MinImageCount = 2;
+    initInfo.ImageCount = MAX_FRAME_IN_FLIGHT;
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+    ImGui_ImplVulkan_Init(&initInfo);
 }
 
 
@@ -263,7 +338,7 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
             commandBuffer,
             swapchain,
             swapchain.getFramebuffer().getFrame(imageIndex),
-            {{{0.0f, 0.0f, 0.0f, 1.0f}}}
+            { }
         );
         graphicsPipeline.bind(commandBuffer);
 
@@ -293,6 +368,44 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
     commandBuffer.endRecording();
 }
 
+void Application::recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+    commandBuffer.beginRecording();
+    {
+        uiRenderPass.begin(
+            commandBuffer,
+            swapchain,
+            swapchain.getFramebuffer().getFrame(imageIndex),
+            {{{0.0f, 0.0f, 0.0f, 0.0f}}}
+        );
+            
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        
+        ImGui::NewFrame();
+
+        ImGuiID dockspace_id = ImGui::GetID("Dock space");
+        ImGui::SetNextWindowBgAlpha(0.0f);
+        ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport(), 0);
+
+        ImGui::SetNextWindowPos({0, 0});
+        ImGui::Begin("FPS",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration // | ImGuiWindowFlags_NoBackground
+        );
+            ImGui::Text("%.1f fps (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
+        ImGui::End();
+
+        ImGui::ShowDemoWindow();
+
+        ImGui::Render();
+
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.get());
+
+        uiRenderPass.end(commandBuffer);
+    }
+    commandBuffer.endRecording();
+}
+
 void Application::updateUniformBuffer(uint32_t currentFrame) {
     static auto startTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -316,7 +429,7 @@ void Application::mainLoop() {
 }
 
 void Application::drawFrame() {
-    inFlightFences[currentFrame].wait(device);
+    Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
 
     uint32_t result;
     result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
@@ -325,7 +438,7 @@ void Application::drawFrame() {
         return;
     }
 
-    inFlightFences[currentFrame].reset(device);
+    Fence::reset({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
     uint32_t imageIndex = result;
 
     updateUniformBuffer(currentFrame);
@@ -334,12 +447,21 @@ void Application::drawFrame() {
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
     graphicsQueue.submit(
         { commandBuffers[currentFrame] },
-        inFlightFences[currentFrame],
+        renderInFlightFences[currentFrame],
         { imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
         { renderFinishedSemaphores[currentFrame][imageIndex] }
     );
 
-    result = presentQueue.present({ swapchain }, { imageIndex }, { renderFinishedSemaphores[currentFrame][imageIndex] });
+    uiCommandBuffers[currentFrame].reset();
+    recordUiCommandBuffer(uiCommandBuffers[currentFrame], imageIndex);
+    graphicsQueue.submit(
+        { uiCommandBuffers[currentFrame] },
+        uiInFlightFences[currentFrame],
+        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT },
+        { uiFinishedSemaphores[currentFrame][imageIndex] }
+    );
+
+    result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
     if (result == RECREATE_SWAPCHAIN || framebufferResized) {
         framebufferResized = false;
         swapchain.recreate(device, physicalDevice, surface, window, renderPass);
@@ -353,15 +475,23 @@ void Application::drawFrame() {
 
 void Application::cleanup() {
     device.waitIdle();
+
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
     
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         imageAvailableSemaphores[i].destroy(device);
         for (Semaphore& semaphore : renderFinishedSemaphores[i])
             semaphore.destroy(device);
-        inFlightFences[i].destroy(device);
+        for (Semaphore& semaphore : uiFinishedSemaphores[i])
+            semaphore.destroy(device);
+        renderInFlightFences[i].destroy(device);
+        uiInFlightFences[i].destroy(device);
     }
 
     descriptorPool.destroy(device);
+    uiDescriptorPool.destroy(device);
 
     vertexBuffer.free(device);
     vertexBuffer.destroy(device);
@@ -374,13 +504,18 @@ void Application::cleanup() {
 
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.free(device, graphicsCommandPool);
+    for (CommandBuffer& commandBuffer : uiCommandBuffers)
+        commandBuffer.free(device, uiCommandPool);
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
+    uiCommandPool.destroy(device);
 
     swapchain.destroy(device);
     
     graphicsPipeline.destroy(device);
     uboLayout.destroy(device);
+
+    uiRenderPass.destroy(device);
     renderPass.destroy(device);
 
     device.destroy();

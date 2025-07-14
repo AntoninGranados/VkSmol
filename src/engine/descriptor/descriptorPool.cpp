@@ -10,6 +10,7 @@ void DescriptorPool::init(LogicalDevice device) {
     createInfo.poolSizeCount = static_cast<uint32_t>(m_PoolSizes.size());
     createInfo.pPoolSizes = m_PoolSizes.data();
     createInfo.maxSets = m_MaxSize;
+    createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     vkCheck(vkCreateDescriptorPool(device.get(), &createInfo, nullptr, &m_DescriptorPool), "Failed to create descriptor pool");
 }

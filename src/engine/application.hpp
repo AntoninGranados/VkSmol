@@ -1,9 +1,14 @@
 #pragma once
 
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_vulkan.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -51,9 +56,9 @@ struct Vertex {
 };
 
 struct UBO {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
 };
 
 class Application {
@@ -74,33 +79,35 @@ private:
 
     Swapchain swapchain;
 
-    RenderPass renderPass;
+    RenderPass renderPass, uiRenderPass;
     DescriptorSetLayout uboLayout;
-    GraphicsPipeline graphicsPipeline;
+    GraphicsPipeline graphicsPipeline; //!, uiPipeline;
     
-    DescriptorPool descriptorPool;
+    DescriptorPool descriptorPool, uiDescriptorPool;
     std::vector<DescriptorSet> descriptorSets;
 
-    CommandPool graphicsCommandPool, transferCommandPool;
-    std::vector<CommandBuffer> commandBuffers;
+    CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
+    std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;
 
     Buffer vertexBuffer, indexBuffer;
     std::vector<Buffer> uniformBuffers;
 
     std::vector<Semaphore> imageAvailableSemaphores;
-    std::vector<std::vector<Semaphore> > renderFinishedSemaphores;    // One semaphore per image in the swap chain
-    std::vector<Fence> inFlightFences;
+    std::vector<std::vector<Semaphore> > renderFinishedSemaphores, uiFinishedSemaphores;    // One semaphore per image in the swap chain
+    std::vector<Fence> renderInFlightFences, uiInFlightFences;
     uint32_t currentFrame = 0;
 
     bool framebufferResized = false;
 
     void init();
+    void initImgui();
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     std::vector<const char*> getRequiredExtensions();
     int scoreDevice(PhysicalDevice device);
 
     void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentFrame);
 
     void mainLoop();
