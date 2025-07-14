@@ -3,7 +3,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "glm/glm.hpp"
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
 
 #include "./window.hpp"
 
@@ -20,6 +24,9 @@
 
 #include "./shader.hpp"
 #include "./renderPass.hpp"
+#include "./descriptor/descriptorSetLayout.hpp"
+#include "./descriptor/descriptorPool.hpp"
+#include "./descriptor/descriptorSet.hpp"
 #include "./pipeline/graphicsPipeline.hpp"
 #include "./pipeline/vertexInput.hpp"
 
@@ -43,6 +50,12 @@ struct Vertex {
     glm::vec3 color;
 };
 
+struct UBO {
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 class Application {
 public:
     void run();
@@ -62,12 +75,17 @@ private:
     Swapchain swapchain;
 
     RenderPass renderPass;
+    DescriptorSetLayout uboLayout;
     GraphicsPipeline graphicsPipeline;
+    
+    DescriptorPool descriptorPool;
+    std::vector<DescriptorSet> descriptorSets;
 
     CommandPool graphicsCommandPool, transferCommandPool;
     std::vector<CommandBuffer> commandBuffers;
 
     Buffer vertexBuffer, indexBuffer;
+    std::vector<Buffer> uniformBuffers;
 
     std::vector<Semaphore> imageAvailableSemaphores;
     std::vector<std::vector<Semaphore> > renderFinishedSemaphores;    // One semaphore per image in the swap chain
@@ -83,6 +101,7 @@ private:
     int scoreDevice(PhysicalDevice device);
 
     void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
+    void updateUniformBuffer(uint32_t currentFrame);
 
     void mainLoop();
     void drawFrame();

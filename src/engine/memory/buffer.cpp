@@ -7,15 +7,18 @@
 #include "../queue.hpp"
 #include "../utils.hpp"
 
-void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage) {
+#include <print>
+
+void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage, bool persistentMapping) {
     m_Size = size;
     m_Usage = usage;
+    m_PersistentMapping = persistentMapping;
 
     VkBufferCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     createInfo.size = m_Size;
     createInfo.usage = m_Usage;
-    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;     // Can only be used in one queue
+    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;     //! Can only be used in one queue
 
     vkCheck(vkCreateBuffer(device.get(), &createInfo, nullptr, &m_Buffer), "Failed to create buffer");
 }
@@ -36,6 +39,9 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
     vkCheck(vkAllocateMemory(device.get(), &allocInfo, nullptr, &m_BufferMemory), "Failed to allocate buffer memory");
 
     vkBindBufferMemory(device.get(), m_Buffer, m_BufferMemory, 0);
+
+    if (m_PersistentMapping)
+        vkMapMemory(device.get(), m_BufferMemory, 0, m_Size, 0, &m_BufferMapped);
 }
 
 void Buffer::destroy(LogicalDevice device) {
@@ -43,15 +49,22 @@ void Buffer::destroy(LogicalDevice device) {
 }
 
 void Buffer::free(LogicalDevice device) {
+    if (m_PersistentMapping)
+        vkUnmapMemory(device.get(), m_BufferMemory);
+
     vkFreeMemory(device.get(), m_BufferMemory, nullptr);
 }
 
 
 void Buffer::fill(LogicalDevice device, void* data) {
-    void* mem;
-    vkMapMemory(device.get(), m_BufferMemory, 0, m_Size, 0, &mem);
-    memcpy(mem, data, m_Size);
-    vkUnmapMemory(device.get(), m_BufferMemory);
+    if (m_PersistentMapping) {
+        memcpy(m_BufferMapped, data, m_Size);
+    } else {
+        void* mem;
+        vkMapMemory(device.get(), m_BufferMemory, 0, m_Size, 0, &mem);
+        memcpy(mem, data, m_Size);
+        vkUnmapMemory(device.get(), m_BufferMemory);
+    }
 }
 
 void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
@@ -76,18 +89,22 @@ void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, Comm
 
 
 void Buffer::bindVertex(CommandBuffer commandBuffer) {
-    if (!(m_Usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
-        throw std::runtime_error("Trying to bind a buffer as a vertex buffer when it is not");
-    
+    #ifndef NDEBUG
+        if (!(m_Usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
+            throw std::runtime_error("Trying to bind a buffer as a vertex buffer when it is not");
+    #endif
+
     VkBuffer buffers[] = { m_Buffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer.get(), 0, 1, buffers, offsets);
 }
 
 void Buffer::bindIndex(CommandBuffer commandBuffer, VkIndexType indexType) {
-if (!(m_Usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
-        throw std::runtime_error("Trying to bind a buffer as an index buffer when it is not");
-    
+    #ifndef NDEBUG
+        if (!(m_Usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
+            throw std::runtime_error("Trying to bind a buffer as an index buffer when it is not");
+    #endif
+
     vkCmdBindIndexBuffer(commandBuffer.get(), m_Buffer, 0, indexType);
 }
 

@@ -1,6 +1,7 @@
 #include "graphicsPipeline.hpp"
 
 #include "../command/commandBuffer.hpp"
+#include "../descriptor/descriptorSetLayout.hpp"
 #include "../logicalDevice.hpp"
 #include "../shader.hpp"
 #include "../renderPass.hpp"
@@ -8,8 +9,9 @@
 
 void GraphicsPipeline::init(
     LogicalDevice device, RenderPass renderPass,
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     std::vector<Shader> shaders,
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo
+    std::vector<DescriptorSetLayout> setLayouts
     // VkViewport viewport, VkRect2D scissor
 ) {
     // Input Assembly State
@@ -44,7 +46,7 @@ void GraphicsPipeline::init(
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;  // Needs a special feature enabled if we don't use fill
     rasterizer.lineWidth = 1.0f;                    // Needs the wideLine feature if > 1.0f
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;          // `VK_TRUE` for shadow maping
 
     // Multisampling
@@ -67,8 +69,14 @@ void GraphicsPipeline::init(
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Pipeline layout
+    std::vector<VkDescriptorSetLayout> vkSetLayouts;
+    for (DescriptorSetLayout setLayout : setLayouts)
+        vkSetLayouts.emplace_back(setLayout.get());
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
+    pipelineLayoutInfo.pSetLayouts = vkSetLayouts.data();
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &m_PipelineLayout), "Failed to create pipeline layout");
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;

@@ -115,8 +115,16 @@ void Application::init() {
         VertexInput<Vertex> vertexInput;
         vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position));
         vertexInput.addAttributeDescription(VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color));
+
+        uboLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        uboLayout.init(device);
     
-        graphicsPipeline.init(device, renderPass, { vertShader, fragShader }, vertexInput.get());
+        graphicsPipeline.init(
+            device, renderPass,
+            vertexInput.get(),
+            { vertShader, fragShader },
+            { uboLayout }
+        );
     
         // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
         vertShader.destroy(device);
@@ -131,44 +139,70 @@ void Application::init() {
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.alloc(device, graphicsCommandPool);
 
-    // Vertex Buffers
-    Buffer vertexStagingBuffer;
-    size_t vertexBufferSize = sizeof(Vertex)*vertices.size();
-    vertexStagingBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    vertexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    vertexStagingBuffer.fill(device, (void*)vertices.data());
+    // Buffers
+    {
+        // Vertex Buffer
+        Buffer vertexStagingBuffer;
+        size_t vertexBufferSize = sizeof(Vertex)*vertices.size();
+        vertexStagingBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        vertexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vertexStagingBuffer.fill(device, (void*)vertices.data());
 
-    vertexBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    vertexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    Buffer::copy(vertexStagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
+        vertexBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        vertexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        Buffer::copy(vertexStagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
 
-    vertexStagingBuffer.free(device);
-    vertexStagingBuffer.destroy(device);
+        vertexStagingBuffer.free(device);
+        vertexStagingBuffer.destroy(device);
+        
+        // Index Buffer
+        Buffer indexStagingBuffer;
+        size_t indexBufferSize = sizeof(indices[0])*indices.size();
+        indexStagingBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        indexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        indexStagingBuffer.fill(device, (void*)indices.data());
+        
+        indexBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        indexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        Buffer::copy(indexStagingBuffer, indexBuffer, device, transferCommandPool, transferQueue);
+        
+        indexStagingBuffer.free(device);
+        indexStagingBuffer.destroy(device);
 
-    // Index Buffer
-    Buffer indexStagingBuffer;
-    size_t indexBufferSize = sizeof(indices[0])*indices.size();
-    indexStagingBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    indexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    indexStagingBuffer.fill(device, (void*)indices.data());
+        // Uniform Buffers
+        size_t uniformBufferSize = sizeof(UBO);
+        uniformBuffers.resize(MAX_FRAME_IN_FLIGHT);
+        for (Buffer& uniformBuffer : uniformBuffers) {
+            uniformBuffer.init(device, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true);
+            uniformBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        }
+    }
 
-    indexBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    indexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    Buffer::copy(indexStagingBuffer, indexBuffer, device, transferCommandPool, transferQueue);
-
-    indexStagingBuffer.free(device);
-    indexStagingBuffer.destroy(device);
+    // Descriptor
+    {
+        descriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAME_IN_FLIGHT);
+        descriptorPool.init(device);
+    
+        descriptorSets.resize(MAX_FRAME_IN_FLIGHT);
+        // DescriptorSet::alloc(descriptorSets, device, descriptorPool, std::vector<DescriptorSetLayout>(MAX_FRAME_IN_FLIGHT, uboLayout));
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            descriptorSets[i].alloc(device, descriptorPool, uboLayout); //! Should not allocate them individually
+            descriptorSets[i].linkBuffer(device, uniformBuffers[i]);
+        }
+    }
 
     // Synchronization Objects
-    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-    renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-    inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        imageAvailableSemaphores[i].init(device);
-        renderFinishedSemaphores[i].resize(swapchain.getImageCount());
-        for (Semaphore& semaphore : renderFinishedSemaphores[i])
-            semaphore.init(device);
-        inFlightFences[i].init(device, true);
+    {
+        imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+        renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+        inFlightFences.resize(MAX_FRAME_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            imageAvailableSemaphores[i].init(device);
+            renderFinishedSemaphores[i].resize(swapchain.getImageCount());
+            for (Semaphore& semaphore : renderFinishedSemaphores[i])
+                semaphore.init(device);
+            inFlightFences[i].init(device, true);
+        }
     }
 }
 
@@ -251,12 +285,28 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
         scissor.extent = swapchain.getExtent();
         graphicsPipeline.setScissor(commandBuffer, scissor);
 
+        descriptorSets[currentFrame].bind(commandBuffer, graphicsPipeline.getLayout());
         graphicsPipeline.drawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()));
 
         renderPass.end(commandBuffer);
     }
     commandBuffer.endRecording();
 }
+
+void Application::updateUniformBuffer(uint32_t currentFrame) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UBO ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(60.0f), swapchain.getExtent().width / (float)swapchain.getExtent().height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;   // Y coordinates are reversed compared to OpenGL
+
+    uniformBuffers[currentFrame].fill(device, &ubo);
+}
+
 
 void Application::mainLoop() {
     while (!window.shouldClose()) {
@@ -277,6 +327,8 @@ void Application::drawFrame() {
 
     inFlightFences[currentFrame].reset(device);
     uint32_t imageIndex = result;
+
+    updateUniformBuffer(currentFrame);
 
     commandBuffers[currentFrame].reset();
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
@@ -309,10 +361,16 @@ void Application::cleanup() {
         inFlightFences[i].destroy(device);
     }
 
+    descriptorPool.destroy(device);
+
     vertexBuffer.free(device);
     vertexBuffer.destroy(device);
     indexBuffer.free(device);
     indexBuffer.destroy(device);
+    for (Buffer& uniformBuffer : uniformBuffers) {
+        uniformBuffer.free(device);
+        uniformBuffer.destroy(device);
+    }
 
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.free(device, graphicsCommandPool);
@@ -322,6 +380,7 @@ void Application::cleanup() {
     swapchain.destroy(device);
     
     graphicsPipeline.destroy(device);
+    uboLayout.destroy(device);
     renderPass.destroy(device);
 
     device.destroy();

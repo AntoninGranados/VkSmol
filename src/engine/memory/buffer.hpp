@@ -12,7 +12,7 @@ class Queue;
 class Buffer {
 public:
     // TODO: maybe combine init/alloc and destroye/free ?
-    void init(LogicalDevice device, size_t size, VkBufferUsageFlags usage);
+    void init(LogicalDevice device, size_t size, VkBufferUsageFlags usage, bool persistentMapping = false);
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
     void destroy(LogicalDevice device);
     void free(LogicalDevice device);
@@ -23,15 +23,17 @@ public:
     static void copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
 
     // TODO: make a static version to bind multiple buffer
-    // TODO: remove error checking if NDEBUG
     void bindVertex(CommandBuffer commandBuffer);
     void bindIndex(CommandBuffer commandBuffer, VkIndexType indexType);
 
+    bool m_PersistentMapping;
 private:
     VkBuffer m_Buffer;
     VkDeviceMemory m_BufferMemory;
     size_t m_Size;
     VkBufferUsageFlags m_Usage;
+
+    void* m_BufferMapped;
 
     uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 };
