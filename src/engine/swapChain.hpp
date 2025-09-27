@@ -1,6 +1,7 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
+#include <vulkan/vulkan.h>
+
 #include <GLFW/glfw3.h>
 
 #include <vector>
@@ -8,13 +9,10 @@
 #include <limits>
 #include <algorithm>
 
-#include "./framebuffer.hpp"
-
 class Window;
 class PhysicalDevice;
 class LogicalDevice;
 class Surface;
-class RenderPass;
 class Semaphore;
 
 struct SwapChainSupportDetails {
@@ -29,20 +27,18 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 class Swapchain {
 public:
     void init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, std::optional<Swapchain> oldSwapChain = std::nullopt);
-    void initFramebuffer(LogicalDevice device, RenderPass renderPass);
     void destroy(LogicalDevice device);
     // Does not currently support using the old swapchain
     // Recreate the swapchain (and its associated framebuffer)
-    void recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, RenderPass renderPass);
+    void recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window);
     VkSwapchainKHR get() { return swapchain; };
-    Framebuffer getFramebuffer() { return framebuffer; };
 
     std::vector<VkImage> getImages() { return images; };
     VkImage getImage(size_t i) { return images[i]; };
     std::vector<VkImageView> getImageViews() { return imageViews; };
     VkImageView getImageView(size_t i) { return imageViews[i]; };
     uint32_t getImageCount() { return imageCount; };
-    VkFormat getImageFormat() { return imageFormat; };
+    VkFormat* getImageFormat() { return &imageFormat; };
     VkExtent2D getExtent() { return extent; };
 
     // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
@@ -53,7 +49,6 @@ private:
     
     std::vector<VkImage> images;
     std::vector<VkImageView> imageViews;
-    Framebuffer framebuffer;
     uint32_t imageCount;
     VkFormat imageFormat;
     VkExtent2D extent;

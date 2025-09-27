@@ -1,8 +1,8 @@
 #include <iostream>
 
-#include "./engine/application.hpp"
+#include "./engine/engine.hpp"
 
-int main() {
+int main()  {
     #ifdef __APPLE__
         // Apple
     #endif
@@ -13,14 +13,13 @@ int main() {
         // Linux
     #endif
 
-    Application app;
+    Engine engine;
+    engine.init("Application");
 
-    try {
-        app.run();
-    } catch (const std::exception& e) {
-        std::fprintf(stderr, "%s\n", e.what());
-        return EXIT_FAILURE;
+    while (!engine.shouldClose()) {
+        engine.drawFrame();
     }
 
+    engine.terminate();
     return EXIT_SUCCESS;
 }

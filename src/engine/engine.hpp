@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -13,6 +15,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
+#include <string>
+#include <iostream>
 
 #include "./window.hpp"
 
@@ -25,10 +29,9 @@
 #include "./queue.hpp"
 
 #include "./swapchain.hpp"
-#include "./framebuffer.hpp"
+#include "./dynamicRenderer.hpp"
 
 #include "./shader.hpp"
-#include "./renderPass.hpp"
 #include "./descriptor/descriptorSetLayout.hpp"
 #include "./descriptor/descriptorPool.hpp"
 #include "./descriptor/descriptorSet.hpp"
@@ -42,6 +45,7 @@
 
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
+#include "./sync/imageBarrier.hpp"
 
 #include "./utils.hpp"
 
@@ -61,9 +65,13 @@ struct UBO {
     alignas(16) glm::mat4 proj;
 };
 
-class Application {
+class Engine {
 public:
-    void run();
+    void init(std::string appName);
+    void drawFrame();
+    void terminate();
+
+    bool shouldClose();
 
 private:
     Window window;
@@ -79,9 +87,9 @@ private:
 
     Swapchain swapchain;
 
-    RenderPass renderPass, uiRenderPass;
     DescriptorSetLayout uboLayout;
     GraphicsPipeline graphicsPipeline; //!, uiPipeline;
+    DynamicRenderer dynamicRenderer;
     
     DescriptorPool descriptorPool, uiDescriptorPool;
     std::vector<DescriptorSet> descriptorSets;
@@ -99,7 +107,6 @@ private:
 
     bool framebufferResized = false;
 
-    void init();
     void initImgui();
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -109,9 +116,4 @@ private:
     void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
     void recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentFrame);
-
-    void mainLoop();
-    void drawFrame();
-
-    void cleanup();
 };

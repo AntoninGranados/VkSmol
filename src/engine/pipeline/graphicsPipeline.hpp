@@ -7,7 +7,6 @@
 
 class LogicalDevice;
 class Shader;
-class RenderPass;
 class CommandBuffer;
 class DescriptorSetLayout;
 
@@ -16,7 +15,8 @@ class DescriptorSetLayout;
 class GraphicsPipeline {
 public:
     void init(
-        LogicalDevice device, RenderPass renderPass,
+        LogicalDevice device,
+        VkPipelineRenderingCreateInfoKHR pipelineCreate,
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         std::vector<Shader> shaders,
         std::vector<DescriptorSetLayout> setLayouts

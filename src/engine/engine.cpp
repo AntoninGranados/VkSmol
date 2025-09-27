@@ -1,4 +1,4 @@
-#include "application.hpp"
+#include "engine.hpp"
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -16,6 +16,7 @@ const std::vector<const char*> instanceExtensions = {
 
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
     "VK_KHR_portability_subset",
 };
 
@@ -36,26 +37,24 @@ const std::vector<uint16_t> indices = {
     0, 1, 2, 2, 3, 0
 };
 
-
-void Application::run() {
-    init();
-    mainLoop();
-    cleanup();
-}
-
 /*
 ============== INITIALISATION ==============
 */
 
-void Application::init() {
+bool Engine::shouldClose() {
+    if (glfwGetKey(window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS) return true;
+    return window.shouldClose();
+}
+
+void Engine::init(std::string appName) {
     glfwInit();
 
-    window.init(WIDTH, HEIGHT, "Application", framebufferResizeCallback);
+    window.init(WIDTH, HEIGHT, appName.c_str(), framebufferResizeCallback);
 
-    // Application informations
+    // Engine informations
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Application";
+    appInfo.pEngineName = appName.c_str();
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "VkSmol";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -83,31 +82,18 @@ void Application::init() {
     transferQueue.init(device, queueFamilyIndices.transferFamily.value());
 
     swapchain.init(device, physicalDevice, surface, window);
+    
+    dynamicRenderer.init(device);
 
-    // Render Pass
-    {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = swapchain.getImageFormat();
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    
-        renderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        renderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
-        renderPass.addDependency(
-            VK_SUBPASS_EXTERNAL, 0,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-        );
-        renderPass.init(device);
-    }
-    
     // Graphics Pipeline
     {
+        // Dynamic Rendering Info
+        VkPipelineRenderingCreateInfoKHR pipelineCreate{};
+        pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+        pipelineCreate.colorAttachmentCount    = 1;
+        pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
+
+        // Shader Info
         Shader vertShader, fragShader;
         vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
         fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
@@ -120,7 +106,8 @@ void Application::init() {
         uboLayout.init(device);
     
         graphicsPipeline.init(
-            device, renderPass,
+            device,
+            pipelineCreate,
             vertexInput.get(),
             { vertShader, fragShader },
             { uboLayout }
@@ -130,8 +117,6 @@ void Application::init() {
         vertShader.destroy(device);
         fragShader.destroy(device);
     }
-
-    swapchain.initFramebuffer(device, renderPass);
 
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
@@ -217,7 +202,7 @@ void Application::init() {
     }
 }
 
-void Application::initImgui() {
+void Engine::initImgui() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
 
     uiCommandPool.init(device, indices.graphicsFamily.value());
@@ -225,23 +210,6 @@ void Application::initImgui() {
     for (CommandBuffer& commandBuffer : uiCommandBuffers)
         commandBuffer.alloc(device, uiCommandPool);
 
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapchain.getImageFormat();
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    uiRenderPass.addAttachment(colorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    uiRenderPass.addSubpass(VK_PIPELINE_BIND_POINT_GRAPHICS, { 0 });
-    uiRenderPass.addDependency(
-        VK_SUBPASS_EXTERNAL, 0,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-    );
-    uiRenderPass.init(device);
-    
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -258,7 +226,7 @@ void Application::initImgui() {
     initInfo.Device = device.get();
     initInfo.QueueFamily = indices.graphicsFamily.value();
     initInfo.Queue = graphicsQueue.get();
-
+    
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_SAMPLER, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000);
@@ -271,9 +239,18 @@ void Application::initImgui() {
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100);
     uiDescriptorPool.init(device);
-
+    
+    // initInfo.RenderPass = uiRenderPass.get();
+    VkPipelineRenderingCreateInfoKHR pipelineCreate{};
+    pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+    pipelineCreate.colorAttachmentCount    = 1;
+    pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
+    
+    initInfo.RenderPass = VK_NULL_HANDLE;
+    initInfo.UseDynamicRendering = true;
+    initInfo.PipelineRenderingCreateInfo = pipelineCreate;
+    
     initInfo.DescriptorPool = uiDescriptorPool.get();
-    initInfo.RenderPass = uiRenderPass.get();
     initInfo.MinImageCount = 2;
     initInfo.ImageCount = MAX_FRAME_IN_FLIGHT;
     initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -282,12 +259,12 @@ void Application::initImgui() {
 }
 
 
-void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    Application* pApp = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+void Engine::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    Engine* pApp = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
     pApp->framebufferResized = true;
 }
 
-std::vector<const char*> Application::getRequiredExtensions() {
+std::vector<const char*> Engine::getRequiredExtensions() {
     // Extensions needed by GLFW
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -301,7 +278,7 @@ std::vector<const char*> Application::getRequiredExtensions() {
     return requiredExtensions;
 }
 
-int Application::scoreDevice(PhysicalDevice device) {
+int Engine::scoreDevice(PhysicalDevice device) {
     // Check if all the  queue families are available
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
     if (!indices.isComplete())
@@ -331,15 +308,33 @@ int Application::scoreDevice(PhysicalDevice device) {
 }
 
 
-void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+void Engine::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+    ImageBarrier startBarrier;
+    startBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    );
+    ImageBarrier endBarrier;
+    endBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
+    );
+
     commandBuffer.beginRecording();
     {
-        renderPass.begin(
+        startBarrier.call(
             commandBuffer,
-            swapchain,
-            swapchain.getFramebuffer().getFrame(imageIndex),
-            { }
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         );
+        dynamicRenderer.begin(
+            commandBuffer,
+            swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+            {{ 0.0f, 0.0f, 0.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+        );
+
         graphicsPipeline.bind(commandBuffer);
 
         vertexBuffer.bindVertex(commandBuffer);
@@ -363,50 +358,75 @@ void Application::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imag
         descriptorSets[currentFrame].bind(commandBuffer, graphicsPipeline.getLayout());
         graphicsPipeline.drawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()));
 
-        renderPass.end(commandBuffer);
+        dynamicRenderer.end(commandBuffer);
+
+        endBarrier.call(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+        );
     }
     commandBuffer.endRecording();
+
 }
 
-void Application::recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+void Engine::recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+    ImageBarrier startBarrier;
+    startBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    );
+    ImageBarrier endBarrier;
+    endBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
+    );
+    
     commandBuffer.beginRecording();
     {
-        uiRenderPass.begin(
+        startBarrier.call(
             commandBuffer,
-            swapchain,
-            swapchain.getFramebuffer().getFrame(imageIndex),
-            {{{0.0f, 0.0f, 0.0f, 0.0f}}}
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         );
-            
+        dynamicRenderer.begin(
+            commandBuffer,
+            swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+            {{ 1.0f, 0.0f, 1.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+        );
+        
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         
         ImGui::NewFrame();
-
+        
         ImGuiID dockspace_id = ImGui::GetID("Dock space");
         ImGui::SetNextWindowBgAlpha(0.0f);
         ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport(), 0);
-
+        
         ImGui::SetNextWindowPos({0, 0});
         ImGui::Begin("FPS",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration // | ImGuiWindowFlags_NoBackground
         );
-            ImGui::Text("%.1f fps (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
+        ImGui::Text("%.1f fps (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
         ImGui::End();
-
-        ImGui::ShowDemoWindow();
-
+        
         ImGui::Render();
-
+        
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.get());
 
-        uiRenderPass.end(commandBuffer);
+        dynamicRenderer.end(commandBuffer);
+        endBarrier.call(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+        );
     }
     commandBuffer.endRecording();
 }
 
-void Application::updateUniformBuffer(uint32_t currentFrame) {
+void Engine::updateUniformBuffer(uint32_t currentFrame) {
     static auto startTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
@@ -421,20 +441,15 @@ void Application::updateUniformBuffer(uint32_t currentFrame) {
 }
 
 
-void Application::mainLoop() {
-    while (!window.shouldClose()) {
-        glfwPollEvents();
-        drawFrame();
-    }
-}
+void Engine::drawFrame() {
+    glfwPollEvents();
 
-void Application::drawFrame() {
     Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
 
     uint32_t result;
     result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
     if (result == RECREATE_SWAPCHAIN) {
-        swapchain.recreate(device, physicalDevice, surface, window, renderPass);
+        swapchain.recreate(device, physicalDevice, surface, window);
         return;
     }
 
@@ -464,7 +479,7 @@ void Application::drawFrame() {
     result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
     if (result == RECREATE_SWAPCHAIN || framebufferResized) {
         framebufferResized = false;
-        swapchain.recreate(device, physicalDevice, surface, window, renderPass);
+        swapchain.recreate(device, physicalDevice, surface, window);
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
@@ -473,7 +488,7 @@ void Application::drawFrame() {
 }
 
 
-void Application::cleanup() {
+void Engine::terminate() {
     device.waitIdle();
 
     ImGui_ImplVulkan_Shutdown();
@@ -514,9 +529,6 @@ void Application::cleanup() {
     
     graphicsPipeline.destroy(device);
     uboLayout.destroy(device);
-
-    uiRenderPass.destroy(device);
-    renderPass.destroy(device);
 
     device.destroy();
     surface.destroy(instance);

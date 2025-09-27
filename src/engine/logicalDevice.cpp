@@ -27,9 +27,13 @@ void LogicalDevice::init(
     }
 
     VkPhysicalDeviceFeatures deviceFeatures{};  // Everything is set to VK_FALSE for now
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
+    dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamicRenderingFeature.dynamicRendering = VK_TRUE;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pNext = &dynamicRenderingFeature;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.pEnabledFeatures = &deviceFeatures;

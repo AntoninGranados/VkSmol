@@ -4,11 +4,11 @@
 #include "../descriptor/descriptorSetLayout.hpp"
 #include "../logicalDevice.hpp"
 #include "../shader.hpp"
-#include "../renderPass.hpp"
 #include "../utils.hpp"
 
 void GraphicsPipeline::init(
-    LogicalDevice device, RenderPass renderPass,
+    LogicalDevice device,
+    VkPipelineRenderingCreateInfoKHR pipelineCreate,
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     std::vector<Shader> shaders,
     std::vector<DescriptorSetLayout> setLayouts
@@ -95,8 +95,9 @@ void GraphicsPipeline::init(
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = m_PipelineLayout;
-    pipelineInfo.renderPass = renderPass.get();
     pipelineInfo.subpass = 0;
+    pipelineInfo.renderPass = VK_NULL_HANDLE;   //? for dynamic rendering
+    pipelineInfo.pNext = &pipelineCreate;       //? for dynamic rendering
     // Use this if we want to rebuild the pipeline more efficiently (using another pipeline)
     // pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
     // pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;

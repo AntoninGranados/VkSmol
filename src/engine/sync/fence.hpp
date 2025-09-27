@@ -1,7 +1,6 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <vector>
 
@@ -14,7 +13,6 @@ public:
     void destroy(LogicalDevice device);
     VkFence get() { return fence; };
     
-    // TODO: add static versions of both functions that accepts multiple fences
     static void wait(std::vector<Fence> fences, LogicalDevice device, uint64_t timeout = UINT64_MAX);
     void wait(LogicalDevice device, uint64_t timeout = UINT64_MAX);
     static void reset(std::vector<Fence> fences, LogicalDevice device);

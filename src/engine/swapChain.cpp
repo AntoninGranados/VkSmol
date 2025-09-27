@@ -5,8 +5,6 @@
 #include "./logicalDevice.hpp"
 #include "./queue.hpp"
 #include "./surface.hpp"
-#include "./renderPass.hpp"
-#include "./framebuffer.hpp"
 #include "./sync/semaphore.hpp"
 #include "./utils.hpp"
 
@@ -80,12 +78,7 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     initImageViews(device);
 }
 
-void Swapchain::initFramebuffer(LogicalDevice device, RenderPass renderPass) {
-    framebuffer.init(device, *this, renderPass);
-}
-
 void Swapchain::destroy(LogicalDevice device) {
-    framebuffer.destroy(device);
     destroyImageViews(device);
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
 
@@ -94,14 +87,12 @@ void Swapchain::destroy(LogicalDevice device) {
 }
 
 // TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
-void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, RenderPass renderPass) {
+void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window) {
     device.waitIdle();
 
     destroy(device);
-    framebuffer.destroy(device);
 
     init(device, physicalDevice, surface, window);
-    framebuffer.init(device, *this, renderPass);
 }
 
 uint32_t Swapchain::getNextImageIndex(LogicalDevice device, Semaphore semaphore) {
