@@ -65,13 +65,48 @@ struct UBO {
     alignas(16) glm::mat4 proj;
 };
 
-class Engine {
+class VkSmol {
+/*
+    VkSmol engine;
+    engine.init("XXXXXX", VK_MAKE_API_VERSION(V, M, m, P));
+
+    CommandBuffer cmdBuff;
+    while (!enging.shouldTerminate()) {
+        beginFrame();
+
+        cmdBuff = beginRender();
+        {
+            draw(cmdBuff);
+        }
+        endRender(cmdBuff);
+
+        cmdBuff = beginUiRender();
+        {
+            drawUi(cmdBuff);
+        }
+        endUiRender(cmdBuff);
+
+        endFrame();
+    }
+    engine.terminate();
+*/
 public:
-    void init(std::string appName);
+    void init(std::string appName, uint32_t appVersion);
     void drawFrame();
+
+    void beginFrame();
+    void endFrame();
+
+    CommandBuffer beginRender();
+    void endRender(CommandBuffer commandBuffer);
+    
+    CommandBuffer beginUiRender();
+    void endUiRender(CommandBuffer commandBuffer);
+
     void terminate();
 
-    bool shouldClose();
+    uint32_t getFrame() { return currentFrame; }
+    bool shouldTerminate();
 
 private:
     Window window;
@@ -86,10 +121,10 @@ private:
     Queue graphicsQueue, presentQueue, transferQueue;
 
     Swapchain swapchain;
-
-    DescriptorSetLayout uboLayout;
-    GraphicsPipeline graphicsPipeline; //!, uiPipeline;
     DynamicRenderer dynamicRenderer;
+
+    DescriptorSetLayout uboLayout;      //! Move to the Application
+    GraphicsPipeline graphicsPipeline;  //! Move to the Application
     
     DescriptorPool descriptorPool, uiDescriptorPool;
     std::vector<DescriptorSet> descriptorSets;
@@ -97,13 +132,13 @@ private:
     CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
     std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;
 
-    Buffer vertexBuffer, indexBuffer;
-    std::vector<Buffer> uniformBuffers;
+    Buffer vertexBuffer, indexBuffer;   //! Move to the Application
+    std::vector<Buffer> uniformBuffers; //! Move to the Application
 
     std::vector<Semaphore> imageAvailableSemaphores;
     std::vector<std::vector<Semaphore> > renderFinishedSemaphores, uiFinishedSemaphores;    // One semaphore per image in the swap chain
     std::vector<Fence> renderInFlightFences, uiInFlightFences;
-    uint32_t currentFrame = 0;
+    uint32_t currentFrame = 0, imageIndex;
 
     bool framebufferResized = false;
 
@@ -112,8 +147,4 @@ private:
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     std::vector<const char*> getRequiredExtensions();
     int scoreDevice(PhysicalDevice device);
-
-    void recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
-    void recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex);
-    void updateUniformBuffer(uint32_t currentFrame);
 };

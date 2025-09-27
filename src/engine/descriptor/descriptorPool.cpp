@@ -7,18 +7,18 @@
 void DescriptorPool::init(LogicalDevice device) {
     VkDescriptorPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    createInfo.poolSizeCount = static_cast<uint32_t>(m_PoolSizes.size());
-    createInfo.pPoolSizes = m_PoolSizes.data();
-    createInfo.maxSets = m_MaxSize;
+    createInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    createInfo.pPoolSizes = poolSizes.data();
+    createInfo.maxSets = maxSize;
     createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-    vkCheck(vkCreateDescriptorPool(device.get(), &createInfo, nullptr, &m_DescriptorPool), "Failed to create descriptor pool");
+    vkCheck(vkCreateDescriptorPool(device.get(), &createInfo, nullptr, &descriptorPool), "Failed to create descriptor pool");
 }
 
 void DescriptorPool::destroy(LogicalDevice device) {
-    m_PoolSizes.clear();
-    m_MaxSize = 0;
-    vkDestroyDescriptorPool(device.get(), m_DescriptorPool, nullptr);
+    poolSizes.clear();
+    maxSize = 0;
+    vkDestroyDescriptorPool(device.get(), descriptorPool, nullptr);
 }
 
 
@@ -27,6 +27,6 @@ void DescriptorPool::addPoolSize(VkDescriptorType descriptorType, uint32_t descr
     poolSize.type = descriptorType;
     poolSize.descriptorCount = descriptorCount;
 
-    m_PoolSizes.emplace_back(poolSize);
-    m_MaxSize += descriptorCount;
+    poolSizes.emplace_back(poolSize);
+    maxSize += descriptorCount;
 }

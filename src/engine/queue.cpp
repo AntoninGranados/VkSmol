@@ -45,7 +45,7 @@ QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surf
 
 
 void Queue::init(LogicalDevice device, uint32_t queueFamilyIndex) {
-    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &m_Queue);
+    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &queue);
 }
 
 void Queue::submit(
@@ -74,7 +74,7 @@ void Queue::submit(
     submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalVkSemaphore.size());
     submitInfo.pSignalSemaphores = signalVkSemaphore.data();
 
-    vkCheck(vkQueueSubmit(m_Queue, 1, &submitInfo, fence.get()), "Failed to submit queue");
+    vkCheck(vkQueueSubmit(queue, 1, &submitInfo, fence.get()), "Failed to submit queue");
 }
 
 void Queue::submit(std::vector<CommandBuffer> commandBuffers) {
@@ -87,7 +87,7 @@ void Queue::submit(std::vector<CommandBuffer> commandBuffers) {
     submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
     submitInfo.pCommandBuffers = vkCommandBuffers.data();
 
-    vkCheck(vkQueueSubmit(m_Queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
+    vkCheck(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
 }
 
 uint32_t Queue::present(
@@ -111,7 +111,7 @@ uint32_t Queue::present(
     presentInfo.pSwapchains = vkSwapchain.data();
     presentInfo.pImageIndices = frameIndices.data();
 
-    VkResult result = vkQueuePresentKHR(m_Queue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(queue, &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         return RECREATE_SWAPCHAIN;
     else if (result != VK_SUCCESS)
@@ -121,5 +121,5 @@ uint32_t Queue::present(
 }
 
 void Queue::wait() {
-    vkQueueWaitIdle(m_Queue);
+    vkQueueWaitIdle(queue);
 }

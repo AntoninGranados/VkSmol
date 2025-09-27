@@ -1,7 +1,7 @@
 #include "application.hpp"
 
 Application::Application(std::string name) {
-    engine.init("Application");
+    engine.init("Application", VK_MAKE_API_VERSION(0, 1, 0, 0));
 }
 
 Application::~Application() {
@@ -9,7 +9,7 @@ Application::~Application() {
 }
 
 void Application::run() {
-    while(!engine.shouldClose()) {
+    while(!engine.shouldTerminate()) {
         engine.drawFrame();
     }
 }

@@ -16,7 +16,7 @@ void DescriptorSet::alloc(LogicalDevice device, DescriptorPool descriptorPool, D
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &vkDescriptorSetLayout;
 
-    vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, &m_DescriptorSet), "Failed to allocate descriptor set");
+    vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, &descriptorSet), "Failed to allocate descriptor set");
 }
 
 void DescriptorSet::alloc(
@@ -50,7 +50,7 @@ void DescriptorSet::linkBuffer(LogicalDevice device, Buffer buffer) {
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = m_DescriptorSet;
+    descriptorWrite.dstSet = descriptorSet;
     descriptorWrite.dstBinding = 0;         //! should be a parameter
     descriptorWrite.dstArrayElement = 0;    //! should be a parameter
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //! can be other type of buffer -> should be a parameter
@@ -61,5 +61,5 @@ void DescriptorSet::linkBuffer(LogicalDevice device, Buffer buffer) {
 }
 
 void DescriptorSet::bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {
-    vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, 0, 1, &m_DescriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 }

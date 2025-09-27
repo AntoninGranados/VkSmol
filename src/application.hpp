@@ -12,5 +12,5 @@ public:
     void run();
 
 private:
-    Engine engine;
+    VkSmol engine;
 };

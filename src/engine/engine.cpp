@@ -41,21 +41,21 @@ const std::vector<uint16_t> indices = {
 ============== INITIALISATION ==============
 */
 
-bool Engine::shouldClose() {
+bool VkSmol::shouldTerminate() {
     if (glfwGetKey(window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS) return true;
     return window.shouldClose();
 }
 
-void Engine::init(std::string appName) {
+void VkSmol::init(std::string appName, uint32_t appVersion) {
     glfwInit();
 
     window.init(WIDTH, HEIGHT, appName.c_str(), framebufferResizeCallback);
 
-    // Engine informations
+    // VkSmol informations
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = appName.c_str();
-    appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
+    appInfo.applicationVersion = appVersion;
     appInfo.pEngineName = "VkSmol";
     appInfo.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_4;
@@ -84,6 +84,12 @@ void Engine::init(std::string appName) {
     swapchain.init(device, physicalDevice, surface, window);
     
     dynamicRenderer.init(device);
+
+    graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
+    transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
+    commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
+    for (CommandBuffer& commandBuffer : commandBuffers)
+        commandBuffer.alloc(device, graphicsCommandPool);
 
     // Graphics Pipeline
     {
@@ -118,16 +124,11 @@ void Engine::init(std::string appName) {
         fragShader.destroy(device);
     }
 
-    graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
-    transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
-    commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
-    for (CommandBuffer& commandBuffer : commandBuffers)
-        commandBuffer.alloc(device, graphicsCommandPool);
-
     initImgui();
     
     // Buffers
     {
+        // TODO: create a function Buffer::initFilled() that automatically does the staging
         // Vertex Buffer
         Buffer vertexStagingBuffer;
         size_t vertexBufferSize = sizeof(Vertex)*vertices.size();
@@ -156,6 +157,7 @@ void Engine::init(std::string appName) {
         indexStagingBuffer.free(device);
         indexStagingBuffer.destroy(device);
 
+        // TODO: create a function VkSmol::initBufferList() that can be called in the Application
         // Uniform Buffers
         size_t uniformBufferSize = sizeof(UBO);
         uniformBuffers.resize(MAX_FRAME_IN_FLIGHT);
@@ -167,6 +169,7 @@ void Engine::init(std::string appName) {
 
     // Descriptor
     {
+        // TODO: create a function VkSmol::initDescriptorSet() that can be called in the Application
         descriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAME_IN_FLIGHT);
         descriptorPool.init(device);
     
@@ -202,7 +205,7 @@ void Engine::init(std::string appName) {
     }
 }
 
-void Engine::initImgui() {
+void VkSmol::initImgui() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
 
     uiCommandPool.init(device, indices.graphicsFamily.value());
@@ -216,16 +219,16 @@ void Engine::initImgui() {
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImGui::StyleColorsDark();
-    ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.95f);
+    ImGui::GetStyle().Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.95f);
     ImGui::GetStyle().Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
     ImGui_ImplGlfw_InitForVulkan(window.get(), true);
     ImGui_ImplVulkan_InitInfo initInfo{};
-    initInfo.Instance = instance.get();
+    initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();
-    initInfo.Device = device.get();
-    initInfo.QueueFamily = indices.graphicsFamily.value();
-    initInfo.Queue = graphicsQueue.get();
+    initInfo.Device         = device.get();
+    initInfo.QueueFamily    = indices.graphicsFamily.value();
+    initInfo.Queue          = graphicsQueue.get();
     
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_SAMPLER, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000);
@@ -246,25 +249,25 @@ void Engine::initImgui() {
     pipelineCreate.colorAttachmentCount    = 1;
     pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
     
-    initInfo.RenderPass = VK_NULL_HANDLE;
-    initInfo.UseDynamicRendering = true;
+    initInfo.RenderPass                  = VK_NULL_HANDLE;
+    initInfo.UseDynamicRendering         = true;
     initInfo.PipelineRenderingCreateInfo = pipelineCreate;
     
     initInfo.DescriptorPool = uiDescriptorPool.get();
-    initInfo.MinImageCount = 2;
-    initInfo.ImageCount = MAX_FRAME_IN_FLIGHT;
-    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.MinImageCount  = 2;
+    initInfo.ImageCount     = MAX_FRAME_IN_FLIGHT;
+    initInfo.MSAASamples    = VK_SAMPLE_COUNT_1_BIT;
 
     ImGui_ImplVulkan_Init(&initInfo);
 }
 
 
-void Engine::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    Engine* pApp = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+void VkSmol::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    VkSmol* pApp = reinterpret_cast<VkSmol*>(glfwGetWindowUserPointer(window));
     pApp->framebufferResized = true;
 }
 
-std::vector<const char*> Engine::getRequiredExtensions() {
+std::vector<const char*> VkSmol::getRequiredExtensions() {
     // Extensions needed by GLFW
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -278,7 +281,7 @@ std::vector<const char*> Engine::getRequiredExtensions() {
     return requiredExtensions;
 }
 
-int Engine::scoreDevice(PhysicalDevice device) {
+int VkSmol::scoreDevice(PhysicalDevice device) {
     // Check if all the  queue families are available
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
     if (!indices.isComplete())
@@ -308,39 +311,159 @@ int Engine::scoreDevice(PhysicalDevice device) {
 }
 
 
-void Engine::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
+void VkSmol::beginFrame() {
+    glfwPollEvents();
+
+    Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
+
+    uint32_t result;
+    result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
+    if (result == RECREATE_SWAPCHAIN) {
+        swapchain.recreate(device, physicalDevice, surface, window);
+        return;
+    }
+
+    Fence::reset({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
+    imageIndex = result;
+}
+
+void VkSmol::endFrame() {
+    uint32_t result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
+    if (result == RECREATE_SWAPCHAIN || framebufferResized) {
+        framebufferResized = false;
+        swapchain.recreate(device, physicalDevice, surface, window);
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
+
+    window.pauseWhileMinimized();
+}
+
+CommandBuffer VkSmol::beginRender() {
+    CommandBuffer commandBuffer = commandBuffers[currentFrame];
+    commandBuffer.reset();
+
+    commandBuffer.beginRecording();
+
     ImageBarrier startBarrier;
     startBarrier.init(
         swapchain.getImage(imageIndex),
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
     );
+    startBarrier.call(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    );
+
+    dynamicRenderer.begin(
+        commandBuffer,
+        swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+        {{ 0.0f, 0.0f, 0.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+    );
+
+    return commandBuffer;
+}
+
+void VkSmol::endRender(CommandBuffer commandBuffer) {
+    dynamicRenderer.end(commandBuffer);
+
     ImageBarrier endBarrier;
     endBarrier.init(
         swapchain.getImage(imageIndex),
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
     );
+    endBarrier.call(
+        commandBuffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+    );
 
+    commandBuffer.endRecording();
+
+    graphicsQueue.submit(
+        { commandBuffers[currentFrame] },
+        renderInFlightFences[currentFrame],
+        { imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
+        { renderFinishedSemaphores[currentFrame][imageIndex] }
+    );
+}
+
+CommandBuffer VkSmol::beginUiRender() {
+    CommandBuffer commandBuffer = uiCommandBuffers[currentFrame];
+    commandBuffer.reset();
+    ImageBarrier startBarrier;
+    startBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    );
+    
     commandBuffer.beginRecording();
+
+    startBarrier.call(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    );
+    dynamicRenderer.begin(
+        commandBuffer,
+        swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+        {{ 1.0f, 0.0f, 1.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+    );
+
+    return commandBuffer;
+}
+
+void VkSmol::endUiRender(CommandBuffer commandBuffer) {
+    dynamicRenderer.end(commandBuffer);
+
+    ImageBarrier endBarrier;
+    endBarrier.init(
+        swapchain.getImage(imageIndex),
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
+    );
+    endBarrier.call(
+        commandBuffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+    );
+
+    commandBuffer.endRecording();
+    graphicsQueue.submit(
+        { uiCommandBuffers[currentFrame] },
+        uiInFlightFences[currentFrame],
+        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT },
+        { uiFinishedSemaphores[currentFrame][imageIndex] }
+    );
+}
+
+
+void VkSmol::drawFrame() {
+    CommandBuffer commandBuffer;
+    
+    beginFrame();
+    
+    commandBuffer = beginRender();
     {
-        startBarrier.call(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-        );
-        dynamicRenderer.begin(
-            commandBuffer,
-            swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-            {{ 0.0f, 0.0f, 0.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
-        );
+        static auto startTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        UBO ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(60.0f), swapchain.getExtent().width / (float)swapchain.getExtent().height, 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;
+
+        uniformBuffers[getFrame()].fill(device, &ubo);
 
         graphicsPipeline.bind(commandBuffer);
 
         vertexBuffer.bindVertex(commandBuffer);
         indexBuffer.bindIndex(commandBuffer, VK_INDEX_TYPE_UINT16);
     
-        // TODO: make a wrapper for the viewport
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -355,47 +478,14 @@ void Engine::recordCommandBuffer(CommandBuffer commandBuffer, uint32_t imageInde
         scissor.extent = swapchain.getExtent();
         graphicsPipeline.setScissor(commandBuffer, scissor);
 
-        descriptorSets[currentFrame].bind(commandBuffer, graphicsPipeline.getLayout());
+        descriptorSets[getFrame()].bind(commandBuffer, graphicsPipeline.getLayout());
         graphicsPipeline.drawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()));
-
-        dynamicRenderer.end(commandBuffer);
-
-        endBarrier.call(
-            commandBuffer,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-        );
     }
-    commandBuffer.endRecording();
-
-}
-
-void Engine::recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIndex) {
-    ImageBarrier startBarrier;
-    startBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-    );
-    ImageBarrier endBarrier;
-    endBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
-    );
-    
-    commandBuffer.beginRecording();
-    {
-        startBarrier.call(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-        );
-        dynamicRenderer.begin(
-            commandBuffer,
-            swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
-            {{ 1.0f, 0.0f, 1.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
-        );
+    endRender(commandBuffer);
         
+
+    commandBuffer = beginUiRender();
+    {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         
@@ -416,79 +506,14 @@ void Engine::recordUiCommandBuffer(CommandBuffer commandBuffer, uint32_t imageIn
         ImGui::Render();
         
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.get());
-
-        dynamicRenderer.end(commandBuffer);
-        endBarrier.call(
-            commandBuffer,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-        );
     }
-    commandBuffer.endRecording();
-}
+    endUiRender(commandBuffer);
 
-void Engine::updateUniformBuffer(uint32_t currentFrame) {
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-    UBO ubo{};
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(glm::radians(60.0f), swapchain.getExtent().width / (float)swapchain.getExtent().height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1;   // Y coordinates are reversed compared to OpenGL
-
-    uniformBuffers[currentFrame].fill(device, &ubo);
+    endFrame();
 }
 
 
-void Engine::drawFrame() {
-    glfwPollEvents();
-
-    Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
-
-    uint32_t result;
-    result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
-    if (result == RECREATE_SWAPCHAIN) {
-        swapchain.recreate(device, physicalDevice, surface, window);
-        return;
-    }
-
-    Fence::reset({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
-    uint32_t imageIndex = result;
-
-    updateUniformBuffer(currentFrame);
-
-    commandBuffers[currentFrame].reset();
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-    graphicsQueue.submit(
-        { commandBuffers[currentFrame] },
-        renderInFlightFences[currentFrame],
-        { imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
-        { renderFinishedSemaphores[currentFrame][imageIndex] }
-    );
-
-    uiCommandBuffers[currentFrame].reset();
-    recordUiCommandBuffer(uiCommandBuffers[currentFrame], imageIndex);
-    graphicsQueue.submit(
-        { uiCommandBuffers[currentFrame] },
-        uiInFlightFences[currentFrame],
-        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT },
-        { uiFinishedSemaphores[currentFrame][imageIndex] }
-    );
-
-    result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
-    if (result == RECREATE_SWAPCHAIN || framebufferResized) {
-        framebufferResized = false;
-        swapchain.recreate(device, physicalDevice, surface, window);
-    }
-
-    currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
-
-    window.pauseWhileMinimized();
-}
-
-
-void Engine::terminate() {
+void VkSmol::terminate() {
     device.waitIdle();
 
     ImGui_ImplVulkan_Shutdown();

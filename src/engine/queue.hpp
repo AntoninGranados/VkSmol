@@ -39,7 +39,7 @@ class Queue {
 public:
     void init(LogicalDevice device, uint32_t queueFamilyIndex);
     // void destroy();
-    VkQueue get() { return m_Queue; };
+    VkQueue get() { return queue; };
 
     // Should be able to generate multiple VkSubmitInfo and submit them
     void submit(
@@ -59,5 +59,5 @@ public:
     void wait();
 
 private:
-    VkQueue m_Queue;
+    VkQueue queue;
 };

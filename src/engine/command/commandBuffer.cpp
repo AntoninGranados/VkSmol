@@ -11,11 +11,11 @@ void CommandBuffer::alloc(LogicalDevice device, CommandPool pool) {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;  // Needs to be a component (variable)
     allocInfo.commandBufferCount = 1;   // Would need a static function to allocation multiple command buffers and return a std::vector
 
-    vkCheck(vkAllocateCommandBuffers(device.get(), &allocInfo, &m_CommandBuffer), "Failed to allocate command buffer");
+    vkCheck(vkAllocateCommandBuffers(device.get(), &allocInfo, &commandBuffer), "Failed to allocate command buffer");
 }
 
 void CommandBuffer::free(LogicalDevice device, CommandPool pool) {
-    vkFreeCommandBuffers(device.get(), pool.get(), 1, &m_CommandBuffer);
+    vkFreeCommandBuffers(device.get(), pool.get(), 1, &commandBuffer);
 }
 
 void CommandBuffer::beginRecording(VkCommandBufferUsageFlagBits flags) {
@@ -23,13 +23,13 @@ void CommandBuffer::beginRecording(VkCommandBufferUsageFlagBits flags) {
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = flags;
 
-    vkCheck(vkBeginCommandBuffer(m_CommandBuffer, &beginInfo), "Failed to begin recording command buffer");
+    vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin recording command buffer");
 }
 
 void CommandBuffer::endRecording() {
-    vkCheck(vkEndCommandBuffer(m_CommandBuffer), "Failed to record command buffer");
+    vkCheck(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer");
 }
 
 void CommandBuffer::reset() {
-    vkResetCommandBuffer(m_CommandBuffer, 0);
+    vkResetCommandBuffer(commandBuffer, 0);
 }

@@ -22,11 +22,11 @@ public:
         std::vector<DescriptorSetLayout> descriptorSetLayouts
     );
     // void free(LogicalDevice device);
-    VkDescriptorSet get() { return m_DescriptorSet; };
+    VkDescriptorSet get() { return descriptorSet; };
 
     void linkBuffer(LogicalDevice device, Buffer buffer);
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 
 private:
-    VkDescriptorSet m_DescriptorSet;
+    VkDescriptorSet descriptorSet;
 };

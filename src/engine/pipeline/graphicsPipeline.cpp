@@ -77,7 +77,7 @@ void GraphicsPipeline::init(
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
     pipelineLayoutInfo.pSetLayouts = vkSetLayouts.data();
-    vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &m_PipelineLayout), "Failed to create pipeline layout");
+    vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create pipeline layout");
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
     for (Shader shader : shaders)
@@ -94,7 +94,7 @@ void GraphicsPipeline::init(
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = m_PipelineLayout;
+    pipelineInfo.layout = pipelineLayout;
     pipelineInfo.subpass = 0;
     pipelineInfo.renderPass = VK_NULL_HANDLE;   //? for dynamic rendering
     pipelineInfo.pNext = &pipelineCreate;       //? for dynamic rendering
@@ -102,17 +102,17 @@ void GraphicsPipeline::init(
     // pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
     // pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
 
-    vkCheck(vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline), "Failed to create graphic pipeline");
+    vkCheck(vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline), "Failed to create graphic pipeline");
 
 }
 
 void GraphicsPipeline::destroy(LogicalDevice device) {
-    vkDestroyPipeline(device.get(), m_Pipeline, nullptr);
-    vkDestroyPipelineLayout(device.get(), m_PipelineLayout, nullptr);
+    vkDestroyPipeline(device.get(), pipeline, nullptr);
+    vkDestroyPipelineLayout(device.get(), pipelineLayout, nullptr);
 }
 
 void GraphicsPipeline::bind(CommandBuffer commandBuffer) {
-    vkCmdBindPipeline(commandBuffer.get(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+    vkCmdBindPipeline(commandBuffer.get(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 void GraphicsPipeline::setViewport(CommandBuffer commandBuffer, VkViewport viewport) {

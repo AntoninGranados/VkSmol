@@ -16,8 +16,8 @@ public:
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
     void destroy(LogicalDevice device);
     void free(LogicalDevice device);
-    VkBuffer get() { return m_Buffer; };
-    size_t getSize() { return m_Size; };
+    VkBuffer get() { return buffer; };
+    size_t getSize() { return size; };
     
     void fill(LogicalDevice device, void* data);
     static void copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
@@ -26,14 +26,14 @@ public:
     void bindVertex(CommandBuffer commandBuffer);
     void bindIndex(CommandBuffer commandBuffer, VkIndexType indexType);
 
-    bool m_PersistentMapping;
+    bool persistentMapping;
 private:
-    VkBuffer m_Buffer;
-    VkDeviceMemory m_BufferMemory;
-    size_t m_Size;
-    VkBufferUsageFlags m_Usage;
+    VkBuffer buffer;
+    VkDeviceMemory bufferMemory;
+    size_t size;
+    VkBufferUsageFlags usage;
 
-    void* m_BufferMapped;
+    void* bufferMapped;
 
     uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 };

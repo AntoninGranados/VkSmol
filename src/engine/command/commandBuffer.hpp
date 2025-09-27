@@ -13,12 +13,12 @@ public:
     void alloc(LogicalDevice device, CommandPool pool);
     void free(LogicalDevice device, CommandPool pool);
     // void free(LogicalDevice device);
-    VkCommandBuffer get() { return m_CommandBuffer; };
+    VkCommandBuffer get() { return commandBuffer; };
 
     void beginRecording(VkCommandBufferUsageFlagBits flags = (VkCommandBufferUsageFlagBits)0);
     void endRecording();
     void reset();
 
 private:
-    VkCommandBuffer m_CommandBuffer;
+    VkCommandBuffer commandBuffer;
 };
