@@ -8,8 +8,6 @@
 #include "./sync/semaphore.hpp"
 #include "./utils.hpp"
 
-#include <print>
-
 SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface surface) {
     SwapChainSupportDetails details;
 
