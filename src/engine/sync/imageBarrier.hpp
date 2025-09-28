@@ -6,14 +6,11 @@ class CommandBuffer;
 
 class ImageBarrier {
 public:
-    void init(
-        VkImage image,
-        VkImageLayout srcLayout, VkImageLayout dstLayout,
-        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask
-    );
-
     void call(
         CommandBuffer commandBuffer,
+        VkImage image,
+        VkImageLayout srcLayout, VkImageLayout dstLayout,
+        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
         VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
     );
 

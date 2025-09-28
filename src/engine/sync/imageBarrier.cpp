@@ -2,10 +2,12 @@
 
 #include "../command/commandBuffer.hpp"
 
-void ImageBarrier::init(
+void ImageBarrier::call(
+    CommandBuffer commandBuffer,
     VkImage image,
     VkImageLayout srcLayout, VkImageLayout dstLayout,
-    VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask
+    VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
 ) {
     barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -21,12 +23,7 @@ void ImageBarrier::init(
     barrier.subresourceRange.layerCount = 1;
     barrier.srcAccessMask = srcAccessMask;
     barrier.dstAccessMask = dstAccessMask;
-}
 
-void ImageBarrier::call(
-    CommandBuffer commandBuffer,
-    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
-) {
     vkCmdPipelineBarrier(
         commandBuffer.get(),
         srcStageMask, dstStageMask,

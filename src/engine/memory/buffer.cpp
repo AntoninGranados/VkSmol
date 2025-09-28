@@ -7,12 +7,14 @@
 #include "../queue.hpp"
 #include "../utils.hpp"
 
-#include <print>
-
-void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage, bool persistentMapping) {
-    size = size;
-    usage = usage;
-    persistentMapping = persistentMapping;
+void Buffer::init(LogicalDevice device,
+        VkBufferUsageFlags usage_,
+        size_t size_,
+        bool persistentMapping_
+) {
+    usage = usage_;
+    size = size_;
+    persistentMapping = persistentMapping_;
 
     VkBufferCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -21,6 +23,25 @@ void Buffer::init(LogicalDevice device, size_t size, VkBufferUsageFlags usage, b
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;     //! Can only be used in one queue
 
     vkCheck(vkCreateBuffer(device.get(), &createInfo, nullptr, &buffer), "Failed to create buffer");
+}
+
+void Buffer::initFilled(
+        LogicalDevice device, PhysicalDevice physicalDevice,
+        VkBufferUsageFlags usage,
+        CommandPool transferCommandPool, Queue transferQueue,
+        size_t size, void *data
+) {
+    Buffer stagingBuffer;
+    stagingBuffer.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size);
+    stagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    stagingBuffer.fill(device, data);
+
+    this->init(device, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
+    this->alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    Buffer::copy(stagingBuffer, *this, device, transferCommandPool, transferQueue);
+
+    stagingBuffer.free(device);
+    stagingBuffer.destroy(device);
 }
 
 void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {

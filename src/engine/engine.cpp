@@ -25,18 +25,6 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-
-const std::vector<Vertex> vertices = {
-    { {-0.5f,-0.5f}, {0.0f, 0.0f, 0.0f} },
-    { { 0.5f,-0.5f}, {1.0f, 0.0f, 0.0f} },
-    { { 0.5f, 0.5f}, {1.0f, 1.0f, 0.0f} },
-    { {-0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} }
-};
-
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0
-};
-
 /*
 ============== INITIALISATION ==============
 */
@@ -88,98 +76,10 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
     commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
-    for (CommandBuffer& commandBuffer : commandBuffers)
+    for (CommandBuffer &commandBuffer : commandBuffers)
         commandBuffer.alloc(device, graphicsCommandPool);
 
-    // Graphics Pipeline
-    {
-        // Dynamic Rendering Info
-        VkPipelineRenderingCreateInfoKHR pipelineCreate{};
-        pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        pipelineCreate.colorAttachmentCount    = 1;
-        pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
-
-        // Shader Info
-        Shader vertShader, fragShader;
-        vertShader.init(device, VK_SHADER_STAGE_VERTEX_BIT, "./shader/vert.glsl");
-        fragShader.init(device, VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
-    
-        VertexInput<Vertex> vertexInput;
-        vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position));
-        vertexInput.addAttributeDescription(VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color));
-
-        uboLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        uboLayout.init(device);
-    
-        graphicsPipeline.init(
-            device,
-            pipelineCreate,
-            vertexInput.get(),
-            { vertShader, fragShader },
-            { uboLayout }
-        );
-    
-        // TODO: should be delayed in case we want to rebuild the pipeline and reuse the shaders
-        vertShader.destroy(device);
-        fragShader.destroy(device);
-    }
-
     initImgui();
-    
-    // Buffers
-    {
-        // TODO: create a function Buffer::initFilled() that automatically does the staging
-        // Vertex Buffer
-        Buffer vertexStagingBuffer;
-        size_t vertexBufferSize = sizeof(Vertex)*vertices.size();
-        vertexStagingBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        vertexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        vertexStagingBuffer.fill(device, (void*)vertices.data());
-
-        vertexBuffer.init(device, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        vertexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        Buffer::copy(vertexStagingBuffer, vertexBuffer, device, transferCommandPool, transferQueue);
-
-        vertexStagingBuffer.free(device);
-        vertexStagingBuffer.destroy(device);
-        
-        // Index Buffer
-        Buffer indexStagingBuffer;
-        size_t indexBufferSize = sizeof(indices[0])*indices.size();
-        indexStagingBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        indexStagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        indexStagingBuffer.fill(device, (void*)indices.data());
-        
-        indexBuffer.init(device, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        indexBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        Buffer::copy(indexStagingBuffer, indexBuffer, device, transferCommandPool, transferQueue);
-        
-        indexStagingBuffer.free(device);
-        indexStagingBuffer.destroy(device);
-
-        // TODO: create a function VkSmol::initBufferList() that can be called in the Application
-        // Uniform Buffers
-        size_t uniformBufferSize = sizeof(UBO);
-        uniformBuffers.resize(MAX_FRAME_IN_FLIGHT);
-        for (Buffer& uniformBuffer : uniformBuffers) {
-            uniformBuffer.init(device, uniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true);
-            uniformBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        }
-    }
-
-    // Descriptor
-    {
-        // TODO: create a function VkSmol::initDescriptorSet() that can be called in the Application
-        descriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAME_IN_FLIGHT);
-        descriptorPool.init(device);
-    
-        descriptorSets.resize(MAX_FRAME_IN_FLIGHT);
-        // DescriptorSet::alloc(descriptorSets, device, descriptorPool, std::vector<DescriptorSetLayout>(MAX_FRAME_IN_FLIGHT, uboLayout));
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            descriptorSets[i].alloc(device, descriptorPool, uboLayout); //! Should not allocate them individually
-            descriptorSets[i].linkBuffer(device, uniformBuffers[i]);
-        }
-    }
 
     // Synchronization Objects
     {
@@ -192,11 +92,11 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
             imageAvailableSemaphores[i].init(device);
 
             renderFinishedSemaphores[i].resize(swapchain.getImageCount());
-            for (Semaphore& semaphore : renderFinishedSemaphores[i])
+            for (Semaphore &semaphore : renderFinishedSemaphores[i])
                 semaphore.init(device);
 
             uiFinishedSemaphores[i].resize(swapchain.getImageCount());
-            for (Semaphore& semaphore : uiFinishedSemaphores[i])
+            for (Semaphore &semaphore : uiFinishedSemaphores[i])
                 semaphore.init(device);
 
             renderInFlightFences[i].init(device, true);
@@ -210,7 +110,7 @@ void VkSmol::initImgui() {
 
     uiCommandPool.init(device, indices.graphicsFamily.value());
     uiCommandBuffers.resize(MAX_FRAME_IN_FLIGHT);
-    for (CommandBuffer& commandBuffer : uiCommandBuffers)
+    for (CommandBuffer &commandBuffer : uiCommandBuffers)
         commandBuffer.alloc(device, uiCommandPool);
 
     IMGUI_CHECKVERSION();
@@ -262,6 +162,124 @@ void VkSmol::initImgui() {
 }
 
 
+GraphicsPipeline VkSmol::initGraphicsPipeline(
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo,
+    std::vector<Shader> shaders,
+    std::vector<DescriptorSetLayout> setLayouts
+) {
+    // Dynamic Rendering Info
+    VkPipelineRenderingCreateInfoKHR pipelineCreate{};
+    pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+    pipelineCreate.colorAttachmentCount    = 1;
+    pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
+
+    GraphicsPipeline pipeline;
+    pipeline.init(
+        device,
+        pipelineCreate,
+        vertexInputInfo,
+        shaders,
+        setLayouts
+    );
+    return pipeline;
+}
+
+void VkSmol::destroyGraphicsPipeline(GraphicsPipeline &pipeline) {
+    pipeline.destroy(device);
+}
+
+Shader VkSmol::initShader(VkShaderStageFlagBits stage, std::string filepath) {
+    Shader shader;
+    shader.init(device, stage, filepath);
+    return shader;
+}
+
+void VkSmol::destroyShader(Shader &shader) {
+    shader.destroy(device);
+}
+
+void VkSmol::initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout) {
+    descriptorSetLayout.init(device);
+}
+
+void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout) {
+    descriptorSetLayout.destroy(device);
+}
+
+void VkSmol::addDescriptorPoolSize(VkDescriptorType descriptorType) {
+    descriptorPool.addPoolSize(descriptorType, MAX_FRAME_IN_FLIGHT);
+}
+
+void VkSmol::initDescriptorPool() {
+    descriptorPool.init(device);
+}
+
+Buffer VkSmol::initBuffer(VkBufferUsageFlags usage, size_t size, void *data) {
+    Buffer buffer;
+
+    if (data == nullptr) {
+        buffer.init(device, usage, size);
+    } else {
+        buffer.initFilled(
+            device, physicalDevice,
+            usage,
+            transferCommandPool, transferQueue,
+            size, data
+        );
+    }
+
+    return buffer;
+}
+
+void VkSmol::destroyBuffer(Buffer &buffer) {
+    buffer.free(device);
+    buffer.destroy(device);
+}
+
+bufferList_t VkSmol::initBufferList(VkBufferUsageFlags usage, size_t size) {
+    //! it always uses persistent mapping
+    std::vector<Buffer> bufferList;
+    bufferList.resize(MAX_FRAME_IN_FLIGHT);
+    for (Buffer &buffer : bufferList) {
+        buffer.init(device, usage, size, true);
+        buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    }
+    
+    bufferLists.push_back(bufferList);
+    return bufferLists.size()-1;
+}
+
+void VkSmol::fillBuffer(Buffer buffer, void *data) {
+    buffer.fill(device, data);
+}
+
+void VkSmol::destroyBufferList(bufferList_t bufferList) {
+    for (Buffer &buffer : bufferLists[bufferList]) {
+        buffer.free(device);
+        buffer.destroy(device);
+    }
+}
+
+Buffer VkSmol::getBuffer(bufferList_t bufferList) {
+    return bufferLists[bufferList][currentFrame];
+}
+
+descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList) {
+    std::vector<DescriptorSet> descriptorSetList;
+    descriptorSetList.resize(MAX_FRAME_IN_FLIGHT);
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        descriptorSetList[i].alloc(device, descriptorPool, layout);
+        descriptorSetList[i].linkBuffer(device, bufferLists[bufferList][i]);
+    }
+    
+    descriptorSetLists.push_back(descriptorSetList);
+    return descriptorSetLists.size()-1;
+}
+
+DescriptorSet VkSmol::getDescriptorSet(descriptorSetList_t descriptorSetList) {
+    return descriptorSetLists[descriptorSetList][currentFrame];
+}
+
 void VkSmol::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     VkSmol* pApp = reinterpret_cast<VkSmol*>(glfwGetWindowUserPointer(window));
     pApp->framebufferResized = true;
@@ -297,7 +315,7 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
         if (!std::any_of(
             supportedExtensions.begin(),
             supportedExtensions.end(),
-            [&](VkExtensionProperties& properties) { return strcmp(extension, properties.extensionName) == 0; })
+            [&](VkExtensionProperties &properties) { return strcmp(extension, properties.extensionName) == 0; })
         )
             return 0;
     }
@@ -339,20 +357,17 @@ void VkSmol::endFrame() {
     window.pauseWhileMinimized();
 }
 
-CommandBuffer VkSmol::beginRender() {
+CommandBuffer VkSmol::beginRecordingRender() {
     CommandBuffer commandBuffer = commandBuffers[currentFrame];
     commandBuffer.reset();
 
     commandBuffer.beginRecording();
 
-    ImageBarrier startBarrier;
-    startBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-    );
-    startBarrier.call(
+    barrier(
         commandBuffer,
+        nullptr,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     );
 
@@ -366,17 +381,14 @@ CommandBuffer VkSmol::beginRender() {
     return commandBuffer;
 }
 
-void VkSmol::endRender(CommandBuffer commandBuffer) {
+void VkSmol::endRecoringRender(CommandBuffer commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 
-    ImageBarrier endBarrier;
-    endBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
-    );
-    endBarrier.call(
+    barrier(
         commandBuffer,
+        nullptr,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
     );
 
@@ -390,22 +402,20 @@ void VkSmol::endRender(CommandBuffer commandBuffer) {
     );
 }
 
-CommandBuffer VkSmol::beginUiRender() {
+CommandBuffer VkSmol::beginRecordingUiRender() {
     CommandBuffer commandBuffer = uiCommandBuffers[currentFrame];
     commandBuffer.reset();
-    ImageBarrier startBarrier;
-    startBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-    );
     
     commandBuffer.beginRecording();
-
-    startBarrier.call(
+    
+    barrier(
         commandBuffer,
+        nullptr,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     );
+
     dynamicRenderer.begin(
         commandBuffer,
         swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -416,21 +426,18 @@ CommandBuffer VkSmol::beginUiRender() {
     return commandBuffer;
 }
 
-void VkSmol::endUiRender(CommandBuffer commandBuffer) {
+void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 
-    ImageBarrier endBarrier;
-    endBarrier.init(
-        swapchain.getImage(imageIndex),
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE
-    );
-    endBarrier.call(
+    barrier(
         commandBuffer,
+        nullptr,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
     );
 
-    commandBuffer.endRecording();
+    commandBuffer.endRecording();   
     graphicsQueue.submit(
         { uiCommandBuffers[currentFrame] },
         uiInFlightFences[currentFrame],
@@ -439,121 +446,56 @@ void VkSmol::endUiRender(CommandBuffer commandBuffer) {
     );
 }
 
+// Will use the barrier on the swapchain image if `image` is `nullptr`
+void VkSmol::barrier(
+    CommandBuffer commandBuffer,
+    VkImage image,
+    VkImageLayout srcLayout, VkImageLayout dstLayout,
+    VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
+) {
+    ImageBarrier barrier;
+    barrier.call(
+        commandBuffer,
+        image == nullptr ? swapchain.getImage(imageIndex) : image,
+        srcLayout, dstLayout,
+        srcAccessMask, dstAccessMask,
+        srcStageMask, dstStageMask
+    );
+}
 
-void VkSmol::drawFrame() {
-    CommandBuffer commandBuffer;
-    
-    beginFrame();
-    
-    commandBuffer = beginRender();
-    {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        UBO ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(60.0f), swapchain.getExtent().width / (float)swapchain.getExtent().height, 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
-
-        uniformBuffers[getFrame()].fill(device, &ubo);
-
-        graphicsPipeline.bind(commandBuffer);
-
-        vertexBuffer.bindVertex(commandBuffer);
-        indexBuffer.bindIndex(commandBuffer, VK_INDEX_TYPE_UINT16);
-    
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)swapchain.getExtent().width;
-        viewport.height = (float)swapchain.getExtent().height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        graphicsPipeline.setViewport(commandBuffer, viewport);
-    
-        VkRect2D scissor;
-        scissor.offset = {0, 0};
-        scissor.extent = swapchain.getExtent();
-        graphicsPipeline.setScissor(commandBuffer, scissor);
-
-        descriptorSets[getFrame()].bind(commandBuffer, graphicsPipeline.getLayout());
-        graphicsPipeline.drawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()));
-    }
-    endRender(commandBuffer);
-        
-
-    commandBuffer = beginUiRender();
-    {
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        
-        ImGui::NewFrame();
-        
-        ImGuiID dockspace_id = ImGui::GetID("Dock space");
-        ImGui::SetNextWindowBgAlpha(0.0f);
-        ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport(), 0);
-        
-        ImGui::SetNextWindowPos({0, 0});
-        ImGui::Begin("FPS",
-            nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration // | ImGuiWindowFlags_NoBackground
-        );
-        ImGui::Text("%.1f fps (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
-        ImGui::End();
-        
-        ImGui::Render();
-        
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.get());
-    }
-    endUiRender(commandBuffer);
-
-    endFrame();
+void VkSmol::waitIdle() {
+    device.waitIdle();
 }
 
 
 void VkSmol::terminate() {
-    device.waitIdle();
-
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     
+    descriptorPool.destroy(device);
+    uiDescriptorPool.destroy(device);
+
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         imageAvailableSemaphores[i].destroy(device);
-        for (Semaphore& semaphore : renderFinishedSemaphores[i])
+        for (Semaphore &semaphore : renderFinishedSemaphores[i])
             semaphore.destroy(device);
-        for (Semaphore& semaphore : uiFinishedSemaphores[i])
+        for (Semaphore &semaphore : uiFinishedSemaphores[i])
             semaphore.destroy(device);
         renderInFlightFences[i].destroy(device);
         uiInFlightFences[i].destroy(device);
     }
 
-    descriptorPool.destroy(device);
-    uiDescriptorPool.destroy(device);
-
-    vertexBuffer.free(device);
-    vertexBuffer.destroy(device);
-    indexBuffer.free(device);
-    indexBuffer.destroy(device);
-    for (Buffer& uniformBuffer : uniformBuffers) {
-        uniformBuffer.free(device);
-        uniformBuffer.destroy(device);
-    }
-
-    for (CommandBuffer& commandBuffer : commandBuffers)
+    for (CommandBuffer &commandBuffer : commandBuffers)
         commandBuffer.free(device, graphicsCommandPool);
-    for (CommandBuffer& commandBuffer : uiCommandBuffers)
+    for (CommandBuffer &commandBuffer : uiCommandBuffers)
         commandBuffer.free(device, uiCommandPool);
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
     uiCommandPool.destroy(device);
 
     swapchain.destroy(device);
-    
-    graphicsPipeline.destroy(device);
-    uboLayout.destroy(device);
 
     device.destroy();
     surface.destroy(instance);

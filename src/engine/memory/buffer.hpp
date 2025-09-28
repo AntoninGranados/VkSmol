@@ -12,10 +12,23 @@ class Queue;
 class Buffer {
 public:
     // TODO: maybe combine init/alloc and destroye/free ?
-    void init(LogicalDevice device, size_t size, VkBufferUsageFlags usage, bool persistentMapping = false);
+    void init(
+        LogicalDevice device,
+        VkBufferUsageFlags usage,
+        size_t size,
+        bool persistentMapping = false
+    );
+    void initFilled(
+        LogicalDevice device, PhysicalDevice physicalDevice,
+        VkBufferUsageFlags usage,
+        CommandPool transferCommandPool, Queue transferQueue,
+        size_t size, void *data
+    );
+
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
     void destroy(LogicalDevice device);
     void free(LogicalDevice device);
+
     VkBuffer get() { return buffer; };
     size_t getSize() { return size; };
     
@@ -30,8 +43,8 @@ public:
 private:
     VkBuffer buffer;
     VkDeviceMemory bufferMemory;
-    size_t size;
     VkBufferUsageFlags usage;
+    size_t size;
 
     void* bufferMapped;
 

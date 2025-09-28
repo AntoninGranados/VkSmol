@@ -3,7 +3,7 @@
 #include "./application.hpp"
 
 int main()  {
-    Application application("Vulkan app");
+    Application application;
     application.run();
     return EXIT_SUCCESS;
 }

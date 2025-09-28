@@ -54,16 +54,8 @@
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 
-struct Vertex {
-    glm::vec2 position;
-    glm::vec3 color;
-};
-
-struct UBO {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-};
+typedef size_t bufferList_t;
+typedef size_t descriptorSetList_t;
 
 class VkSmol {
 /*
@@ -74,37 +66,75 @@ class VkSmol {
     while (!enging.shouldTerminate()) {
         beginFrame();
 
-        cmdBuff = beginRender();
+        cmdBuff = beginRecordingRender();
         {
             draw(cmdBuff);
         }
-        endRender(cmdBuff);
+        endRecoringRender(cmdBuff);
 
-        cmdBuff = beginUiRender();
+        cmdBuff = beginRecordingUiRender();
         {
             drawUi(cmdBuff);
         }
-        endUiRender(cmdBuff);
+        endRecoringUiRender(cmdBuff);
 
         endFrame();
     }
     engine.terminate();
 */
+
 public:
     void init(std::string appName, uint32_t appVersion);
-    void drawFrame();
 
     void beginFrame();
     void endFrame();
 
-    CommandBuffer beginRender();
-    void endRender(CommandBuffer commandBuffer);
+    CommandBuffer beginRecordingRender();
+    void endRecoringRender(CommandBuffer commandBuffer);
     
-    CommandBuffer beginUiRender();
-    void endUiRender(CommandBuffer commandBuffer);
+    CommandBuffer beginRecordingUiRender();
+    void endRecoringUiRender(CommandBuffer commandBuffer);
 
+    void waitIdle();
     void terminate();
 
+    VkExtent2D getExtent() { return swapchain.getExtent(); };
+
+    GraphicsPipeline initGraphicsPipeline(
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
+        std::vector<Shader> shaders,
+        std::vector<DescriptorSetLayout> setLayouts
+    );
+    void destroyGraphicsPipeline(GraphicsPipeline &graphicsPipeline);
+
+    Shader initShader(VkShaderStageFlagBits stage_, std::string filepath);
+    void destroyShader(Shader &shader);
+
+    void initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
+    void destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
+
+    descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList);
+    DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
+
+    void addDescriptorPoolSize(VkDescriptorType descriptorType);
+    void initDescriptorPool();
+
+    Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);
+    void fillBuffer(Buffer buffer, void *data);
+    void destroyBuffer(Buffer &buffer);
+    
+    bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
+    void destroyBufferList(bufferList_t bufferList);
+    Buffer getBuffer(bufferList_t bufferList);
+
+    void barrier(
+        CommandBuffer commandBuffer,
+        VkImage image,
+        VkImageLayout srcLayout, VkImageLayout dstLayout,
+        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+        VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
+    );
+    
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 
@@ -122,21 +152,17 @@ private:
 
     Swapchain swapchain;
     DynamicRenderer dynamicRenderer;
-
-    DescriptorSetLayout uboLayout;      //! Move to the Application
-    GraphicsPipeline graphicsPipeline;  //! Move to the Application
     
     DescriptorPool descriptorPool, uiDescriptorPool;
-    std::vector<DescriptorSet> descriptorSets;
+    std::vector<std::vector<Buffer> > bufferLists;
+
+    std::vector<std::vector<DescriptorSet> > descriptorSetLists;
 
     CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
     std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;
 
-    Buffer vertexBuffer, indexBuffer;   //! Move to the Application
-    std::vector<Buffer> uniformBuffers; //! Move to the Application
-
     std::vector<Semaphore> imageAvailableSemaphores;
-    std::vector<std::vector<Semaphore> > renderFinishedSemaphores, uiFinishedSemaphores;    // One semaphore per image in the swap chain
+    std::vector<std::vector<Semaphore> > renderFinishedSemaphores, uiFinishedSemaphores;    // One semaphore per image in the swapchain
     std::vector<Fence> renderInFlightFences, uiInFlightFences;
     uint32_t currentFrame = 0, imageIndex;
 
