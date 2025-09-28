@@ -27,12 +27,12 @@ public:
 private:
     VkSmol engine;
 
-    DescriptorSetLayout uboLayout;
+    DescriptorSetLayout setLayout;
+    descriptorSetList_t descriptorSets;
     GraphicsPipeline pipeline;
 
     Buffer vertexBuffer, indexBuffer;
     bufferList_t uniformBuffers;
     
-    descriptorSetList_t descriptorSets;
 
 };

@@ -1,7 +1,6 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <vector>
 
@@ -24,9 +23,14 @@ public:
     // void free(LogicalDevice device);
     VkDescriptorSet get() { return descriptorSet; };
 
-    void linkBuffer(LogicalDevice device, Buffer buffer);
+    void linkUniformBuffer(Buffer buffer, uint32_t binding);
+    void update(LogicalDevice device);
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 
 private:
     VkDescriptorSet descriptorSet;
+    
+    std::vector<VkDescriptorBufferInfo> bufferInfos;
+    std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<VkWriteDescriptorSet> descriptorWrites;
 };

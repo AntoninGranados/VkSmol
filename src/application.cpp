@@ -14,6 +14,9 @@ const std::vector<index_t> indices = {
 Application::Application() {
     engine.init("Vulkan Application", VK_MAKE_API_VERSION(0, 1, 0, 0));
 
+    Image image = engine.initImageFromPath("./res/logo.png");
+    engine.destroyImage(image);
+
     // Buffer creation
     {
         vertexBuffer = engine.initBuffer(
@@ -29,17 +32,14 @@ Application::Application() {
         uniformBuffers = engine.initBufferList(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO));
     }
     
-    DescriptorSetLayout uboLayout;
-    uboLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    engine.addDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    engine.initDescriptorPool();
-    
-    engine.initDescriptorSetLayout(uboLayout);
+    setLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    // setLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    engine.initDescriptorSetLayout(setLayout);
     
     // Pipeline creation
     {
-        Shader vertShader = engine.initShader(VK_SHADER_STAGE_VERTEX_BIT,   "./shader/vert.glsl");
-        Shader fragShader = engine.initShader(VK_SHADER_STAGE_FRAGMENT_BIT, "./shader/frag.glsl");
+        Shader vertShader = engine.initShader(VK_SHADER_STAGE_VERTEX_BIT,   "./res/shader/vert.glsl");
+        Shader fragShader = engine.initShader(VK_SHADER_STAGE_FRAGMENT_BIT, "./res/shader/frag.glsl");
     
         VertexInput<Vertex> vertexInput;
         vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position));
@@ -47,16 +47,16 @@ Application::Application() {
         pipeline = engine.initGraphicsPipeline(
             vertexInput.get(),
             { vertShader, fragShader },
-            { uboLayout }
+            { setLayout }
         );
     
         engine.destroyShader(vertShader);
         engine.destroyShader(fragShader);
     }
 
-    descriptorSets = engine.initDescriptorSetList(uboLayout, uniformBuffers);
+    descriptorSets = engine.initDescriptorSetList(setLayout, uniformBuffers);
     
-    engine.destroyDescriptorSetLayout(uboLayout);
+    engine.destroyDescriptorSetLayout(setLayout);
 }
 
 Application::~Application() {

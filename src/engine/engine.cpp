@@ -188,6 +188,7 @@ void VkSmol::destroyGraphicsPipeline(GraphicsPipeline &pipeline) {
     pipeline.destroy(device);
 }
 
+
 Shader VkSmol::initShader(VkShaderStageFlagBits stage, std::string filepath) {
     Shader shader;
     shader.init(device, stage, filepath);
@@ -198,6 +199,7 @@ void VkSmol::destroyShader(Shader &shader) {
     shader.destroy(device);
 }
 
+
 void VkSmol::initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout) {
     descriptorSetLayout.init(device);
 }
@@ -206,13 +208,31 @@ void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout
     descriptorSetLayout.destroy(device);
 }
 
-void VkSmol::addDescriptorPoolSize(VkDescriptorType descriptorType) {
-    descriptorPool.addPoolSize(descriptorType, MAX_FRAME_IN_FLIGHT);
+
+bufferList_t VkSmol::initBufferList(VkBufferUsageFlags usage, size_t size) {
+    //! it always uses persistent mapping
+    std::vector<Buffer> bufferList;
+    bufferList.resize(MAX_FRAME_IN_FLIGHT);
+    for (Buffer &buffer : bufferList) {
+        buffer.init(device, usage, size, true);
+        buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    }
+    
+    bufferLists.push_back(bufferList);
+    return bufferLists.size()-1;
 }
 
-void VkSmol::initDescriptorPool() {
-    descriptorPool.init(device);
+void VkSmol::destroyBufferList(bufferList_t bufferList) {
+    for (Buffer &buffer : bufferLists[bufferList]) {
+        buffer.free(device);
+        buffer.destroy(device);
+    }
 }
+
+Buffer VkSmol::getBuffer(bufferList_t bufferList) {
+    return bufferLists[bufferList][currentFrame];
+}
+
 
 Buffer VkSmol::initBuffer(VkBufferUsageFlags usage, size_t size, void *data) {
     Buffer buffer;
@@ -236,42 +256,36 @@ void VkSmol::destroyBuffer(Buffer &buffer) {
     buffer.destroy(device);
 }
 
-bufferList_t VkSmol::initBufferList(VkBufferUsageFlags usage, size_t size) {
-    //! it always uses persistent mapping
-    std::vector<Buffer> bufferList;
-    bufferList.resize(MAX_FRAME_IN_FLIGHT);
-    for (Buffer &buffer : bufferList) {
-        buffer.init(device, usage, size, true);
-        buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    }
-    
-    bufferLists.push_back(bufferList);
-    return bufferLists.size()-1;
-}
-
 void VkSmol::fillBuffer(Buffer buffer, void *data) {
     buffer.fill(device, data);
 }
 
-void VkSmol::destroyBufferList(bufferList_t bufferList) {
-    for (Buffer &buffer : bufferLists[bufferList]) {
-        buffer.free(device);
-        buffer.destroy(device);
-    }
-}
-
-Buffer VkSmol::getBuffer(bufferList_t bufferList) {
-    return bufferLists[bufferList][currentFrame];
-}
 
 descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList) {
+    DescriptorPool descriptorPool;
+    for (VkDescriptorSetLayoutBinding &binding : layout.getBindings())
+        descriptorPool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
+    descriptorPool.init(device);
+
     std::vector<DescriptorSet> descriptorSetList;
     descriptorSetList.resize(MAX_FRAME_IN_FLIGHT);
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         descriptorSetList[i].alloc(device, descriptorPool, layout);
-        descriptorSetList[i].linkBuffer(device, bufferLists[bufferList][i]);
+
+        for (VkDescriptorSetLayoutBinding &binding : layout.getBindings()) {
+            switch (binding.descriptorType) {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                    descriptorSetList[i].linkUniformBuffer(bufferLists[bufferList][i], binding.binding);
+                    break;
+                default:
+                    throw std::runtime_error("Unsupported descriptor type");
+            }
+        }
+
+        descriptorSetList[i].update(device);
     }
     
+    descriptorPools.push_back(descriptorPool);
     descriptorSetLists.push_back(descriptorSetList);
     return descriptorSetLists.size()-1;
 }
@@ -279,6 +293,31 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, b
 DescriptorSet VkSmol::getDescriptorSet(descriptorSetList_t descriptorSetList) {
     return descriptorSetLists[descriptorSetList][currentFrame];
 }
+
+
+Image VkSmol::initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
+    Image image;
+
+    image.init(device, width, height, format, usage);
+    image.alloc(device, physicalDevice, properties);
+
+    return image;
+}
+
+Image VkSmol::initImageFromPath(std::string path) {
+    Image image;
+
+    image.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
+
+    return image;
+}
+
+void VkSmol::destroyImage(Image &image) {
+    image.free(device);
+    image.destroy(device);
+}
+
+
 
 void VkSmol::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     VkSmol* pApp = reinterpret_cast<VkSmol*>(glfwGetWindowUserPointer(window));
@@ -446,6 +485,7 @@ void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
     );
 }
 
+
 // Will use the barrier on the swapchain image if `image` is `nullptr`
 void VkSmol::barrier(
     CommandBuffer commandBuffer,
@@ -464,17 +504,18 @@ void VkSmol::barrier(
     );
 }
 
+
 void VkSmol::waitIdle() {
     device.waitIdle();
 }
-
 
 void VkSmol::terminate() {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     
-    descriptorPool.destroy(device);
+    for(DescriptorPool &descriptorPool : descriptorPools)
+        descriptorPool.destroy(device);
     uiDescriptorPool.destroy(device);
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {

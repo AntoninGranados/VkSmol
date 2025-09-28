@@ -45,12 +45,12 @@
 
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
-#include "./sync/imageBarrier.hpp"
+
+#include "./image/image.hpp"
+#include "./image/imageBarrier.hpp"
 
 #include "./utils.hpp"
 
-// TODO: remove error checking (everywhere) when using NDEBUG
-// TODO: clear every vector when using destroy in a function (in case we want to recreate the object by recalling init)
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 
@@ -116,16 +116,17 @@ public:
     descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList);
     DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
 
-    void addDescriptorPoolSize(VkDescriptorType descriptorType);
-    void initDescriptorPool();
+    bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
+    void destroyBufferList(bufferList_t bufferList);
+    Buffer getBuffer(bufferList_t bufferList);
 
     Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);
     void fillBuffer(Buffer buffer, void *data);
     void destroyBuffer(Buffer &buffer);
-    
-    bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
-    void destroyBufferList(bufferList_t bufferList);
-    Buffer getBuffer(bufferList_t bufferList);
+
+    Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+    Image initImageFromPath(std::string path);
+    void destroyImage(Image &image);
 
     void barrier(
         CommandBuffer commandBuffer,
@@ -153,9 +154,9 @@ private:
     Swapchain swapchain;
     DynamicRenderer dynamicRenderer;
     
-    DescriptorPool descriptorPool, uiDescriptorPool;
+    DescriptorPool uiDescriptorPool;
+    std::vector<DescriptorPool> descriptorPools;
     std::vector<std::vector<Buffer> > bufferLists;
-
     std::vector<std::vector<DescriptorSet> > descriptorSetLists;
 
     CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;

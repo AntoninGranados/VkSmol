@@ -26,8 +26,8 @@ public:
     );
 
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
-    void destroy(LogicalDevice device);
     void free(LogicalDevice device);
+    void destroy(LogicalDevice device);
 
     VkBuffer get() { return buffer; };
     size_t getSize() { return size; };
@@ -39,6 +39,8 @@ public:
     void bindVertex(CommandBuffer commandBuffer);
     void bindIndex(CommandBuffer commandBuffer, VkIndexType indexType);
 
+    static uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
     bool persistentMapping;
 private:
     VkBuffer buffer;
@@ -47,7 +49,5 @@ private:
     size_t size;
 
     void* bufferMapped;
-
-    uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 };
 

@@ -51,7 +51,7 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(
+    allocInfo.memoryTypeIndex = Buffer::findMemoryType(
         physicalDevice,
         memRequirements.memoryTypeBits,
         properties
@@ -65,17 +65,17 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
         vkMapMemory(device.get(), bufferMemory, 0, size, 0, &bufferMapped);
 }
 
-void Buffer::destroy(LogicalDevice device) {
-    vkDestroyBuffer(device.get(), buffer, nullptr);
-}
 
 void Buffer::free(LogicalDevice device) {
     if (persistentMapping)
-        vkUnmapMemory(device.get(), bufferMemory);
-
+    vkUnmapMemory(device.get(), bufferMemory);
+    
     vkFreeMemory(device.get(), bufferMemory, nullptr);
 }
 
+void Buffer::destroy(LogicalDevice device) {
+    vkDestroyBuffer(device.get(), buffer, nullptr);
+}
 
 void Buffer::fill(LogicalDevice device, void* data) {
     if (persistentMapping) {
@@ -92,20 +92,13 @@ void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, Comm
     if (srcBuffer.getSize() != dstBuffer.getSize())
         throw std::runtime_error("Buffers don't have the same size");
 
-    CommandBuffer temporaryCommandBuffer;
-    temporaryCommandBuffer.alloc(device, transferCommandPool);
-    temporaryCommandBuffer.beginRecording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
 
     VkBufferCopy copyRegion{};
     copyRegion.size = srcBuffer.getSize();
-    vkCmdCopyBuffer(temporaryCommandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 1, &copyRegion);
+    vkCmdCopyBuffer(commandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 1, &copyRegion);
 
-    temporaryCommandBuffer.endRecording();
-
-    transferQueue.submit({ temporaryCommandBuffer });
-    transferQueue.wait();
-
-    temporaryCommandBuffer.free(device, transferCommandPool);
+    CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, commandBuffer);
 }
 
 
@@ -128,7 +121,6 @@ void Buffer::bindIndex(CommandBuffer commandBuffer, VkIndexType indexType) {
 
     vkCmdBindIndexBuffer(commandBuffer.get(), buffer, 0, indexType);
 }
-
 
 uint32_t Buffer::findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties;

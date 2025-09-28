@@ -2,6 +2,7 @@
 
 #include "./commandPool.hpp"
 #include "../logicalDevice.hpp"
+#include "../queue.hpp"
 #include "../utils.hpp"
 
 void CommandBuffer::alloc(LogicalDevice device, CommandPool pool) {
@@ -32,4 +33,20 @@ void CommandBuffer::endRecording() {
 
 void CommandBuffer::reset() {
     vkResetCommandBuffer(commandBuffer, 0);
+}
+
+CommandBuffer CommandBuffer::beginSingleTimeCommands(LogicalDevice device, CommandPool pool) {
+    CommandBuffer commandBuffer;
+    commandBuffer.alloc(device, pool);
+    commandBuffer.beginRecording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    return commandBuffer;
+}
+
+void CommandBuffer::endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer &commandBuffer) {
+    commandBuffer.endRecording();
+
+    queue.submit({ commandBuffer });
+    queue.wait();
+
+    commandBuffer.free(device, pool);
 }
