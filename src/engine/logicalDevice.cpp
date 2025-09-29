@@ -26,7 +26,9 @@ void LogicalDevice::init(
         queueCreateInfos.emplace_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};  // Everything is set to VK_FALSE for now
+    VkPhysicalDeviceFeatures deviceFeatures{};
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
+
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
     dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamicRenderingFeature.dynamicRendering = VK_TRUE;

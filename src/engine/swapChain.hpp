@@ -53,6 +53,7 @@ private:
     VkFormat imageFormat;
     VkExtent2D extent;
 
+    // TODO: switch to the wrappers Image and ImageView
     void initImages(LogicalDevice device);
     void initImageViews(LogicalDevice device);
     void destroyImageViews(LogicalDevice device);

@@ -15,10 +15,11 @@
 void Image::init(
     LogicalDevice device,
     uint32_t width_, uint32_t height_,
-    VkFormat format, VkImageUsageFlags usage
+    VkFormat format_, VkImageUsageFlags usage
 ) {
     width = width_;
     height = height_;
+    format = format_;
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;

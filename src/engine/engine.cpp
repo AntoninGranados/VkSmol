@@ -312,9 +312,30 @@ Image VkSmol::initImageFromPath(std::string path) {
     return image;
 }
 
+ImageView VkSmol::initImageView(Image &image) {
+    ImageView imageView;
+    imageView.init(device, image);
+    return imageView;
+}
+
 void VkSmol::destroyImage(Image &image) {
     image.free(device);
     image.destroy(device);
+}
+
+void VkSmol::destroyImageView(ImageView &imageView) {
+    imageView.destroy(device);
+}
+
+
+Sampler VkSmol::initSampler() {
+    Sampler sampler;
+    sampler.init(device, physicalDevice);
+    return sampler;
+}
+
+void VkSmol::destroySampler(Sampler &sampler) {
+    sampler.destroy(device);
 }
 
 
@@ -358,6 +379,11 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
         )
             return 0;
     }
+
+    VkPhysicalDeviceFeatures supportedFeatures;
+    vkGetPhysicalDeviceFeatures(device.get(), &supportedFeatures);
+    if (!supportedFeatures.samplerAnisotropy)
+        return 0;
 
     // Check swap chain support
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);

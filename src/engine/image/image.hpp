@@ -6,10 +6,13 @@
 
 class LogicalDevice;
 class PhysicalDevice;
+
 class CommandBuffer;
 class CommandPool;
 class Queue;
+
 class Buffer;
+
 
 class Image {
 public:
@@ -32,8 +35,11 @@ public:
     void destroy(LogicalDevice device);
 
     VkImage get() { return image; }
+    VkFormat getFormat() { return format; }
+
 private:
     VkImage image;
     VkDeviceMemory imageMemory;
+    VkFormat format;
     uint32_t width, height;
 };

@@ -15,7 +15,11 @@ Application::Application() {
     engine.init("Vulkan Application", VK_MAKE_API_VERSION(0, 1, 0, 0));
 
     Image image = engine.initImageFromPath("./res/logo.png");
+    ImageView imageView = engine.initImageView(image);
+    Sampler sampler = engine.initSampler();
+    engine.destroySampler(sampler);
     engine.destroyImage(image);
+    engine.destroyImageView(imageView);
 
     // Buffer creation
     {

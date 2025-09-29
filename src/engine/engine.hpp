@@ -47,6 +47,8 @@
 #include "./sync/fence.hpp"
 
 #include "./image/image.hpp"
+#include "./image/imageView.hpp"
+#include "./image/sampler.hpp"
 #include "./image/imageBarrier.hpp"
 
 #include "./utils.hpp"
@@ -127,6 +129,11 @@ public:
     Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
     Image initImageFromPath(std::string path);
     void destroyImage(Image &image);
+    ImageView initImageView(Image &image);
+    void destroyImageView(ImageView &imageView);
+
+    Sampler initSampler();
+    void destroySampler(Sampler &sampler);
 
     void barrier(
         CommandBuffer commandBuffer,
