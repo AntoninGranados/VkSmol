@@ -282,9 +282,7 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, s
                 } break;
                 case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
                     std::pair<ImageView, Sampler> pair = *(std::pair<ImageView, Sampler>*)descriptors[bind_idx];
-                    ImageView view = pair.first;
-                    Sampler sampler = pair.second;
-                    descriptorSetList[i].linkCombinedImageSampler(view, sampler, bindings[bind_idx].binding);
+                    descriptorSetList[i].linkCombinedImageSampler(pair.first, pair.second, bindings[bind_idx].binding);
                 } break;
                 default:
                     throw std::runtime_error("Unsupported descriptor type");
@@ -306,18 +304,14 @@ DescriptorSet VkSmol::getDescriptorSet(descriptorSetList_t descriptorSetList) {
 
 Image VkSmol::initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
     Image image;
-
     image.init(device, width, height, format, usage);
     image.alloc(device, physicalDevice, properties);
-
     return image;
 }
 
 Image VkSmol::initImageFromPath(std::string path) {
     Image image;
-
     image.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
-
     return image;
 }
 
@@ -436,36 +430,10 @@ CommandBuffer VkSmol::beginRecordingRender() {
     commandBuffer.reset();
 
     commandBuffer.beginRecording();
-
-    barrier(
-        commandBuffer,
-        nullptr,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-    );
-
-    dynamicRenderer.begin(
-        commandBuffer,
-        swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-        {{ 0.0f, 0.0f, 0.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
-    );
-
     return commandBuffer;
 }
 
 void VkSmol::endRecoringRender(CommandBuffer commandBuffer) {
-    dynamicRenderer.end(commandBuffer);
-
-    barrier(
-        commandBuffer,
-        nullptr,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-    );
-
     commandBuffer.endRecording();
 
     graphicsQueue.submit(
@@ -481,36 +449,11 @@ CommandBuffer VkSmol::beginRecordingUiRender() {
     commandBuffer.reset();
     
     commandBuffer.beginRecording();
-    
-    barrier(
-        commandBuffer,
-        nullptr,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-    );
-
-    dynamicRenderer.begin(
-        commandBuffer,
-        swapchain.getImageView(imageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
-        {{ 1.0f, 0.0f, 1.0f, 1.0f }}, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
-    );
 
     return commandBuffer;
 }
 
 void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
-    dynamicRenderer.end(commandBuffer);
-
-    barrier(
-        commandBuffer,
-        nullptr,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_NONE,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-    );
-
     commandBuffer.endRecording();   
     graphicsQueue.submit(
         { uiCommandBuffers[currentFrame] },
@@ -520,6 +463,28 @@ void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
     );
 }
 
+
+//! The render area is fixed to the screen size for now
+void VkSmol::beginDynamicRenderer(
+    CommandBuffer commandBuffer, 
+    VkImageView imageView, VkImageLayout imageLayout,
+    VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+    VkClearColorValue clearColor
+) {
+    if (imageView == VK_NULL_HANDLE)
+        imageView = swapchain.getImageView(imageIndex);
+
+    dynamicRenderer.begin(
+        commandBuffer,
+        imageView, imageLayout,
+        loadOp, storeOp,
+        clearColor, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+    );
+}
+
+void VkSmol::endDynamicRenderer(CommandBuffer commandBuffer) {
+    dynamicRenderer.end(commandBuffer);
+}
 
 // Will use the barrier on the swapchain image if `image` is `nullptr`
 void VkSmol::barrier(

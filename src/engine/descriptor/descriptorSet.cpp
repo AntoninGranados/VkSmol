@@ -49,18 +49,7 @@ void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     bufferInfo.buffer = buffer.get();
     bufferInfo.offset = 0;
     bufferInfo.range = buffer.getSize();
-    bufferInfos.push_back(bufferInfo);
-    
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet;
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = &bufferInfos.back();
-
-    descriptorWrites.push_back(descriptorWrite);
+    bufferInfos.push_back({ bufferInfo, binding });
 }
 
 void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding) {
@@ -68,22 +57,37 @@ void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, ui
     imageInfo.sampler = sampler.get();
     imageInfo.imageView = view.get();
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfos.push_back(imageInfo);
-    
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet;
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pImageInfo = &imageInfos.back();
-
-    descriptorWrites.push_back(descriptorWrite);
+    imageInfos.push_back({ imageInfo, binding });
 }
 
 void DescriptorSet::update(LogicalDevice device) {
-    vkUpdateDescriptorSets(device.get(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+    descriptorWrites.clear();
+    for (const std::pair<VkDescriptorBufferInfo, uint32_t> &pair : bufferInfos) {
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSet;
+            descriptorWrite.dstBinding = pair.second;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &pair.first;
+
+            descriptorWrites.push_back(descriptorWrite);
+    }
+    for (const std::pair<VkDescriptorImageInfo, uint32_t> &pair : imageInfos) {
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSet;
+            descriptorWrite.dstBinding = pair.second;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pImageInfo = &pair.first;
+
+            descriptorWrites.push_back(descriptorWrite);
+    }
+
+    vkUpdateDescriptorSets(device.get(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
 void DescriptorSet::bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {

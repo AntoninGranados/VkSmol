@@ -33,7 +33,7 @@ public:
 private:
     VkDescriptorSet descriptorSet;
     
-    std::vector<VkDescriptorBufferInfo> bufferInfos;
-    std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<std::pair<VkDescriptorBufferInfo, uint32_t> > bufferInfos;
+    std::vector<std::pair<VkDescriptorImageInfo, uint32_t> > imageInfos;
     std::vector<VkWriteDescriptorSet> descriptorWrites;
 };

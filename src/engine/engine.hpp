@@ -136,6 +136,14 @@ public:
     Sampler initSampler();
     void destroySampler(Sampler &sampler);
 
+    void beginDynamicRenderer(
+        CommandBuffer commandBuffer, 
+        VkImageView imageView, VkImageLayout imageLayout,
+        VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+        VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }}
+    );
+    void endDynamicRenderer(CommandBuffer commandBuffer);
+
     void barrier(
         CommandBuffer commandBuffer,
         VkImage image,
