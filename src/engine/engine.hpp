@@ -17,6 +17,7 @@
 #include <chrono>
 #include <string>
 #include <iostream>
+#include <utility>
 
 #include "./window.hpp"
 
@@ -115,7 +116,7 @@ public:
     void initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
 
-    descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList);
+    descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors);
     DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);

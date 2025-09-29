@@ -261,9 +261,11 @@ void VkSmol::fillBuffer(Buffer buffer, void *data) {
 }
 
 
-descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, bufferList_t bufferList) {
+descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
+    std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
+
     DescriptorPool descriptorPool;
-    for (VkDescriptorSetLayoutBinding &binding : layout.getBindings())
+    for (VkDescriptorSetLayoutBinding &binding : bindings)
         descriptorPool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
     descriptorPool.init(device);
 
@@ -272,11 +274,18 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, b
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         descriptorSetList[i].alloc(device, descriptorPool, layout);
 
-        for (VkDescriptorSetLayoutBinding &binding : layout.getBindings()) {
-            switch (binding.descriptorType) {
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-                    descriptorSetList[i].linkUniformBuffer(bufferLists[bufferList][i], binding.binding);
-                    break;
+        for (size_t bind_idx = 0; bind_idx < bindings.size(); bind_idx++) {
+            switch (bindings[bind_idx].descriptorType) {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
+                    bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];
+                    descriptorSetList[i].linkUniformBuffer(bufferLists[bufferList][i], bindings[bind_idx].binding);
+                } break;
+                case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
+                    std::pair<ImageView, Sampler> pair = *(std::pair<ImageView, Sampler>*)descriptors[bind_idx];
+                    ImageView view = pair.first;
+                    Sampler sampler = pair.second;
+                    descriptorSetList[i].linkCombinedImageSampler(view, sampler, bindings[bind_idx].binding);
+                } break;
                 default:
                     throw std::runtime_error("Unsupported descriptor type");
             }

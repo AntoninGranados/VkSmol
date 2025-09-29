@@ -7,6 +7,8 @@
 class LogicalDevice;
 class Buffer;
 class CommandBuffer;
+class ImageView;
+class Sampler;
 class DescriptorSetLayout;
 class DescriptorPool;
 
@@ -24,6 +26,7 @@ public:
     VkDescriptorSet get() { return descriptorSet; };
 
     void linkUniformBuffer(Buffer buffer, uint32_t binding);
+    void linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding);
     void update(LogicalDevice device);
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 

@@ -5,6 +5,8 @@
 #include "../logicalDevice.hpp"
 #include "../memory/buffer.hpp"
 #include "../command/commandBuffer.hpp"
+#include "../image/imageView.hpp"
+#include "../image/sampler.hpp"
 #include "../utils.hpp"
 
 void DescriptorSet::alloc(LogicalDevice device, DescriptorPool descriptorPool, DescriptorSetLayout descriptorSetLayout) {
@@ -57,6 +59,26 @@ void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pBufferInfo = &bufferInfos.back();
+
+    descriptorWrites.push_back(descriptorWrite);
+}
+
+void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding) {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.sampler = sampler.get();
+    imageInfo.imageView = view.get();
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfos.push_back(imageInfo);
+    
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = descriptorSet;
+    descriptorWrite.dstBinding = binding;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imageInfos.back();
+
     descriptorWrites.push_back(descriptorWrite);
 }
 

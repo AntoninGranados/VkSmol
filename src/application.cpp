@@ -1,10 +1,10 @@
 #include "application.hpp"
 
 const std::vector<Vertex> vertices = {
-    { {-0.5f,-0.5f}, {0.0f, 0.0f, 0.0f} },
-    { { 0.5f,-0.5f}, {1.0f, 0.0f, 0.0f} },
-    { { 0.5f, 0.5f}, {1.0f, 1.0f, 0.0f} },
-    { {-0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} }
+    { .position={-0.5f,-0.5f}, .color={0.0f, 0.0f, 0.0f}, .texCoord={1.0f, 0.0f} },
+    { .position={ 0.5f,-0.5f}, .color={1.0f, 0.0f, 0.0f}, .texCoord={0.0f, 0.0f} },
+    { .position={ 0.5f, 0.5f}, .color={1.0f, 1.0f, 0.0f}, .texCoord={0.0f, 1.0f} },
+    { .position={-0.5f, 0.5f}, .color={0.0f, 1.0f, 0.0f}, .texCoord={1.0f, 1.0f} }
 };
 
 const std::vector<index_t> indices = {
@@ -14,12 +14,9 @@ const std::vector<index_t> indices = {
 Application::Application() {
     engine.init("Vulkan Application", VK_MAKE_API_VERSION(0, 1, 0, 0));
 
-    Image image = engine.initImageFromPath("./res/logo.png");
-    ImageView imageView = engine.initImageView(image);
-    Sampler sampler = engine.initSampler();
-    engine.destroySampler(sampler);
-    engine.destroyImage(image);
-    engine.destroyImageView(imageView);
+    image = engine.initImageFromPath("./res/tp_logo.png");
+    imageView = engine.initImageView(image);
+    sampler = engine.initSampler();
 
     // Buffer creation
     {
@@ -36,8 +33,8 @@ Application::Application() {
         uniformBuffers = engine.initBufferList(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO));
     }
     
-    setLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    // setLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    setLayout.addBinding(VK_SHADER_STAGE_VERTEX_BIT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    setLayout.addBinding(VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     engine.initDescriptorSetLayout(setLayout);
     
     // Pipeline creation
@@ -48,6 +45,7 @@ Application::Application() {
         VertexInput<Vertex> vertexInput;
         vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position));
         vertexInput.addAttributeDescription(VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color));
+        vertexInput.addAttributeDescription(VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, texCoord));
         pipeline = engine.initGraphicsPipeline(
             vertexInput.get(),
             { vertShader, fragShader },
@@ -58,7 +56,11 @@ Application::Application() {
         engine.destroyShader(fragShader);
     }
 
-    descriptorSets = engine.initDescriptorSetList(setLayout, uniformBuffers);
+    std::pair<ImageView, Sampler> combinedImageSampler = { imageView, sampler };
+    descriptorSets = engine.initDescriptorSetList(
+        setLayout,
+        { (void*)&uniformBuffers, (void*)&combinedImageSampler }
+    );
     
     engine.destroyDescriptorSetLayout(setLayout);
 }
@@ -66,16 +68,22 @@ Application::Application() {
 Application::~Application() {
     engine.waitIdle();
 
-    engine.destroyGraphicsPipeline(pipeline);
-    
+    engine.destroySampler(sampler);
+    engine.destroyImage(image);
+    engine.destroyImageView(imageView);
+
     engine.destroyBuffer(vertexBuffer);
     engine.destroyBuffer(indexBuffer);
     engine.destroyBufferList(uniformBuffers);
+    
+    engine.destroyGraphicsPipeline(pipeline);
     
     engine.terminate();
 }
 
 void Application::run() {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     while(!engine.shouldTerminate()) {
         CommandBuffer commandBuffer;
     
@@ -85,14 +93,15 @@ void Application::run() {
         {
             VkExtent2D extent = engine.getExtent();
             
-            static auto startTime = std::chrono::high_resolution_clock::now();
             auto currentTime = std::chrono::high_resolution_clock::now();
-            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-            
+            float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+            startTime = currentTime;
+            rotation += deltaTime * rotationSpeed;
+
             UBO ubo{};
-            ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            ubo.proj = glm::perspective(glm::radians(60.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
+            ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.view = glm::lookAt(cameraPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.proj = glm::perspective(glm::radians(60.0f), extent.width / (float)extent.height, 0.001f, 1000.0f);
             ubo.proj[1][1] *= -1;
             
             engine.fillBuffer(engine.getBuffer(uniformBuffers), (void*)&ubo);
@@ -139,6 +148,14 @@ void Application::run() {
                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration // | ImGuiWindowFlags_NoBackground
             );
             ImGui::Text("%.1f fps (%.3f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
+            ImGui::End();
+
+            ImGui::Begin("Control");
+            ImGui::Text("Camera Position");
+            ImGui::DragFloat3("##Camera Position", glm::value_ptr(cameraPos), 0.01f, -10.0f, 10.0f, "%.2f");
+            ImGui::Separator();
+            ImGui::Text("Rotation Speed");
+            ImGui::DragFloat("##Rotation Speed", &rotationSpeed, 1.0f, -180.0f, 180.0f, "%.f°/s");
             ImGui::End();
             
             ImGui::Render();
