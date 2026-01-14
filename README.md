@@ -1,3 +1,3 @@
 # VkSmol
 
-A small (smol) Vulkan engine
+A small (smol) multipurpose Vulkan engine
