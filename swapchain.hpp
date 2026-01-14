@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <algorithm>
+#include <optional>
 
 class Window;
 class PhysicalDevice;
