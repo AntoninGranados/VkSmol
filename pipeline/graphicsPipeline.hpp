@@ -14,12 +14,15 @@ class DescriptorSetLayout;
 // TODO: keep track of the shader modules (in case we want to rebuild the pipeline with the same ones)
 class GraphicsPipeline {
 public:
+    GraphicsPipeline() {};
+
     void init(
         LogicalDevice device,
         VkPipelineRenderingCreateInfoKHR pipelineCreate,
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         std::vector<Shader> shaders,
-        std::vector<DescriptorSetLayout> setLayouts
+        std::vector<DescriptorSetLayout> setLayouts,
+        GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,
     );
     void destroy(LogicalDevice device);
@@ -34,6 +37,6 @@ public:
     void drawIndexed(CommandBuffer commandBuffer, size_t indexCount);
 
 private:
-    VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 };

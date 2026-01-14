@@ -56,6 +56,7 @@
 
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
+// TODO: use more assert
 
 typedef size_t bufferList_t;
 typedef size_t descriptorSetList_t;
@@ -106,7 +107,9 @@ public:
     GraphicsPipeline initGraphicsPipeline(
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         std::vector<Shader> shaders,
-        std::vector<DescriptorSetLayout> setLayouts
+        std::vector<DescriptorSetLayout> setLayouts,
+        GraphicsPipeline other = GraphicsPipeline(),
+        VkFormat colorFormat = VK_FORMAT_UNDEFINED
     );
     void destroyGraphicsPipeline(GraphicsPipeline &graphicsPipeline);
 
@@ -152,6 +155,7 @@ public:
         VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
     );
     
+    Window getWindow() { return window; }
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 

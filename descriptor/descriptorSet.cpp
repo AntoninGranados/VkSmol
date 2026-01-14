@@ -52,6 +52,14 @@ void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     bufferInfos.push_back({ bufferInfo, binding });
 }
 
+void DescriptorSet::linkStorageBuffer(Buffer buffer, uint32_t binding) {
+    VkDescriptorBufferInfo storageInfo{};
+    storageInfo.buffer = buffer.get();
+    storageInfo.offset = 0;
+    storageInfo.range = buffer.getSize();
+    storageInfos.push_back({ storageInfo, binding });
+}
+
 void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler.get();
@@ -62,6 +70,7 @@ void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, ui
 
 void DescriptorSet::update(LogicalDevice device) {
     descriptorWrites.clear();
+
     for (const std::pair<VkDescriptorBufferInfo, uint32_t> &pair : bufferInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -69,6 +78,18 @@ void DescriptorSet::update(LogicalDevice device) {
             descriptorWrite.dstBinding = pair.second;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &pair.first;
+
+            descriptorWrites.push_back(descriptorWrite);
+    }
+    for (const std::pair<VkDescriptorBufferInfo, uint32_t> &pair : storageInfos) {
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSet;
+            descriptorWrite.dstBinding = pair.second;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrite.descriptorCount = 1;
             descriptorWrite.pBufferInfo = &pair.first;
 

@@ -11,7 +11,8 @@ void GraphicsPipeline::init(
     VkPipelineRenderingCreateInfoKHR pipelineCreate,
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     std::vector<Shader> shaders,
-    std::vector<DescriptorSetLayout> setLayouts
+    std::vector<DescriptorSetLayout> setLayouts,
+    GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
 ) {
     // Input Assembly State
@@ -98,9 +99,14 @@ void GraphicsPipeline::init(
     pipelineInfo.subpass = 0;
     pipelineInfo.renderPass = VK_NULL_HANDLE;   //? for dynamic rendering
     pipelineInfo.pNext = &pipelineCreate;       //? for dynamic rendering
-    // Use this if we want to rebuild the pipeline more efficiently (using another pipeline)
-    // pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-    // pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    
+    // To rebuild the pipeline more efficiently (using another pipeline)
+    pipelineInfo.flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT; //! should not always be active
+    if (other.get() != VK_NULL_HANDLE) {
+        pipelineInfo.basePipelineIndex = -1;
+        pipelineInfo.basePipelineHandle = other.get();
+        pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    }
 
     vkCheck(vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline), "Failed to create graphic pipeline");
 

@@ -1,7 +1,8 @@
 #include "engine.hpp"
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+// TODO: get this values from the application (and pass them in the engine.init)
+const uint32_t WIDTH = 1280;
+const uint32_t HEIGHT = 720;
 
 const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
 
@@ -17,10 +18,12 @@ const std::vector<const char*> instanceExtensions = {
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+#ifdef __APPLE__
     "VK_KHR_portability_subset",
+#endif
 };
 
-// only used if NDEBUG is not defined
+// only used if NDEBUG is ndef
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
@@ -30,7 +33,6 @@ const std::vector<const char*> validationLayers = {
 */
 
 bool VkSmol::shouldTerminate() {
-    if (glfwGetKey(window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS) return true;
     return window.shouldClose();
 }
 
@@ -119,8 +121,10 @@ void VkSmol::initImgui() {
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImGui::StyleColorsDark();
-    ImGui::GetStyle().Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.95f);
-    ImGui::GetStyle().Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f); // keep docked windows transparent
+    // style.Colors[ImGuiCol_ChildBg]        = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
+    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
     ImGui_ImplGlfw_InitForVulkan(window.get(), true);
     ImGui_ImplVulkan_InitInfo initInfo{};
@@ -165,13 +169,16 @@ void VkSmol::initImgui() {
 GraphicsPipeline VkSmol::initGraphicsPipeline(
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     std::vector<Shader> shaders,
-    std::vector<DescriptorSetLayout> setLayouts
+    std::vector<DescriptorSetLayout> setLayouts,
+    GraphicsPipeline other,
+    VkFormat colorFormat
 ) {
     // Dynamic Rendering Info
+    VkFormat format = colorFormat == VK_FORMAT_UNDEFINED ? *swapchain.getImageFormat() : colorFormat;
     VkPipelineRenderingCreateInfoKHR pipelineCreate{};
     pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
     pipelineCreate.colorAttachmentCount    = 1;
-    pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
+    pipelineCreate.pColorAttachmentFormats = &format;
 
     GraphicsPipeline pipeline;
     pipeline.init(
@@ -179,7 +186,8 @@ GraphicsPipeline VkSmol::initGraphicsPipeline(
         pipelineCreate,
         vertexInputInfo,
         shaders,
-        setLayouts
+        setLayouts,
+        other
     );
     return pipeline;
 }
@@ -260,7 +268,6 @@ void VkSmol::fillBuffer(Buffer buffer, void *data) {
     buffer.fill(device, data);
 }
 
-
 descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
     std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
 
@@ -279,6 +286,10 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, s
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
                     bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];
                     descriptorSetList[i].linkUniformBuffer(bufferLists[bufferList][i], bindings[bind_idx].binding);
+                } break;
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+                    bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];
+                    descriptorSetList[i].linkStorageBuffer(bufferLists[bufferList][i], bindings[bind_idx].binding);
                 } break;
                 case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
                     std::pair<ImageView, Sampler> pair = *(std::pair<ImageView, Sampler>*)descriptors[bind_idx];
@@ -458,7 +469,7 @@ void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
     graphicsQueue.submit(
         { uiCommandBuffers[currentFrame] },
         uiInFlightFences[currentFrame],
-        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT },
+        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT },
         { uiFinishedSemaphores[currentFrame][imageIndex] }
     );
 }
