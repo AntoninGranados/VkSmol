@@ -88,6 +88,20 @@ void Buffer::fill(LogicalDevice device, void* data) {
     }
 }
 
+void Buffer::read(LogicalDevice device, void* out, size_t bytes, size_t offset) {
+    if (offset + bytes > size)
+        throw std::runtime_error("Buffer read out of range");
+
+    if (persistentMapping) {
+        memcpy(out, static_cast<char*>(bufferMapped) + offset, bytes);
+    } else {
+        void* mem;
+        vkMapMemory(device.get(), bufferMemory, offset, bytes, 0, &mem);
+        memcpy(out, mem, bytes);
+        vkUnmapMemory(device.get(), bufferMemory);
+    }
+}
+
 void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
     if (srcBuffer.getSize() != dstBuffer.getSize())
         throw std::runtime_error("Buffers don't have the same size");

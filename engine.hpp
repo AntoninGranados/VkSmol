@@ -127,7 +127,9 @@ public:
     Buffer getBuffer(bufferList_t bufferList);
 
     Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);
+    Buffer initReadbackBuffer(size_t size, bool persistentMapping = true);
     void fillBuffer(Buffer buffer, void *data);
+    void readBuffer(Buffer buffer, void *out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer &buffer);
 
     Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);

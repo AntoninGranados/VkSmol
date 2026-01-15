@@ -259,6 +259,13 @@ Buffer VkSmol::initBuffer(VkBufferUsageFlags usage, size_t size, void *data) {
     return buffer;
 }
 
+Buffer VkSmol::initReadbackBuffer(size_t size, bool persistentMapping) {
+    Buffer buffer;
+    buffer.init(device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
+    buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    return buffer;
+}
+
 void VkSmol::destroyBuffer(Buffer &buffer) {
     buffer.free(device);
     buffer.destroy(device);
@@ -266,6 +273,10 @@ void VkSmol::destroyBuffer(Buffer &buffer) {
 
 void VkSmol::fillBuffer(Buffer buffer, void *data) {
     buffer.fill(device, data);
+}
+
+void VkSmol::readBuffer(Buffer buffer, void *out, size_t bytes, size_t offset) {
+    buffer.read(device, out, bytes, offset);
 }
 
 descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
@@ -514,7 +525,6 @@ void VkSmol::barrier(
         srcStageMask, dstStageMask
     );
 }
-
 
 void VkSmol::waitIdle() {
     device.waitIdle();

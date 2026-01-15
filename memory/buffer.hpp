@@ -33,6 +33,7 @@ public:
     size_t getSize() { return size; };
     
     void fill(LogicalDevice device, void* data);
+    void read(LogicalDevice device, void* out, size_t bytes, size_t offset = 0);
     static void copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
 
     // TODO: make a static version to bind multiple buffer
@@ -50,4 +51,3 @@ private:
 
     void* bufferMapped;
 };
-

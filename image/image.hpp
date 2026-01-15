@@ -31,11 +31,14 @@ public:
         LogicalDevice device, CommandBuffer commandBuffer,
         Buffer buffer
     );
+    void copyToBuffer(CommandBuffer commandBuffer, Buffer buffer);
     void free(LogicalDevice device);
     void destroy(LogicalDevice device);
 
     VkImage get() { return image; }
     VkFormat getFormat() { return format; }
+    int getWidth() { return width; }
+    int getHeight() { return height; }
 
 private:
     VkImage image;

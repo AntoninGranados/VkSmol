@@ -51,7 +51,7 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
     createInfo.imageExtent = extent;
     createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;    // If we want to do post processing, we should use `VK_IMAGE_USAGE_TRANSFER_DST_BIT`
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
     // In the case where the two families are different
