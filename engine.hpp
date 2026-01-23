@@ -123,6 +123,7 @@ public:
     DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
+    bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
     void destroyBufferList(bufferList_t bufferList);
     Buffer getBuffer(bufferList_t bufferList);
 

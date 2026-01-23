@@ -26,8 +26,10 @@ void LogicalDevice::init(
         queueCreateInfos.emplace_back(queueCreateInfo);
     }
 
+    //! When adding a feature, don't forget to add it to the `scoreDevice` function
     VkPhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = VK_TRUE;
+    deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
     dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;

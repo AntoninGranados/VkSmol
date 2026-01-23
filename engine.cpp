@@ -1,5 +1,7 @@
 #include "engine.hpp"
 
+#include <unordered_set>
+
 // TODO: get this values from the application (and pass them in the engine.init)
 const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
@@ -230,10 +232,26 @@ bufferList_t VkSmol::initBufferList(VkBufferUsageFlags usage, size_t size) {
     return bufferLists.size()-1;
 }
 
+bufferList_t VkSmol::initSharedBufferList(VkBufferUsageFlags usage, size_t size) {
+    Buffer sharedBuffer;
+    sharedBuffer.init(device, usage, size, true);
+    sharedBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    std::vector<Buffer> bufferList;
+    bufferList.resize(MAX_FRAME_IN_FLIGHT, sharedBuffer);
+    bufferLists.push_back(bufferList);
+    return bufferLists.size()-1;
+}
+
 void VkSmol::destroyBufferList(bufferList_t bufferList) {
+    std::unordered_set<VkBuffer> freed;
     for (Buffer &buffer : bufferLists[bufferList]) {
+        VkBuffer handle = buffer.get();
+        if (freed.find(handle) != freed.end())
+            continue;
         buffer.free(device);
         buffer.destroy(device);
+        freed.insert(handle);
     }
 }
 
@@ -408,6 +426,9 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device.get(), &supportedFeatures);
     if (!supportedFeatures.samplerAnisotropy)
+        return 0;
+
+    if (!supportedFeatures.fragmentStoresAndAtomics)
         return 0;
 
     // Check swap chain support
