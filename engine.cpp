@@ -441,8 +441,6 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
 
 
 void VkSmol::beginFrame() {
-    glfwPollEvents();
-
     Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
 
     uint32_t result;
