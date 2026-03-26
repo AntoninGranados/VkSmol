@@ -139,7 +139,7 @@ void VkSmol::initImgui() {
     // style.Colors[ImGuiCol_ChildBg]        = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    ImGui_ImplGlfw_InitForVulkan(window.get(), false);
+    ImGui_ImplGlfw_InitForVulkan(window.get(), true);
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();
@@ -449,6 +449,7 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
 }
 
 void VkSmol::recreateSwapchain() {
+    window.pauseWhileMinimized();
     swapchain.recreate(device, physicalDevice, surface, window);
     swapchainGeneration++;
     framebufferResized = false;
@@ -483,8 +484,6 @@ void VkSmol::endFrame() {
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
-
-    window.pauseWhileMinimized();
 }
 
 CommandBuffer VkSmol::beginRecordingRender() {
