@@ -25,10 +25,12 @@
 #include "./swapchain.hpp"
 #include "./dynamic_renderer.hpp"
 
-#include "./shader.hpp"
 #include "./descriptor/descriptor_set_layout.hpp"
 #include "./descriptor/descriptor_pool.hpp"
 #include "./descriptor/descriptor_set.hpp"
+#include "./descriptor/descriptor_set_allocation.hpp"
+
+#include "./shader.hpp"
 #include "./pipeline/graphics_pipeline.hpp"
 
 #include "./command/command_pool.hpp"
@@ -49,7 +51,6 @@
 // TODO: use more assert
 
 typedef size_t bufferList_t;
-typedef size_t descriptorSetList_t;
 
 class VkSmol {
 /*
@@ -109,9 +110,8 @@ public:
     void initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
 
-    descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors);
-    DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
-    void destroyDescriptorSetList(descriptorSetList_t &descriptorSetList);
+    DescriptorSetAllocation createDescriptorSetAllocation(DescriptorSetLayout &layout, std::vector<void*> descriptors);
+    void destroyDescriptorSetAllocation(DescriptorSetAllocation &allocation);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
     bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
@@ -169,9 +169,7 @@ private:
     DynamicRenderer dynamicRenderer;
     
     DescriptorPool uiDescriptorPool;
-    std::vector<DescriptorPool> descriptorPools;
     std::vector<std::vector<Buffer> > bufferLists;
-    std::vector<std::vector<DescriptorSet> > descriptorSetLists;
 
     CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
     std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;

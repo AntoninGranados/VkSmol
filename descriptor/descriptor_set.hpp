@@ -11,10 +11,11 @@ class ImageView;
 class Sampler;
 class DescriptorSetLayout;
 class DescriptorPool;
+class DescriptorSetAllocation;
 
 class DescriptorSet {
 public:
-    void alloc(LogicalDevice device, DescriptorPool descriptorPool, DescriptorSetLayout descriptorSetLayout);
+    void alloc(LogicalDevice device, const DescriptorPool &descriptorPool, const DescriptorSetLayout &descriptorSetLayout);
     // TODO: FIX IT
     // static void alloc(
     //     std::vector<DescriptorSet>& descriptorSets,
@@ -22,7 +23,8 @@ public:
     //     DescriptorPool descriptorPool,
     //     std::vector<DescriptorSetLayout> descriptorSetLayouts
     // );
-    // void free(LogicalDevice device);
+
+    static void free(LogicalDevice device, DescriptorSetAllocation &descriptorSetGroup);
     VkDescriptorSet get() { return descriptorSet; };
 
     void linkUniformBuffer(Buffer buffer, uint32_t binding);
@@ -32,7 +34,7 @@ public:
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 
 private:
-    VkDescriptorSet descriptorSet;
+    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
     
     std::vector<std::pair<VkDescriptorBufferInfo, uint32_t> > bufferInfos;
     std::vector<std::pair<VkDescriptorBufferInfo, uint32_t> > storageInfos;

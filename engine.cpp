@@ -304,7 +304,9 @@ void VkSmol::readBuffer(Buffer buffer, void *out, size_t bytes, size_t offset) {
     buffer.read(device, out, bytes, offset);
 }
 
-descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
+DescriptorSetAllocation VkSmol::createDescriptorSetAllocation(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
+    //! The lifetime of the descriptor set allocations need to be managed by the parent application
+    
     std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
 
     DescriptorPool descriptorPool;
@@ -339,17 +341,15 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, s
         descriptorSetList[i].update(device);
     }
     
-    descriptorPools.push_back(descriptorPool);
-    descriptorSetLists.push_back(descriptorSetList);
-    return descriptorSetLists.size()-1;
+    return DescriptorSetAllocation(std::move(descriptorPool), std::move(descriptorSetList));
 }
 
-DescriptorSet VkSmol::getDescriptorSet(descriptorSetList_t descriptorSetList) {
-    return descriptorSetLists[descriptorSetList][currentFrame];
-}
+// TODO: needs to store the available spots to refill them
+void VkSmol::destroyDescriptorSetAllocation(DescriptorSetAllocation &allocation) {
+    if (!allocation.isValide()) return;
 
-void VkSmol::destroyDescriptorSetList(descriptorSetList_t &descriptorSetList) {
-
+    allocation.destroy(device);
+    allocation = DescriptorSetAllocation{};
 }
 
 
@@ -565,8 +565,6 @@ void VkSmol::terminate() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     
-    for(DescriptorPool &descriptorPool : descriptorPools)
-        descriptorPool.destroy(device);
     uiDescriptorPool.destroy(device);
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {

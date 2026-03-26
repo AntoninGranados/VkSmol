@@ -2,6 +2,8 @@
 
 #include "./descriptor_set_layout.hpp"
 #include "./descriptor_pool.hpp"
+#include "./descriptor_set_allocation.hpp"
+
 #include "../logical_device.hpp"
 #include "../memory/buffer.hpp"
 #include "../command/command_buffer.hpp"
@@ -9,7 +11,7 @@
 #include "../image/sampler.hpp"
 #include "../utils.hpp"
 
-void DescriptorSet::alloc(LogicalDevice device, DescriptorPool descriptorPool, DescriptorSetLayout descriptorSetLayout) {
+void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool &descriptorPool, const DescriptorSetLayout &descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -43,6 +45,25 @@ void DescriptorSet::alloc(LogicalDevice device, DescriptorPool descriptorPool, D
 
 //     vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, vkDescriptorSets.data()), "Failed to allocate descriptor sets");
 // }
+
+
+void DescriptorSet::free(LogicalDevice device, DescriptorSetAllocation &allocation) {
+    if (allocation.pool.get() == VK_NULL_HANDLE || allocation.sets.empty()) return;
+
+    std::vector<VkDescriptorSet> sets(static_cast<size_t>(allocation.sets.size()));
+    for (size_t i = 0; i < allocation.sets.size(); i++) {
+        sets[i] = allocation.sets[i].get();
+    }
+
+    vkFreeDescriptorSets(
+        device.get(),
+        allocation.pool.get(),
+        sets.size(),
+        sets.data()
+    );
+
+    allocation.sets.clear();
+}
 
 void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     VkDescriptorBufferInfo bufferInfo{};

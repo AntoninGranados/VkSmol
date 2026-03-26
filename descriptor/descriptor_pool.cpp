@@ -3,6 +3,28 @@
 #include "../logical_device.hpp"
 #include "../utils.hpp"
 
+
+DescriptorPool::DescriptorPool(DescriptorPool&& other) noexcept
+    : descriptorPool(other.descriptorPool),
+    poolSizes(std::move(other.poolSizes)),
+    maxSize(other.maxSize) {
+    other.descriptorPool = VK_NULL_HANDLE;
+    other.maxSize = 0;
+}
+
+DescriptorPool& DescriptorPool::operator=(DescriptorPool&& other) noexcept {
+    if (this == &other) return *this;
+
+    descriptorPool = other.descriptorPool;
+    poolSizes = std::move(other.poolSizes);
+    maxSize = other.maxSize;
+
+    other.descriptorPool = VK_NULL_HANDLE;
+    other.maxSize = 0;
+
+    return *this;
+}
+
 // TODO: maybe use a DescriptorSetLayout to construct the pool sizes
 void DescriptorPool::init(LogicalDevice device) {
     VkDescriptorPoolCreateInfo createInfo{};
@@ -19,6 +41,7 @@ void DescriptorPool::destroy(LogicalDevice device) {
     poolSizes.clear();
     maxSize = 0;
     vkDestroyDescriptorPool(device.get(), descriptorPool, nullptr);
+    descriptorPool = VK_NULL_HANDLE;
 }
 
 
