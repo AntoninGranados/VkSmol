@@ -1,6 +1,6 @@
-#include "commandPool.hpp"
+#include "command_pool.hpp"
 
-#include "../logicalDevice.hpp"
+#include "../logical_device.hpp"
 #include "../queue.hpp"
 #include "../utils.hpp"
 

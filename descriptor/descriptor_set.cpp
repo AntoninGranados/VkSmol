@@ -1,11 +1,11 @@
-#include "descriptorSet.hpp"
+#include "descriptor_set.hpp"
 
-#include "./descriptorSetLayout.hpp"
-#include "./descriptorPool.hpp"
-#include "../logicalDevice.hpp"
+#include "./descriptor_set_layout.hpp"
+#include "./descriptor_pool.hpp"
+#include "../logical_device.hpp"
 #include "../memory/buffer.hpp"
-#include "../command/commandBuffer.hpp"
-#include "../image/imageView.hpp"
+#include "../command/command_buffer.hpp"
+#include "../image/image_view.hpp"
 #include "../image/sampler.hpp"
 #include "../utils.hpp"
 
@@ -21,28 +21,28 @@ void DescriptorSet::alloc(LogicalDevice device, DescriptorPool descriptorPool, D
     vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, &descriptorSet), "Failed to allocate descriptor set");
 }
 
-void DescriptorSet::alloc(
-    std::vector<DescriptorSet>& descriptorSets,
-    LogicalDevice device,
-    DescriptorPool descriptorPool,
-    std::vector<DescriptorSetLayout> descriptorSetLayouts
-) {
-    std::vector<VkDescriptorSet> vkDescriptorSets;
-    for (DescriptorSet& descriptorSet : descriptorSets)
-        vkDescriptorSets.emplace_back(descriptorSet.get());
+// void DescriptorSet::alloc(
+//     std::vector<DescriptorSet>& descriptorSets,
+//     LogicalDevice device,
+//     DescriptorPool descriptorPool,
+//     std::vector<DescriptorSetLayout> descriptorSetLayouts
+// ) {
+//     std::vector<VkDescriptorSet> vkDescriptorSets;
+//     for (DescriptorSet& descriptorSet : descriptorSets)
+//         vkDescriptorSets.emplace_back(descriptorSet.get());
     
-        std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts;
-    for (DescriptorSetLayout& descriptorSetLayout : descriptorSetLayouts)
-        vkDescriptorSetLayouts.emplace_back(descriptorSetLayout.get());
+//         std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts;
+//     for (DescriptorSetLayout& descriptorSetLayout : descriptorSetLayouts)
+//         vkDescriptorSetLayouts.emplace_back(descriptorSetLayout.get());
 
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool.get();
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(vkDescriptorSetLayouts.size());
-    allocInfo.pSetLayouts = vkDescriptorSetLayouts.data();
+//     VkDescriptorSetAllocateInfo allocInfo{};
+//     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+//     allocInfo.descriptorPool = descriptorPool.get();
+//     allocInfo.descriptorSetCount = static_cast<uint32_t>(vkDescriptorSetLayouts.size());
+//     allocInfo.pSetLayouts = vkDescriptorSetLayouts.data();
 
-    vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, vkDescriptorSets.data()), "Failed to allocate descriptor sets");
-}
+//     vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, vkDescriptorSets.data()), "Failed to allocate descriptor sets");
+// }
 
 void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     VkDescriptorBufferInfo bufferInfo{};

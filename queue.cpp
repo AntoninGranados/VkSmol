@@ -1,10 +1,10 @@
 #include "queue.hpp"
 
 #include "./surface.hpp"
-#include "./physicalDevice.hpp"
-#include "./logicalDevice.hpp"
+#include "./physical_device.hpp"
+#include "./logical_device.hpp"
 #include "./swapchain.hpp"
-#include "./command/commandBuffer.hpp"
+#include "./command/command_buffer.hpp"
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
 #include "./utils.hpp"

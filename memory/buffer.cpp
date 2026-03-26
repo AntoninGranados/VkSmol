@@ -1,9 +1,9 @@
 #include "buffer.hpp"
 
-#include "../physicalDevice.hpp"
-#include "../logicalDevice.hpp"
-#include "../command/commandPool.hpp"
-#include "../command/commandBuffer.hpp"
+#include "../physical_device.hpp"
+#include "../logical_device.hpp"
+#include "../command/command_pool.hpp"
+#include "../command/command_buffer.hpp"
 #include "../queue.hpp"
 #include "../utils.hpp"
 

@@ -1,8 +1,8 @@
-#include "graphicsPipeline.hpp"
+#include "graphics_pipeline.hpp"
 
-#include "../command/commandBuffer.hpp"
-#include "../descriptor/descriptorSetLayout.hpp"
-#include "../logicalDevice.hpp"
+#include "../command/command_buffer.hpp"
+#include "../descriptor/descriptor_set_layout.hpp"
+#include "../logical_device.hpp"
 #include "../shader.hpp"
 #include "../utils.hpp"
 

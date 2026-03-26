@@ -1,7 +1,7 @@
-#include "commandBuffer.hpp"
+#include "command_buffer.hpp"
 
-#include "./commandPool.hpp"
-#include "../logicalDevice.hpp"
+#include "./command_pool.hpp"
+#include "../logical_device.hpp"
 #include "../queue.hpp"
 #include "../utils.hpp"
 

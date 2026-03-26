@@ -1,7 +1,7 @@
 #include "sampler.hpp"
 
-#include "../logicalDevice.hpp"
-#include "../physicalDevice.hpp"
+#include "../logical_device.hpp"
+#include "../physical_device.hpp"
 #include "../utils.hpp"
 
 void Sampler::init(LogicalDevice device, PhysicalDevice physicalDevice) {

@@ -2,8 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
-#include <set>
-#include <vector>
+#include <cstdio>
+#include <stdexcept>
 
 // TODO: use Smol/SMOL_ or something similar to start the defines and the functions
 

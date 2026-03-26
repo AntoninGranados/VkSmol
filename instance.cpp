@@ -1,6 +1,6 @@
 #include "instance.hpp"
 
-#include "./debugMessenger.hpp"
+#include "./debug_messenger.hpp"
 #include "./utils.hpp"
 
 void Instance::init(

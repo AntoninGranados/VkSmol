@@ -1,6 +1,6 @@
 #include "shader.hpp"
 
-#include "./logicalDevice.hpp"
+#include "./logical_device.hpp"
 #include "./utils.hpp"
 
 void Shader::init(LogicalDevice device, VkShaderStageFlagBits stage_, std::string filepath) {

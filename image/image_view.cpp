@@ -1,7 +1,7 @@
-#include "imageView.hpp"
+#include "image_view.hpp"
 
 #include "image.hpp"
-#include "../logicalDevice.hpp"
+#include "../logical_device.hpp"
 #include "../utils.hpp"
 
 void ImageView::init(LogicalDevice device, Image image) {

@@ -1,6 +1,6 @@
-#include "imageBarrier.hpp"
+#include "image_barrier.hpp"
 
-#include "../command/commandBuffer.hpp"
+#include "../command/command_buffer.hpp"
 
 void ImageBarrier::call(
     CommandBuffer commandBuffer,

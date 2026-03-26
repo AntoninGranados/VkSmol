@@ -1,6 +1,6 @@
-#include "descriptorSetLayout.hpp"
+#include "descriptor_set_layout.hpp"
 
-#include "../logicalDevice.hpp"
+#include "../logical_device.hpp"
 #include "../utils.hpp"
 
 void DescriptorSetLayout::init(LogicalDevice device) {

@@ -3,12 +3,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
 
-#include "imageBarrier.hpp"
-#include "../logicalDevice.hpp"
-#include "../physicalDevice.hpp"
+#include "image_barrier.hpp"
+#include "../logical_device.hpp"
+#include "../physical_device.hpp"
 #include "../queue.hpp"
-#include "../command/commandBuffer.hpp"
-#include "../command/commandPool.hpp"
+#include "../command/command_buffer.hpp"
+#include "../command/command_pool.hpp"
 #include "../memory/buffer.hpp"
 #include "../utils.hpp"
 

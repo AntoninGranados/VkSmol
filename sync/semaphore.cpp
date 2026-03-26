@@ -1,6 +1,6 @@
 #include "semaphore.hpp"
 
-#include "../logicalDevice.hpp"
+#include "../logical_device.hpp"
 #include "../utils.hpp"
 
 void Semaphore::init(LogicalDevice device) {

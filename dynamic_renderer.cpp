@@ -1,8 +1,8 @@
-#include "dynamicRenderer.hpp"
+#include "dynamic_renderer.hpp"
 
-#include "./command/commandBuffer.hpp"
+#include "./command/command_buffer.hpp"
 #include "./swapchain.hpp"
-#include "./logicalDevice.hpp"
+#include "./logical_device.hpp"
 
 void DynamicRenderer::init(LogicalDevice device) {
     vkCmdBeginRenderingKHR = (PFN_vkCmdBeginRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdBeginRenderingKHR");

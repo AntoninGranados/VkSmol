@@ -1,7 +1,7 @@
-#include "logicalDevice.hpp"
+#include "logical_device.hpp"
 
 #include "./queue.hpp"
-#include "./physicalDevice.hpp"
+#include "./physical_device.hpp"
 #include "./utils.hpp"
 
 void LogicalDevice::init(

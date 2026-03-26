@@ -1,6 +1,6 @@
-#include "descriptorPool.hpp"
+#include "descriptor_pool.hpp"
 
-#include "../logicalDevice.hpp"
+#include "../logical_device.hpp"
 #include "../utils.hpp"
 
 // TODO: maybe use a DescriptorSetLayout to construct the pool sizes

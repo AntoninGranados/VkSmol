@@ -16,12 +16,12 @@ class DescriptorSet {
 public:
     void alloc(LogicalDevice device, DescriptorPool descriptorPool, DescriptorSetLayout descriptorSetLayout);
     // TODO: FIX IT
-    static void alloc(
-        std::vector<DescriptorSet>& descriptorSets,
-        LogicalDevice device,
-        DescriptorPool descriptorPool,
-        std::vector<DescriptorSetLayout> descriptorSetLayouts
-    );
+    // static void alloc(
+    //     std::vector<DescriptorSet>& descriptorSets,
+    //     LogicalDevice device,
+    //     DescriptorPool descriptorPool,
+    //     std::vector<DescriptorSetLayout> descriptorSetLayouts
+    // );
     // void free(LogicalDevice device);
     VkDescriptorSet get() { return descriptorSet; };
 

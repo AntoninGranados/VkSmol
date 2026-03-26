@@ -1,8 +1,8 @@
 #include "swapchain.hpp"
 
 #include "./window.hpp"
-#include "./physicalDevice.hpp"
-#include "./logicalDevice.hpp"
+#include "./physical_device.hpp"
+#include "./logical_device.hpp"
 #include "./queue.hpp"
 #include "./surface.hpp"
 #include "./sync/semaphore.hpp"

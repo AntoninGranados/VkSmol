@@ -1,8 +1,14 @@
 #include "engine.hpp"
 
+#include "./utils.hpp"
+
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_vulkan.h"
+
 #include <unordered_set>
 
-// TODO: get this values from the application (and pass them in the engine.init)
+// TODO: get this values from the application (and pass them in the engine.init function)
 const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
 
@@ -340,6 +346,10 @@ descriptorSetList_t VkSmol::initDescriptorSetList(DescriptorSetLayout &layout, s
 
 DescriptorSet VkSmol::getDescriptorSet(descriptorSetList_t descriptorSetList) {
     return descriptorSetLists[descriptorSetList][currentFrame];
+}
+
+void VkSmol::destroyDescriptorSetList(descriptorSetList_t &descriptorSetList) {
+
 }
 
 

@@ -2,10 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_vulkan.h"
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -14,33 +10,29 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <chrono>
 #include <string>
-#include <iostream>
-#include <utility>
 
 #include "./window.hpp"
 
 #include "./instance.hpp"
-#include "./debugMessenger.hpp"
+#include "./debug_messenger.hpp"
 #include "./surface.hpp"
 
-#include "./physicalDevice.hpp"
-#include "./logicalDevice.hpp"
+#include "./physical_device.hpp"
+#include "./logical_device.hpp"
 #include "./queue.hpp"
 
 #include "./swapchain.hpp"
-#include "./dynamicRenderer.hpp"
+#include "./dynamic_renderer.hpp"
 
 #include "./shader.hpp"
-#include "./descriptor/descriptorSetLayout.hpp"
-#include "./descriptor/descriptorPool.hpp"
-#include "./descriptor/descriptorSet.hpp"
-#include "./pipeline/graphicsPipeline.hpp"
-#include "./pipeline/vertexInput.hpp"
+#include "./descriptor/descriptor_set_layout.hpp"
+#include "./descriptor/descriptor_pool.hpp"
+#include "./descriptor/descriptor_set.hpp"
+#include "./pipeline/graphics_pipeline.hpp"
 
-#include "./command/commandPool.hpp"
-#include "./command/commandBuffer.hpp"
+#include "./command/command_pool.hpp"
+#include "./command/command_buffer.hpp"
 
 #include "./memory/buffer.hpp"
 
@@ -48,11 +40,9 @@
 #include "./sync/fence.hpp"
 
 #include "./image/image.hpp"
-#include "./image/imageView.hpp"
+#include "./image/image_view.hpp"
 #include "./image/sampler.hpp"
-#include "./image/imageBarrier.hpp"
-
-#include "./utils.hpp"
+#include "./image/image_barrier.hpp"
 
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
@@ -121,6 +111,7 @@ public:
 
     descriptorSetList_t initDescriptorSetList(DescriptorSetLayout &layout, std::vector<void*> descriptors);
     DescriptorSet getDescriptorSet(descriptorSetList_t descriptorSetList);
+    void destroyDescriptorSetList(descriptorSetList_t &descriptorSetList);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
     bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
