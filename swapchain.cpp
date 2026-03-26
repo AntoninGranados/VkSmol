@@ -87,9 +87,7 @@ void Swapchain::destroy(LogicalDevice device) {
 // TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
 void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window) {
     device.waitIdle();
-
     destroy(device);
-
     init(device, physicalDevice, surface, window);
 }
 

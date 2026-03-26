@@ -46,6 +46,8 @@
 #include "./image/sampler.hpp"
 #include "./image/image_barrier.hpp"
 
+#include "./frame_context.hpp"
+
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 // TODO: use more assert
@@ -81,7 +83,7 @@ class VkSmol {
 public:
     void init(std::string appName, uint32_t appVersion);
 
-    void beginFrame();
+    std::optional<FrameContext> beginFrame();
     void endFrame();
 
     CommandBuffer beginRecordingRender();
@@ -149,7 +151,8 @@ public:
         VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
     );
     
-    Window getWindow() { return window; }
+    Window& getWindow() { return window; }
+    const Window& getWindow() const { return window; }
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 
@@ -166,6 +169,7 @@ private:
     Queue graphicsQueue, presentQueue, transferQueue;
 
     Swapchain swapchain;
+    uint64_t swapchainGeneration = 0;
     DynamicRenderer dynamicRenderer;
     
     DescriptorPool uiDescriptorPool;
@@ -183,7 +187,8 @@ private:
 
     void initImgui();
 
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+    void recreateSwapchain();
+    
     std::vector<const char*> getRequiredExtensions();
     int scoreDevice(PhysicalDevice device);
 };

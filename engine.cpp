@@ -47,7 +47,11 @@ bool VkSmol::shouldTerminate() {
 void VkSmol::init(std::string appName, uint32_t appVersion) {
     glfwInit();
 
-    window.init(WIDTH, HEIGHT, appName.c_str(), framebufferResizeCallback);
+    window.setFrameBufferResizeCallback([this](int, int){
+        framebufferResized = true;
+    });
+
+    window.init(WIDTH, HEIGHT, appName.c_str());
 
     // VkSmol informations
     VkApplicationInfo appInfo{};
@@ -135,7 +139,7 @@ void VkSmol::initImgui() {
     // style.Colors[ImGuiCol_ChildBg]        = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    ImGui_ImplGlfw_InitForVulkan(window.get(), true);
+    ImGui_ImplGlfw_InitForVulkan(window.get(), false);
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();
@@ -393,12 +397,6 @@ void VkSmol::destroySampler(Sampler &sampler) {
 }
 
 
-
-void VkSmol::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    VkSmol* pApp = reinterpret_cast<VkSmol*>(glfwGetWindowUserPointer(window));
-    pApp->framebufferResized = true;
-}
-
 std::vector<const char*> VkSmol::getRequiredExtensions() {
     // Extensions needed by GLFW
     uint32_t glfwExtensionCount = 0;
@@ -450,26 +448,38 @@ int VkSmol::scoreDevice(PhysicalDevice device) {
     return 1;
 }
 
+void VkSmol::recreateSwapchain() {
+    swapchain.recreate(device, physicalDevice, surface, window);
+    swapchainGeneration++;
+    framebufferResized = false;
+}
 
-void VkSmol::beginFrame() {
+
+std::optional<FrameContext> VkSmol::beginFrame() {
     Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
 
     uint32_t result;
     result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
     if (result == RECREATE_SWAPCHAIN) {
-        swapchain.recreate(device, physicalDevice, surface, window);
-        return;
+        recreateSwapchain();
+        return {};
     }
 
     Fence::reset({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
     imageIndex = result;
+
+    return FrameContext{
+        .extent = getExtent(),
+        .currentFrame = currentFrame,
+        .imageIndex = imageIndex,
+        .swapchainGeneration = swapchainGeneration,
+    };
 }
 
 void VkSmol::endFrame() {
     uint32_t result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
     if (result == RECREATE_SWAPCHAIN || framebufferResized) {
-        framebufferResized = false;
-        swapchain.recreate(device, physicalDevice, surface, window);
+        recreateSwapchain();
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
