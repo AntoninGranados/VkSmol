@@ -37,6 +37,7 @@
 #include "./command/command_buffer.hpp"
 
 #include "./memory/buffer.hpp"
+#include "./memory/per_frame_buffer.hpp"
 
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
@@ -118,13 +119,18 @@ public:
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
     bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
     void destroyBufferList(bufferList_t bufferList);
-    Buffer getBuffer(bufferList_t bufferList);
+    Buffer& getBuffer(bufferList_t bufferList);
 
     Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);
     Buffer initReadbackBuffer(size_t size, bool persistentMapping = true);
-    void fillBuffer(Buffer buffer, void *data);
-    void readBuffer(Buffer buffer, void *out, size_t bytes, size_t offset = 0);
+    void fillBuffer(Buffer& buffer, void *data);
+    void readBuffer(Buffer& buffer, void *out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer &buffer);
+    
+    template<typename T>
+    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage) { return PerFrameBuffer<T>::create(device, physicalDevice, usage); }
+    template<typename T>
+    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) { buffer.destroy(device); }
 
     Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
     Image initImageFromPath(std::string path);

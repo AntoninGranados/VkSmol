@@ -23,6 +23,6 @@ public:
         pool(std::move(pool_)), sets(std::move(sets_)) {};
 
     void destroy(LogicalDevice device);
-    DescriptorSet &get (uint32_t frameIndex);
+    DescriptorSet &current (uint32_t frameIndex);
     bool isValide() const { return pool.get() != VK_NULL_HANDLE; }
 };

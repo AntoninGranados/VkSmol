@@ -12,8 +12,6 @@
 const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
 
-const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
-
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -266,7 +264,7 @@ void VkSmol::destroyBufferList(bufferList_t bufferList) {
     }
 }
 
-Buffer VkSmol::getBuffer(bufferList_t bufferList) {
+Buffer& VkSmol::getBuffer(bufferList_t bufferList) {
     return bufferLists[bufferList][currentFrame];
 }
 
@@ -295,18 +293,19 @@ Buffer VkSmol::initReadbackBuffer(size_t size, bool persistentMapping) {
     return buffer;
 }
 
-void VkSmol::destroyBuffer(Buffer &buffer) {
+void VkSmol::destroyBuffer(Buffer& buffer) {
     buffer.free(device);
     buffer.destroy(device);
 }
 
-void VkSmol::fillBuffer(Buffer buffer, void *data) {
+void VkSmol::fillBuffer(Buffer& buffer, void *data) {
     buffer.fill(device, data);
 }
 
-void VkSmol::readBuffer(Buffer buffer, void *out, size_t bytes, size_t offset) {
+void VkSmol::readBuffer(Buffer& buffer, void *out, size_t bytes, size_t offset) {
     buffer.read(device, out, bytes, offset);
 }
+
 
 DescriptorSetAllocation VkSmol::createDescriptorSetAllocation(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
     //! The lifetime of the descriptor set allocations need to be managed by the parent application
@@ -326,8 +325,8 @@ DescriptorSetAllocation VkSmol::createDescriptorSetAllocation(DescriptorSetLayou
         for (size_t bind_idx = 0; bind_idx < bindings.size(); bind_idx++) {
             switch (bindings[bind_idx].descriptorType) {
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
-                    bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];
-                    descriptorSetList[i].linkUniformBuffer(bufferLists[bufferList][i], bindings[bind_idx].binding);
+                    PerFrameBufferBase *buffer = static_cast<PerFrameBufferBase*>(descriptors[bind_idx]);
+                    descriptorSetList[i].linkUniformBuffer(buffer->at(i), bindings[bind_idx].binding);
                 } break;
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
                     bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];

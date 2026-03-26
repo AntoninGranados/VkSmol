@@ -67,9 +67,9 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
 
 
 void Buffer::free(LogicalDevice device) {
-    if (persistentMapping)
-    vkUnmapMemory(device.get(), bufferMemory);
-    
+    if (persistentMapping) {
+        vkUnmapMemory(device.get(), bufferMemory);
+    }
     vkFreeMemory(device.get(), bufferMemory, nullptr);
 }
 

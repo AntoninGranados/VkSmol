@@ -7,6 +7,8 @@
 
 // TODO: use Smol/SMOL_ or something similar to start the defines and the functions
 
+const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
+
 #define RECREATE_SWAPCHAIN ~(0u)
 
 // Message formating
