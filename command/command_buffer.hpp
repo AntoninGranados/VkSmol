@@ -20,7 +20,7 @@ public:
     void reset();
 
     static CommandBuffer beginSingleTimeCommands(LogicalDevice device, CommandPool pool);
-    static void endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer &commandBuffer);
+    static void endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer& commandBuffer);
 
 private:
     VkCommandBuffer commandBuffer;

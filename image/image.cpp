@@ -12,6 +12,7 @@
 #include "../memory/buffer.hpp"
 #include "../utils.hpp"
 
+// Public
 void Image::init(
     LogicalDevice device,
     uint32_t width_, uint32_t height_,
@@ -47,7 +48,7 @@ void Image::initFromPath(
     std::string path
 ) {
     int width, height, channels;
-    stbi_uc *data = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
     VkDeviceSize imageSize = width * height * 4;
 
     if (!data)
@@ -93,6 +94,23 @@ void Image::initFromPath(
 
     stagingBuffer.free(device);
     stagingBuffer.destroy(device);
+}
+
+void Image::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(device.get(), image, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = Buffer::findMemoryType(
+        physicalDevice,
+        memRequirements.memoryTypeBits,
+        properties
+    );
+
+    vkCheck(vkAllocateMemory(device.get(), &allocInfo, nullptr, &imageMemory), "Failed to allocate image memory");
+    vkCheck(vkBindImageMemory(device.get(), image, imageMemory, 0), "Failed to bind image memory");
 }
 
 void Image::fillFromBuffer(
@@ -144,23 +162,6 @@ void Image::copyToBuffer(CommandBuffer commandBuffer, Buffer buffer) {
         1,
         &region
     );
-}
-
-void Image::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device.get(), image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = Buffer::findMemoryType(
-        physicalDevice,
-        memRequirements.memoryTypeBits,
-        properties
-    );
-
-    vkCheck(vkAllocateMemory(device.get(), &allocInfo, nullptr, &imageMemory), "Failed to allocate image memory");
-    vkCheck(vkBindImageMemory(device.get(), image, imageMemory, 0), "Failed to bind image memory");
 }
 
 void Image::free(LogicalDevice device) {

@@ -11,7 +11,7 @@
 #include "../image/sampler.hpp"
 #include "../utils.hpp"
 
-void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool &descriptorPool, const DescriptorSetLayout &descriptorSetLayout) {
+void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -47,7 +47,7 @@ void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool &descriptor
 // }
 
 
-void DescriptorSet::free(LogicalDevice device, DescriptorSetGroup &allocation) {
+void DescriptorSet::free(LogicalDevice device, DescriptorSetGroup& allocation) {
     if (allocation.pool.get() == VK_NULL_HANDLE || allocation.sets.empty()) return;
 
     std::vector<VkDescriptorSet> sets(static_cast<size_t>(allocation.sets.size()));
@@ -92,7 +92,7 @@ void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, ui
 void DescriptorSet::update(LogicalDevice device) {
     descriptorWrites.clear();
 
-    for (const std::pair<VkDescriptorBufferInfo, uint32_t> &pair : bufferInfos) {
+    for (const std::pair<VkDescriptorBufferInfo, uint32_t>& pair : bufferInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = descriptorSet;
@@ -104,7 +104,7 @@ void DescriptorSet::update(LogicalDevice device) {
 
             descriptorWrites.push_back(descriptorWrite);
     }
-    for (const std::pair<VkDescriptorBufferInfo, uint32_t> &pair : storageInfos) {
+    for (const std::pair<VkDescriptorBufferInfo, uint32_t>& pair : storageInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = descriptorSet;
@@ -116,7 +116,7 @@ void DescriptorSet::update(LogicalDevice device) {
 
             descriptorWrites.push_back(descriptorWrite);
     }
-    for (const std::pair<VkDescriptorImageInfo, uint32_t> &pair : imageInfos) {
+    for (const std::pair<VkDescriptorImageInfo, uint32_t>& pair : imageInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = descriptorSet;

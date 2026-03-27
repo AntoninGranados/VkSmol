@@ -7,6 +7,6 @@ void DescriptorSetGroup::destroy(LogicalDevice device) {
     pool.destroy(device);
 }
 
-DescriptorSet &DescriptorSetGroup::current(uint32_t frameIndex) {
+DescriptorSet& DescriptorSetGroup::current(uint32_t frameIndex) {
     return sets[frameIndex];
 }

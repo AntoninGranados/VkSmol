@@ -42,7 +42,7 @@ CommandBuffer CommandBuffer::beginSingleTimeCommands(LogicalDevice device, Comma
     return commandBuffer;
 }
 
-void CommandBuffer::endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer &commandBuffer) {
+void CommandBuffer::endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer& commandBuffer) {
     commandBuffer.endRecording();
 
     queue.submit({ commandBuffer });

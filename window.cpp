@@ -1,20 +1,6 @@
 #include "window.hpp"
 
-void Window::framebufferResizeBridge(GLFWwindow* glfwWindow, int width, int height) {
-    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
-    if (self && self->onFramebufferResize) self->onFramebufferResize(width, height);
-}
-
-void Window::cursorPosBridge(GLFWwindow* glfwWindow, double x, double y) {
-    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
-    if (self && self->onCursorPos) self->onCursorPos(x, y);
-}
-
-void Window::scrollBridge(GLFWwindow* glfwWindow, double xoffset, double yoffset) {
-    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
-    if (self && self->onScroll) self->onScroll(xoffset, yoffset);
-}
-
+// Public
 void Window::init(int width, int height, std::string name) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -43,4 +29,20 @@ void Window::pauseWhileMinimized() {
         glfwGetFramebufferSize(window, &width, &height);
         glfwWaitEvents();
     }
+}
+
+// Private helpers
+void Window::framebufferResizeBridge(GLFWwindow* glfwWindow, int width, int height) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
+    if (self && self->onFramebufferResize) self->onFramebufferResize(width, height);
+}
+
+void Window::cursorPosBridge(GLFWwindow* glfwWindow, double x, double y) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
+    if (self && self->onCursorPos) self->onCursorPos(x, y);
+}
+
+void Window::scrollBridge(GLFWwindow* glfwWindow, double xoffset, double yoffset) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
+    if (self && self->onScroll) self->onScroll(xoffset, yoffset);
 }

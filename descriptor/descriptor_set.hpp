@@ -15,7 +15,7 @@ class DescriptorSetGroup;
 
 class DescriptorSet {
 public:
-    void alloc(LogicalDevice device, const DescriptorPool &descriptorPool, const DescriptorSetLayout &descriptorSetLayout);
+    void alloc(LogicalDevice device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout);
     // TODO: FIX IT
     // static void alloc(
     //     std::vector<DescriptorSet>& descriptorSets,
@@ -24,7 +24,7 @@ public:
     //     std::vector<DescriptorSetLayout> descriptorSetLayouts
     // );
 
-    static void free(LogicalDevice device, DescriptorSetGroup &descriptorSetGroup);
+    static void free(LogicalDevice device, DescriptorSetGroup& descriptorSetGroup);
     VkDescriptorSet get() { return descriptorSet; };
 
     void linkUniformBuffer(Buffer buffer, uint32_t binding);

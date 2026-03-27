@@ -22,7 +22,7 @@ public:
         LogicalDevice device, PhysicalDevice physicalDevice,
         VkBufferUsageFlags usage,
         CommandPool transferCommandPool, Queue transferQueue,
-        size_t size, void *data
+        size_t size, void* data
     );
 
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);

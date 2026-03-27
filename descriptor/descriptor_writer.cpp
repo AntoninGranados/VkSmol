@@ -2,13 +2,7 @@
 
 #include <stdexcept>
 
-const VkDescriptorSetLayoutBinding* DescriptorWriter::findBinding(uint32_t binding) const {
-    for (const auto& b : layout->getBindings()) {
-        if (b.binding == binding) return &b;
-    }
-    throw std::runtime_error("Binding not found in descriptor layout");
-}
-
+// Public
 DescriptorWriter& DescriptorWriter::uniform(uint32_t binding, const Buffer& buffer) {
     if (bindingFilled[binding]) {
         throw std::runtime_error("Binding is already filled");
@@ -74,4 +68,12 @@ const std::vector<DescriptorWrite>& DescriptorWriter::getWrites() const {
         }
     }
     return writes;
+}
+
+// Private helpers
+const VkDescriptorSetLayoutBinding* DescriptorWriter::findBinding(uint32_t binding) const {
+    for (const auto& b : layout->getBindings()) {
+        if (b.binding == binding) return &b;
+    }
+    throw std::runtime_error("Binding not found in descriptor layout");
 }

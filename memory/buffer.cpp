@@ -29,7 +29,7 @@ void Buffer::initFilled(
         LogicalDevice device, PhysicalDevice physicalDevice,
         VkBufferUsageFlags usage,
         CommandPool transferCommandPool, Queue transferQueue,
-        size_t size, void *data
+        size_t size, void* data
 ) {
     Buffer stagingBuffer;
     stagingBuffer.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size);

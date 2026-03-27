@@ -106,13 +106,13 @@ public:
         GraphicsPipeline other = GraphicsPipeline(),
         VkFormat colorFormat = VK_FORMAT_UNDEFINED
     );
-    void destroyGraphicsPipeline(GraphicsPipeline &graphicsPipeline);
+    void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
 
     Shader initShader(VkShaderStageFlagBits stage_, std::string filepath);
-    void destroyShader(Shader &shader);
+    void destroyShader(Shader& shader);
 
-    void initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
-    void destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
+    void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
+    void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
 
     DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, DescriptorWriter& writer);
@@ -124,11 +124,11 @@ public:
     Buffer& getBuffer(bufferList_t bufferList, uint32_t frameIndex);
     Buffer& getBuffer(bufferList_t bufferList);
 
-    Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);
+    Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
     Buffer initReadbackBuffer(size_t size, bool persistentMapping = true);
-    void fillBuffer(Buffer& buffer, void *data);
-    void readBuffer(Buffer& buffer, void *out, size_t bytes, size_t offset = 0);
-    void destroyBuffer(Buffer &buffer);
+    void fillBuffer(Buffer& buffer, void* data);
+    void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
+    void destroyBuffer(Buffer& buffer);
     
     template<typename T>
     PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage) { return PerFrameBuffer<T>::create(device, physicalDevice, usage); }
@@ -137,12 +137,12 @@ public:
 
     Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
     Image initImageFromPath(std::string path);
-    void destroyImage(Image &image);
-    ImageView initImageView(Image &image);
-    void destroyImageView(ImageView &imageView);
+    void destroyImage(Image& image);
+    ImageView initImageView(Image& image);
+    void destroyImageView(ImageView& imageView);
 
     Sampler initSampler();
-    void destroySampler(Sampler &sampler);
+    void destroySampler(Sampler& sampler);
 
     void beginDynamicRenderer(
         CommandBuffer commandBuffer, 

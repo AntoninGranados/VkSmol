@@ -3,6 +3,7 @@
 #include "./logical_device.hpp"
 #include "./utils.hpp"
 
+// Public
 void Shader::init(LogicalDevice device, VkShaderStageFlagBits stage_, std::string filepath) {
     stage = stage_;
 
@@ -39,26 +40,6 @@ VkPipelineShaderStageCreateInfo Shader::getShaderStageCreateInfo(std::string ent
     shaderStageInfo.pName = entryPoint.c_str();
 
     return shaderStageInfo;
-}
-
-
-std::vector<char> Shader::read(std::string filepath) {
-    std::ifstream file(filepath.c_str(), std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        char buf[MAX_MSG_SIZE];
-        snprintf(buf, sizeof(buf), "Failed to open file [%s%s%s]", MSG_RED_B, filepath.c_str(), MSG_RESET);
-        throw std::runtime_error(buf);
-    }
-
-    size_t fileSize = (size_t)file.tellg(); // Get the size by reading the position from the end of the file
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);  // Return to the start of the file
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
 }
 
 std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, bool alwaysCompile) {
@@ -106,4 +87,24 @@ std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, b
     // std::cout << "output : " << compiledfilepath << std::endl;
 
     return compiledfilepath;
+}
+
+// Private helpers
+std::vector<char> Shader::read(std::string filepath) {
+    std::ifstream file(filepath.c_str(), std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        char buf[MAX_MSG_SIZE];
+        snprintf(buf, sizeof(buf), "Failed to open file [%s%s%s]", MSG_RED_B, filepath.c_str(), MSG_RESET);
+        throw std::runtime_error(buf);
+    }
+
+    size_t fileSize = static_cast<size_t>(file.tellg()); // Get the size by reading the position from the end of the file
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);  // Return to the start of the file
+    file.read(buffer.data(), fileSize);
+    file.close();
+
+    return buffer;
 }

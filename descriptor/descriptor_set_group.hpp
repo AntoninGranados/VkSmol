@@ -19,10 +19,10 @@ public:
     DescriptorSetGroup& operator=(DescriptorSetGroup&&) = default;
 
     DescriptorSetGroup() {};
-    DescriptorSetGroup(DescriptorPool &&pool_, std::vector<DescriptorSet> &&sets_):
+    DescriptorSetGroup(DescriptorPool&& pool_, std::vector<DescriptorSet>&& sets_):
         pool(std::move(pool_)), sets(std::move(sets_)) {};
 
     void destroy(LogicalDevice device);
-    DescriptorSet &current (uint32_t frameIndex);
+    DescriptorSet& current(uint32_t frameIndex);
     bool isValide() const { return pool.get() != VK_NULL_HANDLE; }
 };
