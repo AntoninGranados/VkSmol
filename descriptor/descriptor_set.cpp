@@ -2,7 +2,7 @@
 
 #include "./descriptor_set_layout.hpp"
 #include "./descriptor_pool.hpp"
-#include "./descriptor_set_allocation.hpp"
+#include "./descriptor_set_group.hpp"
 
 #include "../logical_device.hpp"
 #include "../memory/buffer.hpp"
@@ -47,7 +47,7 @@ void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool &descriptor
 // }
 
 
-void DescriptorSet::free(LogicalDevice device, DescriptorSetAllocation &allocation) {
+void DescriptorSet::free(LogicalDevice device, DescriptorSetGroup &allocation) {
     if (allocation.pool.get() == VK_NULL_HANDLE || allocation.sets.empty()) return;
 
     std::vector<VkDescriptorSet> sets(static_cast<size_t>(allocation.sets.size()));
@@ -134,4 +134,11 @@ void DescriptorSet::update(LogicalDevice device) {
 
 void DescriptorSet::bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {
     vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+}
+
+void DescriptorSet::clear() {
+    bufferInfos.clear();
+    storageInfos.clear();
+    imageInfos.clear();
+    descriptorWrites.clear();
 }

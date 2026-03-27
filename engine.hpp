@@ -28,7 +28,8 @@
 #include "./descriptor/descriptor_set_layout.hpp"
 #include "./descriptor/descriptor_pool.hpp"
 #include "./descriptor/descriptor_set.hpp"
-#include "./descriptor/descriptor_set_allocation.hpp"
+#include "./descriptor/descriptor_set_group.hpp"
+#include "./descriptor/descriptor_writer.hpp"
 
 #include "./shader.hpp"
 #include "./pipeline/graphics_pipeline.hpp"
@@ -113,12 +114,14 @@ public:
     void initDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout &descriptorSetLayout);
 
-    DescriptorSetAllocation createDescriptorSetAllocation(DescriptorSetLayout &layout, std::vector<void*> descriptors);
-    void destroyDescriptorSetAllocation(DescriptorSetAllocation &allocation);
+    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
+    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, DescriptorWriter& writer);
+    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
     bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
     void destroyBufferList(bufferList_t bufferList);
+    Buffer& getBuffer(bufferList_t bufferList, uint32_t frameIndex);
     Buffer& getBuffer(bufferList_t bufferList);
 
     Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void *data = nullptr);

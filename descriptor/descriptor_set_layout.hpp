@@ -12,7 +12,7 @@ public:
     void init(LogicalDevice device);
     void destroy(LogicalDevice device);
     VkDescriptorSetLayout get() const { return descritorSetLayout; };
-    std::vector<VkDescriptorSetLayoutBinding> getBindings() const { return bindings; };
+    const std::vector<VkDescriptorSetLayoutBinding>& getBindings() const { return bindings; };
 
     void addBinding(VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount = 1);
 

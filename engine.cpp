@@ -1,12 +1,13 @@
 #include "engine.hpp"
 
+#include <vector>
+#include <unordered_set>
+
 #include "./utils.hpp"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
-
-#include <unordered_set>
 
 // TODO: get this values from the application (and pass them in the engine.init function)
 const uint32_t WIDTH = 1280;
@@ -264,8 +265,12 @@ void VkSmol::destroyBufferList(bufferList_t bufferList) {
     }
 }
 
+Buffer& VkSmol::getBuffer(bufferList_t bufferList, uint32_t frameIndex) {
+    return bufferLists[bufferList][frameIndex];
+}
+
 Buffer& VkSmol::getBuffer(bufferList_t bufferList) {
-    return bufferLists[bufferList][currentFrame];
+    return getBuffer(bufferList, currentFrame);
 }
 
 
@@ -307,10 +312,8 @@ void VkSmol::readBuffer(Buffer& buffer, void *out, size_t bytes, size_t offset) 
 }
 
 
-DescriptorSetAllocation VkSmol::createDescriptorSetAllocation(DescriptorSetLayout &layout, std::vector<void*> descriptors) {
-    //! The lifetime of the descriptor set allocations need to be managed by the parent application
-    
-    std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
+DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout) {
+     std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
 
     DescriptorPool descriptorPool;
     for (VkDescriptorSetLayoutBinding &binding : bindings)
@@ -321,38 +324,41 @@ DescriptorSetAllocation VkSmol::createDescriptorSetAllocation(DescriptorSetLayou
     descriptorSetList.resize(MAX_FRAME_IN_FLIGHT);
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         descriptorSetList[i].alloc(device, descriptorPool, layout);
-
-        for (size_t bind_idx = 0; bind_idx < bindings.size(); bind_idx++) {
-            switch (bindings[bind_idx].descriptorType) {
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
-                    PerFrameBufferBase *buffer = static_cast<PerFrameBufferBase*>(descriptors[bind_idx]);
-                    descriptorSetList[i].linkUniformBuffer(buffer->at(i), bindings[bind_idx].binding);
-                } break;
-                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
-                    bufferList_t bufferList = *(bufferList_t*)descriptors[bind_idx];
-                    descriptorSetList[i].linkStorageBuffer(bufferLists[bufferList][i], bindings[bind_idx].binding);
-                } break;
-                case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
-                    std::pair<ImageView, Sampler> pair = *(std::pair<ImageView, Sampler>*)descriptors[bind_idx];
-                    descriptorSetList[i].linkCombinedImageSampler(pair.first, pair.second, bindings[bind_idx].binding);
-                } break;
-                default:
-                    throw std::runtime_error("Unsupported descriptor type");
-            }
-        }
-
-        descriptorSetList[i].update(device);
     }
-    
-    return DescriptorSetAllocation(std::move(descriptorPool), std::move(descriptorSetList));
+
+    return DescriptorSetGroup(std::move(descriptorPool), std::move(descriptorSetList));
+}
+
+void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, DescriptorWriter& writer) {
+    DescriptorSet& set = group.current(frameIndex);
+    set.clear();
+
+    for (const DescriptorWrite& write : writer.getWrites()) {
+        std::visit([&](const auto& payload) {
+            using T = std::decay_t<decltype(payload)>;
+
+            if constexpr (std::is_same_v<T, UniformBufferPayload>) {
+                if (!payload.buffer) throw std::runtime_error("Null uniform buffer payload");
+                set.linkUniformBuffer(*payload.buffer, write.binding);
+            } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
+                if (!payload.buffer) throw std::runtime_error("Null storage buffer payload");
+                set.linkStorageBuffer(*payload.buffer, write.binding);
+            } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
+                if (!payload.view || !payload.sampler) throw std::runtime_error("Null image/sampler payload");
+                set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
+            }
+        }, write.payload);
+    }
+
+    set.update(device);
 }
 
 // TODO: needs to store the available spots to refill them
-void VkSmol::destroyDescriptorSetAllocation(DescriptorSetAllocation &allocation) {
-    if (!allocation.isValide()) return;
+void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup &group) {
+    if (!group.isValide()) return;
 
-    allocation.destroy(device);
-    allocation = DescriptorSetAllocation{};
+    group.destroy(device);
+    group = DescriptorSetGroup{};
 }
 
 

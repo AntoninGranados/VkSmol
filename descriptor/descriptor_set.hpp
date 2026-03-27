@@ -11,7 +11,7 @@ class ImageView;
 class Sampler;
 class DescriptorSetLayout;
 class DescriptorPool;
-class DescriptorSetAllocation;
+class DescriptorSetGroup;
 
 class DescriptorSet {
 public:
@@ -24,7 +24,7 @@ public:
     //     std::vector<DescriptorSetLayout> descriptorSetLayouts
     // );
 
-    static void free(LogicalDevice device, DescriptorSetAllocation &descriptorSetGroup);
+    static void free(LogicalDevice device, DescriptorSetGroup &descriptorSetGroup);
     VkDescriptorSet get() { return descriptorSet; };
 
     void linkUniformBuffer(Buffer buffer, uint32_t binding);
@@ -32,6 +32,7 @@ public:
     void linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding);
     void update(LogicalDevice device);
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
+    void clear();
 
 private:
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;

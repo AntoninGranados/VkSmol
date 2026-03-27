@@ -29,8 +29,10 @@ public:
     void free(LogicalDevice device);
     void destroy(LogicalDevice device);
 
-    VkBuffer get() { return buffer; };
+    VkBuffer& get() { return buffer; };
+    const VkBuffer& get() const { return buffer; };
     size_t getSize() { return size; };
+    const size_t getSize() const { return size; };
     
     void fill(LogicalDevice device, void* data);
     void read(LogicalDevice device, void* out, size_t bytes, size_t offset = 0);
