@@ -1,5 +1,6 @@
 #include "engine.hpp"
 
+#include <sstream>
 #include <vector>
 #include <unordered_set>
 
@@ -282,7 +283,9 @@ DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout)
     return DescriptorSetGroup(std::move(descriptorPool), std::move(descriptorSetList));
 }
 
-void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, DescriptorWriter& writer) {
+void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
+    writer.validate();
+    
     DescriptorSet& set = group.current(frameIndex);
     set.clear();
 
@@ -291,13 +294,29 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
             using T = std::decay_t<decltype(payload)>;
 
             if constexpr (std::is_same_v<T, UniformBufferPayload>) {
-                if (!payload.buffer) throw std::runtime_error("Null uniform buffer payload");
+                if (!payload.buffer) {
+                    std::ostringstream message;
+                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex << " received a null uniform buffer payload";
+                    throw std::runtime_error(message.str());
+                }
                 set.linkUniformBuffer(*payload.buffer, write.binding);
             } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
-                if (!payload.buffer) throw std::runtime_error("Null storage buffer payload");
+                if (!payload.buffer) {
+                    std::ostringstream message;
+                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex << " received a null storage buffer payload";
+                    throw std::runtime_error(message.str());
+                }
                 set.linkStorageBuffer(*payload.buffer, write.binding);
             } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
-                if (!payload.view || !payload.sampler) throw std::runtime_error("Null image/sampler payload");
+                if (!payload.view || !payload.sampler) {
+                    std::ostringstream message;
+                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex
+                            << " received an incomplete combined image sampler payload";
+                    throw std::runtime_error(message.str());
+                }
                 set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
             }
         }, write.payload);
@@ -351,10 +370,23 @@ void VkSmol::destroyBufferList(bufferList_t bufferList) {
 }
 
 Buffer& VkSmol::getBuffer(bufferList_t bufferList, uint32_t frameIndex) {
+    if (bufferList >= bufferLists.size()) {
+        std::ostringstream message;
+        message << "VkSmol::getBuffer: buffer list " << bufferList
+                << " is invalid (have " << bufferLists.size() << " buffer lists)";
+        throw std::out_of_range(message.str());
+    }
+    if (frameIndex >= bufferLists[bufferList].size()) {
+        std::ostringstream message;
+        message << "VkSmol::getBuffer: frame index " << frameIndex
+                << " is out of range for buffer list " << bufferList
+                << " (have " << bufferLists[bufferList].size() << " frames)";
+        throw std::out_of_range(message.str());
+    }
     return bufferLists[bufferList][frameIndex];
 }
 
-Buffer& VkSmol::getBuffer(bufferList_t bufferList) {
+Buffer& VkSmol::getCurrentBuffer(bufferList_t bufferList) {
     return getBuffer(bufferList, currentFrame);
 }
 
@@ -537,11 +569,42 @@ void VkSmol::initImgui() {
     ImGui_ImplVulkan_Init(&initInfo);
 }
 
+void VkSmol::recreatePerFrameSynchObjects() {
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        for (Semaphore& semaphore : renderFinishedSemaphores[i])
+            semaphore.destroy(device);
+        renderFinishedSemaphores[i].clear();
+
+        for (Semaphore& semaphore : uiFinishedSemaphores[i])
+            semaphore.destroy(device);
+        uiFinishedSemaphores[i].clear();
+    }
+
+    renderFinishedSemaphores.clear();
+    uiFinishedSemaphores.clear();
+
+    renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    uiFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        renderFinishedSemaphores[i].resize(swapchain.getImageCount());
+        for (Semaphore& semaphore : renderFinishedSemaphores[i])
+            semaphore.init(device);
+
+        uiFinishedSemaphores[i].resize(swapchain.getImageCount());
+        for (Semaphore& semaphore : uiFinishedSemaphores[i])
+            semaphore.init(device);
+    }
+}
+
 void VkSmol::recreateSwapchain() {
     window.pauseWhileMinimized();
+
     swapchain.recreate(device, physicalDevice, surface, window);
     swapchainGeneration++;
     framebufferResized = false;
+    
+    recreatePerFrameSynchObjects();
 }
 
 std::vector<const char*> VkSmol::getRequiredExtensions() {

@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
+#include <unordered_set>
 #include <variant>
 
 #include "../memory/buffer.hpp"
@@ -44,20 +45,19 @@ struct DescriptorWrite {
 
 class DescriptorWriter {
 public:
-    DescriptorWriter(const DescriptorSetLayout& layout): layout(&layout) {
-        bindingFilled.resize(layout.getBindings().size(), false);
-    }
+    DescriptorWriter(const DescriptorSetLayout& layout): layout(&layout) {}
 
     DescriptorWriter& uniform(uint32_t binding, const Buffer& buffer);
     DescriptorWriter& storage(uint32_t binding, const Buffer& buffer);
-    DescriptorWriter& sampler(uint32_t binding, const ImageView& view, const Sampler& sampler);
+    DescriptorWriter& combinedImageSampler(uint32_t binding, const ImageView& view, const Sampler& sampler);
 
-    const std::vector<DescriptorWrite>& getWrites() const;
+    void validate() const;
+    const std::vector<DescriptorWrite>& getWrites() const { return writes; }
 
 private:
     const VkDescriptorSetLayoutBinding* findBinding(uint32_t binding) const;
 
-    std::vector<bool> bindingFilled;
+    std::unordered_set<uint32_t> filledBinding;
     std::vector<DescriptorWrite> writes;
     const DescriptorSetLayout* layout = nullptr;
 };

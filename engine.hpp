@@ -115,14 +115,14 @@ public:
     void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
 
     DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
-    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, DescriptorWriter& writer);
+    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
     bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
     bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
     void destroyBufferList(bufferList_t bufferList);
     Buffer& getBuffer(bufferList_t bufferList, uint32_t frameIndex);
-    Buffer& getBuffer(bufferList_t bufferList);
+    Buffer& getCurrentBuffer(bufferList_t bufferList);
 
     Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
     Buffer initReadbackBuffer(size_t size, bool persistentMapping = true);
@@ -196,6 +196,7 @@ private:
 
     void initImgui();
 
+    void recreatePerFrameSynchObjects();
     void recreateSwapchain();
     
     std::vector<const char*> getRequiredExtensions();
