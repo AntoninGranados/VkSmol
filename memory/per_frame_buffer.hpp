@@ -1,10 +1,15 @@
+/*
+PER FRAME BUFFER
+A storage for per frame buffers (one buffer per frame)
+*/
+
 #pragma once
 
 #include <vulkan/vulkan.h>
 
 #include <array>
 
-#include "../memory/buffer.hpp"
+#include "buffer.hpp"
 
 #include "../utils.hpp"
 #include "../frame_context.hpp"
@@ -25,10 +30,10 @@ protected:
 template <typename T>
 class PerFrameBuffer: public PerFrameBufferBase {
 public:
-    static PerFrameBuffer<T> create(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const VkBufferUsageFlags& usage) {
+    static PerFrameBuffer<T> create(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const VkBufferUsageFlags& usage, size_t count) {
         PerFrameBuffer<T> buffer;
         for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            buffer.buffers[i].init(device, usage, sizeof(T), true);
+            buffer.buffers[i].init(device, usage, sizeof(T) * count, true);
             buffer.buffers[i].alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);    //? Not sure if these are the correct properties
         }
         return buffer;

@@ -2,7 +2,6 @@
 
 #include <sstream>
 #include <vector>
-#include <unordered_set>
 
 #include "./utils.hpp"
 
@@ -333,64 +332,8 @@ void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
     group = DescriptorSetGroup{};
 }
 
-bufferList_t VkSmol::initBufferList(VkBufferUsageFlags usage, size_t size) {
-    //! it always uses persistent mapping
-    std::vector<Buffer> bufferList;
-    bufferList.resize(MAX_FRAME_IN_FLIGHT);
-    for (Buffer& buffer : bufferList) {
-        buffer.init(device, usage, size, true);
-        buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    }
 
-    bufferLists.push_back(bufferList);
-    return bufferLists.size() - 1;
-}
-
-bufferList_t VkSmol::initSharedBufferList(VkBufferUsageFlags usage, size_t size) {
-    Buffer sharedBuffer;
-    sharedBuffer.init(device, usage, size, true);
-    sharedBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    std::vector<Buffer> bufferList;
-    bufferList.resize(MAX_FRAME_IN_FLIGHT, sharedBuffer);
-    bufferLists.push_back(bufferList);
-    return bufferLists.size() - 1;
-}
-
-void VkSmol::destroyBufferList(bufferList_t bufferList) {
-    std::unordered_set<VkBuffer> freed;
-    for (Buffer& buffer : bufferLists[bufferList]) {
-        const VkBuffer handle = buffer.get();
-        if (freed.find(handle) != freed.end())
-            continue;
-        buffer.free(device);
-        buffer.destroy(device);
-        freed.insert(handle);
-    }
-}
-
-Buffer& VkSmol::getBuffer(bufferList_t bufferList, uint32_t frameIndex) {
-    if (bufferList >= bufferLists.size()) {
-        std::ostringstream message;
-        message << "VkSmol::getBuffer: buffer list " << bufferList
-                << " is invalid (have " << bufferLists.size() << " buffer lists)";
-        throw std::out_of_range(message.str());
-    }
-    if (frameIndex >= bufferLists[bufferList].size()) {
-        std::ostringstream message;
-        message << "VkSmol::getBuffer: frame index " << frameIndex
-                << " is out of range for buffer list " << bufferList
-                << " (have " << bufferLists[bufferList].size() << " frames)";
-        throw std::out_of_range(message.str());
-    }
-    return bufferLists[bufferList][frameIndex];
-}
-
-Buffer& VkSmol::getCurrentBuffer(bufferList_t bufferList) {
-    return getBuffer(bufferList, currentFrame);
-}
-
-Buffer VkSmol::initBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
+Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
     Buffer buffer;
 
     if (data == nullptr) {
@@ -407,7 +350,7 @@ Buffer VkSmol::initBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
     return buffer;
 }
 
-Buffer VkSmol::initReadbackBuffer(size_t size, bool persistentMapping) {
+Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping) {
     Buffer buffer;
     buffer.init(device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
     buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -427,14 +370,14 @@ void VkSmol::destroyBuffer(Buffer& buffer) {
     buffer.destroy(device);
 }
 
-Image VkSmol::initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
+Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
     Image image;
     image.init(device, width, height, format, usage);
     image.alloc(device, physicalDevice, properties);
     return image;
 }
 
-Image VkSmol::initImageFromPath(std::string path) {
+Image VkSmol::createImageFromPath(std::string path) {
     Image image;
     image.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
     return image;
@@ -445,7 +388,7 @@ void VkSmol::destroyImage(Image& image) {
     image.destroy(device);
 }
 
-ImageView VkSmol::initImageView(Image& image) {
+ImageView VkSmol::createImageView(Image& image) {
     ImageView imageView;
     imageView.init(device, image);
     return imageView;
@@ -455,7 +398,7 @@ void VkSmol::destroyImageView(ImageView& imageView) {
     imageView.destroy(device);
 }
 
-Sampler VkSmol::initSampler() {
+Sampler VkSmol::createSampler() {
     Sampler sampler;
     sampler.init(device, physicalDevice);
     return sampler;

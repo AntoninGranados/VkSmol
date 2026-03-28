@@ -39,6 +39,8 @@
 
 #include "./memory/buffer.hpp"
 #include "./memory/per_frame_buffer.hpp"
+#include "./memory/dynamic_per_frame_buffer.hpp"
+#include "./memory/shared_buffer.hpp"
 
 #include "./sync/semaphore.hpp"
 #include "./sync/fence.hpp"
@@ -53,8 +55,6 @@
 // TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 // TODO: use more assert
-
-typedef size_t bufferList_t;
 
 class VkSmol {
 /*
@@ -118,30 +118,38 @@ public:
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
-    bufferList_t initBufferList(VkBufferUsageFlags usage, size_t size);
-    bufferList_t initSharedBufferList(VkBufferUsageFlags usage, size_t size);
-    void destroyBufferList(bufferList_t bufferList);
-    Buffer& getBuffer(bufferList_t bufferList, uint32_t frameIndex);
-    Buffer& getCurrentBuffer(bufferList_t bufferList);
-
-    Buffer initBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
-    Buffer initReadbackBuffer(size_t size, bool persistentMapping = true);
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
+    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true);
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
     
     template<typename T>
-    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage) { return PerFrameBuffer<T>::create(device, physicalDevice, usage); }
+    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) { return PerFrameBuffer<T>::create(device, physicalDevice, usage, count); }
     template<typename T>
     void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) { buffer.destroy(device); }
+    
+    template<typename T>
+    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) { return SharedBuffer<T>::create(device, physicalDevice, usage, count); }
+    template<typename T>
+    void destroySharedBuffer(SharedBuffer<T>& buffer) { buffer.destroy(device); }
+    
+    template <typename T, typename Header = std::monostate>
+    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) { return DynamicPerFrameBuffer<T, Header>::create(device, physicalDevice, usage, count); }
+    template <typename T, typename Header = std::monostate>
+    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) { buffer.destroy(device); }
+    template <typename T, typename Header = std::monostate>
+    bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) { return buffer.setElementCount(device, physicalDevice, count); }
+    template <typename T, typename Header = std::monostate>
+    void clearDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) { buffer.clear(device, physicalDevice); }
 
-    Image initImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
-    Image initImageFromPath(std::string path);
+    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+    Image createImageFromPath(std::string path);
     void destroyImage(Image& image);
-    ImageView initImageView(Image& image);
+    ImageView createImageView(Image& image);
     void destroyImageView(ImageView& imageView);
 
-    Sampler initSampler();
+    Sampler createSampler();
     void destroySampler(Sampler& sampler);
 
     void beginDynamicRenderer(
@@ -182,7 +190,6 @@ private:
     DynamicRenderer dynamicRenderer;
     
     DescriptorPool uiDescriptorPool;
-    std::vector<std::vector<Buffer> > bufferLists;
 
     CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
     std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;

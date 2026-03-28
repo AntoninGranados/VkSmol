@@ -65,7 +65,7 @@ void DescriptorSet::free(LogicalDevice device, DescriptorSetGroup& allocation) {
     allocation.sets.clear();
 }
 
-void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
+void DescriptorSet::linkUniformBuffer(const Buffer& buffer, uint32_t binding) {
     VkDescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer.get();
     bufferInfo.offset = 0;
@@ -73,7 +73,7 @@ void DescriptorSet::linkUniformBuffer(Buffer buffer, uint32_t binding) {
     bufferInfos.push_back({ bufferInfo, binding });
 }
 
-void DescriptorSet::linkStorageBuffer(Buffer buffer, uint32_t binding) {
+void DescriptorSet::linkStorageBuffer(const Buffer& buffer, uint32_t binding) {
     VkDescriptorBufferInfo storageInfo{};
     storageInfo.buffer = buffer.get();
     storageInfo.offset = 0;

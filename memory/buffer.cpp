@@ -7,6 +7,45 @@
 #include "../queue.hpp"
 #include "../utils.hpp"
 
+Buffer::Buffer(Buffer&& other)
+    : persistentMapping(other.persistentMapping),
+      buffer(other.buffer),
+      bufferMemory(other.bufferMemory),
+      usage(other.usage),
+      size(other.size),
+      bufferMapped(other.bufferMapped) {
+    other.persistentMapping = false;
+    other.buffer = VK_NULL_HANDLE;
+    other.bufferMemory = VK_NULL_HANDLE;
+    other.usage = 0;
+    other.size = 0;
+    other.bufferMapped = nullptr;
+}
+
+Buffer& Buffer::operator=(Buffer&& other) {
+    if (this == &other) return *this;
+
+    if (buffer != VK_NULL_HANDLE || bufferMemory != VK_NULL_HANDLE || bufferMapped != nullptr) {
+        throw std::runtime_error("Buffer move assignment requires an empty destination");
+    }
+
+    persistentMapping = other.persistentMapping;
+    buffer = other.buffer;
+    bufferMemory = other.bufferMemory;
+    usage = other.usage;
+    size = other.size;
+    bufferMapped = other.bufferMapped;
+
+    other.persistentMapping = false;
+    other.buffer = VK_NULL_HANDLE;
+    other.bufferMemory = VK_NULL_HANDLE;
+    other.usage = 0;
+    other.size = 0;
+    other.bufferMapped = nullptr;
+
+    return *this;
+}
+
 void Buffer::init(LogicalDevice device,
         VkBufferUsageFlags usage_,
         size_t size_,
@@ -67,14 +106,24 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
 
 
 void Buffer::free(LogicalDevice device) {
-    if (persistentMapping) {
+    if (persistentMapping && bufferMapped != nullptr) {
         vkUnmapMemory(device.get(), bufferMemory);
     }
-    vkFreeMemory(device.get(), bufferMemory, nullptr);
+    if (bufferMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(device.get(), bufferMemory, nullptr);
+    }
+    bufferMemory = VK_NULL_HANDLE;
+    bufferMapped = nullptr;
 }
 
 void Buffer::destroy(LogicalDevice device) {
-    vkDestroyBuffer(device.get(), buffer, nullptr);
+    if (buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device.get(), buffer, nullptr);
+    }
+    buffer = VK_NULL_HANDLE;
+    usage = 0;
+    size = 0;
+    persistentMapping = false;
 }
 
 void Buffer::fill(LogicalDevice device, void* data) {
@@ -102,7 +151,7 @@ void Buffer::read(LogicalDevice device, void* out, size_t bytes, size_t offset) 
     }
 }
 
-void Buffer::copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
+void Buffer::copy(const Buffer& srcBuffer, const Buffer& dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
     if (srcBuffer.getSize() != dstBuffer.getSize())
         throw std::runtime_error("Buffers don't have the same size");
 

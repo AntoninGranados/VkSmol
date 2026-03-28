@@ -27,8 +27,8 @@ public:
     static void free(LogicalDevice device, DescriptorSetGroup& descriptorSetGroup);
     VkDescriptorSet get() { return descriptorSet; };
 
-    void linkUniformBuffer(Buffer buffer, uint32_t binding);
-    void linkStorageBuffer(Buffer buffer, uint32_t binding);
+    void linkUniformBuffer(const Buffer& buffer, uint32_t binding);
+    void linkStorageBuffer(const Buffer& buffer, uint32_t binding);
     void linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding);
     void update(LogicalDevice device);
     void bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);

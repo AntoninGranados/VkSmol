@@ -29,9 +29,9 @@ public:
     void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
     void fillFromBuffer(
         LogicalDevice device, CommandBuffer commandBuffer,
-        Buffer buffer
+        const Buffer& buffer
     );
-    void copyToBuffer(CommandBuffer commandBuffer, Buffer buffer);
+    void copyToBuffer(CommandBuffer commandBuffer, const Buffer& buffer);
     void free(LogicalDevice device);
     void destroy(LogicalDevice device);
 

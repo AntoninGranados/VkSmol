@@ -11,6 +11,12 @@ class Queue;
 
 class Buffer {
 public:
+    Buffer() = default;
+    Buffer(const Buffer&) = delete;
+    Buffer& operator=(const Buffer&) = delete;
+    Buffer(Buffer&& other);
+    Buffer& operator=(Buffer&& other);
+
     // TODO: maybe combine init/alloc and destroye/free ?
     void init(
         LogicalDevice device,
@@ -33,10 +39,12 @@ public:
     const VkBuffer& get() const { return buffer; };
     size_t getSize() { return size; };
     const size_t getSize() const { return size; };
+    VkBufferUsageFlags getUsage() { return usage; };
+    const VkBufferUsageFlags getUsage() const { return usage; };
     
     void fill(LogicalDevice device, void* data);
     void read(LogicalDevice device, void* out, size_t bytes, size_t offset = 0);
-    static void copy(Buffer srcBuffer, Buffer dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
+    static void copy(const Buffer& srcBuffer, const Buffer& dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
 
     // TODO: make a static version to bind multiple buffer
     void bindVertex(CommandBuffer commandBuffer);
@@ -44,12 +52,12 @@ public:
 
     static uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-    bool persistentMapping;
+    bool persistentMapping = false;
 private:
-    VkBuffer buffer;
-    VkDeviceMemory bufferMemory;
-    VkBufferUsageFlags usage;
-    size_t size;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory bufferMemory = VK_NULL_HANDLE;
+    VkBufferUsageFlags usage = 0;
+    size_t size = 0;
 
-    void* bufferMapped;
+    void* bufferMapped = nullptr;
 };

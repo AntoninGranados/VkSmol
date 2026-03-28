@@ -115,7 +115,7 @@ void Image::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryP
 
 void Image::fillFromBuffer(
     LogicalDevice device, CommandBuffer commandBuffer,
-    Buffer buffer
+    const Buffer& buffer
 ) {
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -140,7 +140,7 @@ void Image::fillFromBuffer(
     );
 }
 
-void Image::copyToBuffer(CommandBuffer commandBuffer, Buffer buffer) {
+void Image::copyToBuffer(CommandBuffer commandBuffer, const Buffer& buffer) {
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
