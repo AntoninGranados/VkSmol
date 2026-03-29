@@ -8,7 +8,7 @@
 #include "./sync/semaphore.hpp"
 #include "./utils.hpp"
 
-SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface surface) {
+SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, const Surface& surface) {
     SwapChainSupportDetails details;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.get(), surface.get(), &details.capabilities);
@@ -31,7 +31,7 @@ SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface sur
 }
 
 
-void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, std::optional<Swapchain> oldSwapChain) {
+void Swapchain::init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window, const Swapchain* oldSwapChain) {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -56,10 +56,11 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
     // In the case where the two families are different
     // we have to tell the GPU that the images will be shared accross mulitple families
+    std::vector<uint32_t> queueFamilyIndices = indices.getIndices();
     if (!indices.sameFamilies()) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = static_cast<uint32_t>(indices.getIndices().size());
-        createInfo.pQueueFamilyIndices = indices.getIndices().data();
+        createInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
+        createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
     } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
@@ -68,7 +69,7 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;  // For an opaque window
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;   // Pixel behind other window will be clipped
-    createInfo.oldSwapchain = oldSwapChain == std::nullopt ? VK_NULL_HANDLE : oldSwapChain.value().get();
+    createInfo.oldSwapchain = oldSwapChain == nullptr ? VK_NULL_HANDLE : oldSwapChain->get();
 
     vkCheck(vkCreateSwapchainKHR(device.get(), &createInfo, nullptr, &swapchain), "Failed to create the swap chain");
 
@@ -76,7 +77,7 @@ void Swapchain::init(LogicalDevice device, PhysicalDevice physicalDevice, Surfac
     initImageViews(device);
 }
 
-void Swapchain::destroy(LogicalDevice device) {
+void Swapchain::destroy(const LogicalDevice& device) {
     destroyImageViews(device);
     vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
 
@@ -85,13 +86,13 @@ void Swapchain::destroy(LogicalDevice device) {
 }
 
 // TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
-void Swapchain::recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window) {
+void Swapchain::recreate(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window) {
     device.waitIdle();
     destroy(device);
     init(device, physicalDevice, surface, window);
 }
 
-uint32_t Swapchain::getNextImageIndex(LogicalDevice device, Semaphore semaphore) {
+uint32_t Swapchain::getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore) {
     uint32_t frameIndex;
 
     VkResult result = vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
@@ -105,13 +106,13 @@ uint32_t Swapchain::getNextImageIndex(LogicalDevice device, Semaphore semaphore)
 
 
 
-void Swapchain::initImages(LogicalDevice device) {
+void Swapchain::initImages(const LogicalDevice& device) {
     vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, nullptr);
     images.resize(imageCount);
     vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, images.data());
 }
 
-void Swapchain::initImageViews(LogicalDevice device) {
+void Swapchain::initImageViews(const LogicalDevice& device) {
     imageViews.resize(imageCount);
 
     for (size_t i = 0; i < imageCount; i++) {
@@ -136,7 +137,7 @@ void Swapchain::initImageViews(LogicalDevice device) {
     }
 }
 
-void Swapchain::destroyImageViews(LogicalDevice device) {
+void Swapchain::destroyImageViews(const LogicalDevice& device) {
     for (size_t i = 0; i < imageCount; i++) {
         vkDestroyImageView(device.get(), imageViews[i], nullptr);
     }

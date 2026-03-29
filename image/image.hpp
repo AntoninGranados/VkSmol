@@ -13,36 +13,43 @@ class Queue;
 
 class Buffer;
 
-
 class Image {
 public:
+    Image() = default;
+    Image(const Image&) = delete;
+    Image& operator=(const Image&) = delete;
+    Image(Image&& other);
+    Image& operator=(Image&& other);
+
     void init(
-        LogicalDevice device,
+        const LogicalDevice& device,
         uint32_t width, uint32_t height,
         VkFormat format, VkImageUsageFlags usage
     );
     void initFromPath(
-        LogicalDevice device, PhysicalDevice physicalDevice,
-        CommandPool transferCommandPool, Queue transferQueue,
+        const LogicalDevice& device, PhysicalDevice physicalDevice,
+        const CommandPool& transferCommandPool, Queue transferQueue,
         std::string path
     );
-    void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
+    void alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
     void fillFromBuffer(
-        LogicalDevice device, CommandBuffer commandBuffer,
+        const LogicalDevice& device, const CommandBuffer& commandBuffer,
         const Buffer& buffer
     );
-    void copyToBuffer(CommandBuffer commandBuffer, const Buffer& buffer);
-    void free(LogicalDevice device);
-    void destroy(LogicalDevice device);
+    void copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffer);
+    void free(const LogicalDevice& device);
+    void destroy(const LogicalDevice& device);
 
-    VkImage get() { return image; }
-    VkFormat getFormat() { return format; }
+    VkImage& get() { return image; }
+    const VkImage& get() const { return image; }
+    VkFormat& getFormat() { return format; }
+    const VkFormat& getFormat() const { return format; }
     int getWidth() { return width; }
     int getHeight() { return height; }
 
 private:
-    VkImage image;
-    VkDeviceMemory imageMemory;
-    VkFormat format;
-    uint32_t width, height;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory imageMemory = VK_NULL_HANDLE;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    uint32_t width = 0, height = 0;
 };

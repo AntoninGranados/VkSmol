@@ -46,10 +46,11 @@ Buffer& Buffer::operator=(Buffer&& other) {
     return *this;
 }
 
-void Buffer::init(LogicalDevice device,
-        VkBufferUsageFlags usage_,
-        size_t size_,
-        bool persistentMapping_
+void Buffer::init(
+    const LogicalDevice& device,
+    VkBufferUsageFlags usage_,
+    size_t size_,
+    bool persistentMapping_
 ) {
     usage = usage_;
     size = size_;
@@ -65,10 +66,10 @@ void Buffer::init(LogicalDevice device,
 }
 
 void Buffer::initFilled(
-        LogicalDevice device, PhysicalDevice physicalDevice,
-        VkBufferUsageFlags usage,
-        CommandPool transferCommandPool, Queue transferQueue,
-        size_t size, void* data
+    const LogicalDevice& device, PhysicalDevice physicalDevice,
+    VkBufferUsageFlags usage,
+    const CommandPool& transferCommandPool, Queue transferQueue,
+    size_t size, void* data
 ) {
     Buffer stagingBuffer;
     stagingBuffer.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size);
@@ -83,7 +84,7 @@ void Buffer::initFilled(
     stagingBuffer.destroy(device);
 }
 
-void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
+void Buffer::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device.get(), buffer, &memRequirements);
 
@@ -105,7 +106,7 @@ void Buffer::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemory
 }
 
 
-void Buffer::free(LogicalDevice device) {
+void Buffer::free(const LogicalDevice& device) {
     if (persistentMapping && bufferMapped != nullptr) {
         vkUnmapMemory(device.get(), bufferMemory);
     }
@@ -116,7 +117,7 @@ void Buffer::free(LogicalDevice device) {
     bufferMapped = nullptr;
 }
 
-void Buffer::destroy(LogicalDevice device) {
+void Buffer::destroy(const LogicalDevice& device) {
     if (buffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device.get(), buffer, nullptr);
     }
@@ -126,7 +127,7 @@ void Buffer::destroy(LogicalDevice device) {
     persistentMapping = false;
 }
 
-void Buffer::fill(LogicalDevice device, void* data) {
+void Buffer::fill(const LogicalDevice& device, void* data) {
     if (persistentMapping) {
         memcpy(bufferMapped, data, size);
     } else {
@@ -137,7 +138,7 @@ void Buffer::fill(LogicalDevice device, void* data) {
     }
 }
 
-void Buffer::read(LogicalDevice device, void* out, size_t bytes, size_t offset) {
+void Buffer::read(const LogicalDevice& device, void* out, size_t bytes, size_t offset) {
     if (offset + bytes > size)
         throw std::runtime_error("Buffer read out of range");
 
@@ -151,7 +152,7 @@ void Buffer::read(LogicalDevice device, void* out, size_t bytes, size_t offset) 
     }
 }
 
-void Buffer::copy(const Buffer& srcBuffer, const Buffer& dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue) {
+void Buffer::copy(const Buffer& srcBuffer, const Buffer& dstBuffer, const LogicalDevice& device, const CommandPool& transferCommandPool, Queue transferQueue) {
     if (srcBuffer.getSize() != dstBuffer.getSize())
         throw std::runtime_error("Buffers don't have the same size");
 
@@ -165,7 +166,7 @@ void Buffer::copy(const Buffer& srcBuffer, const Buffer& dstBuffer, LogicalDevic
 }
 
 
-void Buffer::bindVertex(CommandBuffer commandBuffer) {
+void Buffer::bindVertex(const CommandBuffer& commandBuffer) {
     #ifndef NDEBUG
         if (!(usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
             throw std::runtime_error("Trying to bind a buffer as a vertex buffer when it is not");
@@ -176,7 +177,7 @@ void Buffer::bindVertex(CommandBuffer commandBuffer) {
     vkCmdBindVertexBuffers(commandBuffer.get(), 0, 1, buffers, offsets);
 }
 
-void Buffer::bindIndex(CommandBuffer commandBuffer, VkIndexType indexType) {
+void Buffer::bindIndex(const CommandBuffer& commandBuffer, VkIndexType indexType) {
     #ifndef NDEBUG
         if (!(usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
             throw std::runtime_error("Trying to bind a buffer as an index buffer when it is not");

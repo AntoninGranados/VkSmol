@@ -5,18 +5,18 @@
 
 #include <vector>
 
+#include "../unique_handle.hpp"
+
 class LogicalDevice;
 
-class DescriptorSetLayout {
+class DescriptorSetLayout: public UniqueHandle<VkDescriptorSetLayout, VK_NULL_HANDLE> {
 public:
-    void init(LogicalDevice device);
-    void destroy(LogicalDevice device);
-    VkDescriptorSetLayout get() const { return descritorSetLayout; };
+    void init(const LogicalDevice& device);
+    void destroy(const LogicalDevice& device);
     const std::vector<VkDescriptorSetLayoutBinding>& getBindings() const { return bindings; };
 
     void addBinding(VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount = 1);
 
 private:
-    VkDescriptorSetLayout descritorSetLayout;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 };

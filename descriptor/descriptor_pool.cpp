@@ -26,7 +26,7 @@ DescriptorPool& DescriptorPool::operator=(DescriptorPool&& other) noexcept {
 }
 
 // TODO: maybe use a DescriptorSetLayout to construct the pool sizes
-void DescriptorPool::init(LogicalDevice device) {
+void DescriptorPool::init(const LogicalDevice& device) {
     VkDescriptorPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     createInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -37,7 +37,7 @@ void DescriptorPool::init(LogicalDevice device) {
     vkCheck(vkCreateDescriptorPool(device.get(), &createInfo, nullptr, &descriptorPool), "Failed to create descriptor pool");
 }
 
-void DescriptorPool::destroy(LogicalDevice device) {
+void DescriptorPool::destroy(const LogicalDevice& device) {
     poolSizes.clear();
     maxSize = 0;
     vkDestroyDescriptorPool(device.get(), descriptorPool, nullptr);

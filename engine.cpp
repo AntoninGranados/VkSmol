@@ -112,7 +112,7 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
 }
 
 std::optional<FrameContext> VkSmol::beginFrame() {
-    Fence::wait({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
+    Fence::wait({ &renderInFlightFences[currentFrame], &uiInFlightFences[currentFrame] }, device);
 
     const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
     if (result == RECREATE_SWAPCHAIN) {
@@ -120,7 +120,7 @@ std::optional<FrameContext> VkSmol::beginFrame() {
         return {};
     }
 
-    Fence::reset({ renderInFlightFences[currentFrame], uiInFlightFences[currentFrame] }, device);
+    Fence::reset({ &renderInFlightFences[currentFrame], &uiInFlightFences[currentFrame] }, device);
     imageIndex = result;
 
     return FrameContext{
@@ -132,7 +132,7 @@ std::optional<FrameContext> VkSmol::beginFrame() {
 }
 
 void VkSmol::endFrame() {
-    const uint32_t result = presentQueue.present({ swapchain }, { imageIndex }, { uiFinishedSemaphores[currentFrame][imageIndex] });
+    const uint32_t result = presentQueue.present({ &swapchain }, { imageIndex }, { &uiFinishedSemaphores[currentFrame][imageIndex] });
     if (result == RECREATE_SWAPCHAIN || framebufferResized) {
         recreateSwapchain();
     }
@@ -140,39 +140,37 @@ void VkSmol::endFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
-CommandBuffer VkSmol::beginRecordingRender() {
-    CommandBuffer commandBuffer = commandBuffers[currentFrame];
-    commandBuffer.reset();
+CommandBuffer& VkSmol::beginRecordingRender() {
+    commandBuffers[currentFrame].reset();
 
-    commandBuffer.beginRecording();
-    return commandBuffer;
+    commandBuffers[currentFrame].beginRecording();
+    return commandBuffers[currentFrame];
 }
 
-void VkSmol::endRecoringRender(CommandBuffer commandBuffer) {
+void VkSmol::endRecoringRender(CommandBuffer& commandBuffer) {
     commandBuffer.endRecording();
 
     graphicsQueue.submit(
-        { commandBuffers[currentFrame] },
+        { &commandBuffers[currentFrame] },
         renderInFlightFences[currentFrame],
-        { imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
-        { renderFinishedSemaphores[currentFrame][imageIndex] }
+        { &imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
+        { &renderFinishedSemaphores[currentFrame][imageIndex] }
     );
 }
 
-CommandBuffer VkSmol::beginRecordingUiRender() {
-    CommandBuffer commandBuffer = uiCommandBuffers[currentFrame];
-    commandBuffer.reset();
-    commandBuffer.beginRecording();
-    return commandBuffer;
+CommandBuffer& VkSmol::beginRecordingUiRender() {
+    uiCommandBuffers[currentFrame].reset();
+    uiCommandBuffers[currentFrame].beginRecording();
+    return uiCommandBuffers[currentFrame];
 }
 
-void VkSmol::endRecoringUiRender(CommandBuffer commandBuffer) {
+void VkSmol::endRecoringUiRender(CommandBuffer& commandBuffer) {
     commandBuffer.endRecording();
     graphicsQueue.submit(
-        { uiCommandBuffers[currentFrame] },
+        { &uiCommandBuffers[currentFrame] },
         uiInFlightFences[currentFrame],
-        { renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT },
-        { uiFinishedSemaphores[currentFrame][imageIndex] }
+        { &renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT },
+        { &uiFinishedSemaphores[currentFrame][imageIndex] }
     );
 }
 
@@ -219,8 +217,8 @@ void VkSmol::terminate() {
 
 GraphicsPipeline VkSmol::initGraphicsPipeline(
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-    std::vector<Shader> shaders,
-    std::vector<DescriptorSetLayout> setLayouts,
+    const std::vector<const Shader*>& shaders,
+    const std::vector<const DescriptorSetLayout*>& setLayouts,
     GraphicsPipeline other,
     VkFormat colorFormat
 ) {
@@ -410,7 +408,7 @@ void VkSmol::destroySampler(Sampler& sampler) {
 
 //! The render area is fixed to the screen size for now
 void VkSmol::beginDynamicRenderer(
-    CommandBuffer commandBuffer,
+    const CommandBuffer& commandBuffer,
     VkImageView imageView, VkImageLayout imageLayout,
     VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
     VkClearColorValue clearColor
@@ -426,13 +424,13 @@ void VkSmol::beginDynamicRenderer(
     );
 }
 
-void VkSmol::endDynamicRenderer(CommandBuffer commandBuffer) {
+void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 }
 
 // Will use the barrier on the swapchain image if `image` is `nullptr`
 void VkSmol::barrier(
-    CommandBuffer commandBuffer,
+    const CommandBuffer& commandBuffer,
     VkImage image,
     VkImageLayout srcLayout, VkImageLayout dstLayout,
     VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
@@ -564,7 +562,7 @@ std::vector<const char*> VkSmol::getRequiredExtensions() {
     return requiredExtensions;
 }
 
-int VkSmol::scoreDevice(PhysicalDevice device) {
+int VkSmol::scoreDevice(const PhysicalDevice& device) {
     // Check if all the  queue families are available
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
     if (!indices.isComplete())

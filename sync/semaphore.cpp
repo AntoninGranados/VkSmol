@@ -3,12 +3,15 @@
 #include "../logical_device.hpp"
 #include "../utils.hpp"
 
-void Semaphore::init(LogicalDevice device) {
+void Semaphore::init(const LogicalDevice& device) {
     VkSemaphoreCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    vkCheck(vkCreateSemaphore(device.get(), &createInfo, nullptr, &semaphore), "Failed to create semaphore");
+    vkCheck(vkCreateSemaphore(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create semaphore");
 }
 
-void Semaphore::destroy(LogicalDevice device) {
-    vkDestroySemaphore(device.get(), semaphore, nullptr);
+void Semaphore::destroy(const LogicalDevice& device) {
+    if (isValid()) {
+        vkDestroySemaphore(device.get(), rawHandle(), nullptr);
+    }
+    resetHandle();
 }

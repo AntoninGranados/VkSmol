@@ -4,7 +4,7 @@
 #include "../physical_device.hpp"
 #include "../utils.hpp"
 
-void Sampler::init(LogicalDevice device, PhysicalDevice physicalDevice) {
+void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -30,9 +30,12 @@ void Sampler::init(LogicalDevice device, PhysicalDevice physicalDevice) {
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
 
-    vkCheck(vkCreateSampler(device.get(), &samplerInfo, nullptr, &sampler), "Failed to create the sampler");
+    vkCheck(vkCreateSampler(device.get(), &samplerInfo, nullptr, &rawHandle()), "Failed to create the sampler");
 }
 
-void Sampler::destroy(LogicalDevice device) {
-    vkDestroySampler(device.get(), sampler, nullptr);
+void Sampler::destroy(const LogicalDevice& device) {
+    if (isValid()) {
+        vkDestroySampler(device.get(), rawHandle(), nullptr);
+    }
+    resetHandle();
 }

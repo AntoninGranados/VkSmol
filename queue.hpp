@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "borrowed_handle.hpp"
+
 class Surface;
 class PhysicalDevice;
 class LogicalDevice;
@@ -33,31 +35,26 @@ struct QueueFamilyIndices {
     }
 };
 
-QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surface);
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface);
 
-class Queue {
+class Queue: public BorrowedHandle<VkQueue, VK_NULL_HANDLE> {
 public:
-    void init(LogicalDevice device, uint32_t queueFamilyIndex);
-    // void destroy();
-    VkQueue get() { return queue; };
+    void init(const LogicalDevice& device, uint32_t queueFamilyIndex);
 
     // Should be able to generate multiple VkSubmitInfo and submit them
     void submit(
-        std::vector<CommandBuffer> commandBuffers,
-        Fence fence,
-        std::vector<Semaphore> waitSemaphores, std::vector<VkPipelineStageFlags> waitStages,
-        std::vector<Semaphore> signalSemaphores
+        const std::vector<const CommandBuffer*>& commandBuffers,
+        const Fence& fence,
+        const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+        const std::vector<const Semaphore*>& signalSemaphores
     );
-    void submit(std::vector<CommandBuffer> commandBuffers);
+    void submit(const std::vector<const CommandBuffer*>& commandBuffers);
     // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
     uint32_t present(
-        std::vector<Swapchain> swapchains,
-        std::vector<uint32_t> frameIndices,
-        std::vector<Semaphore> waitSemaphores
+        const std::vector<const Swapchain*>& swapchains,
+        const std::vector<uint32_t>& frameIndices,
+        const std::vector<const Semaphore*>& waitSemaphores
     );
 
     void wait();
-
-private:
-    VkQueue queue;
 };

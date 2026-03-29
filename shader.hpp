@@ -3,19 +3,18 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
-#include <fstream>
 #include <string>
-#include <filesystem>
+
+#include "unique_handle.hpp"
 
 class LogicalDevice;
 
-class Shader {
+class Shader: UniqueHandle<VkShaderModule, VK_NULL_HANDLE> {
 public:
     // The shader needs to be precompiled and the `filename` is the SPIR-V file
-    void init(LogicalDevice device, VkShaderStageFlagBits stage, std::string filepath);
-    void destroy(LogicalDevice device);
-    VkShaderModule get() { return shaderModule; };
-    VkPipelineShaderStageCreateInfo getShaderStageCreateInfo(std::string entryPoint = "main");
+    void init(const LogicalDevice& device, VkShaderStageFlagBits stage, std::string filepath);
+    void destroy(const LogicalDevice& device);
+    VkPipelineShaderStageCreateInfo getShaderStageCreateInfo(std::string entryPoint = "main") const;
 
     // If `alwaysCompile` is set to `false` (`true` value by default), the compilation will not be done if the SPIR-V file already exists
     // Returns the name of the compiled file
@@ -23,7 +22,6 @@ public:
 
     
 private:
-    VkShaderModule shaderModule;
     VkShaderStageFlagBits stage;
 
     // Read a SPIR-V file into a vector representation for easy access during ShaderModule creation

@@ -12,9 +12,44 @@
 #include "../memory/buffer.hpp"
 #include "../utils.hpp"
 
+Image::Image(Image&& other)
+    : image(other.image),
+      imageMemory(other.imageMemory),
+      format(other.format),
+      width(other.width),
+      height(other.height) {
+    other.image = VK_NULL_HANDLE;
+    other.imageMemory = VK_NULL_HANDLE;
+    other.format = VK_FORMAT_UNDEFINED;
+    other.width = 0;
+    other.height = 0;
+}
+
+Image& Image::operator=(Image&& other) {
+    if (this == &other) return *this;
+
+    if (image != VK_NULL_HANDLE || imageMemory != VK_NULL_HANDLE) {
+        throw std::runtime_error("Image move assignment requires an empty destination");
+    }
+
+    image = other.image;
+    imageMemory = other.imageMemory;
+    format = other.format;
+    width = other.width;
+    height = other.height;
+
+    other.image = VK_NULL_HANDLE;
+    other.imageMemory = VK_NULL_HANDLE;
+    other.format = VK_FORMAT_UNDEFINED;
+    other.width = 0;
+    other.height = 0;
+
+    return *this;
+}
+
 // Public
 void Image::init(
-    LogicalDevice device,
+    const LogicalDevice& device,
     uint32_t width_, uint32_t height_,
     VkFormat format_, VkImageUsageFlags usage
 ) {
@@ -43,8 +78,8 @@ void Image::init(
 }
 
 void Image::initFromPath(
-    LogicalDevice device, PhysicalDevice physicalDevice,
-    CommandPool transferCommandPool, Queue transferQueue,
+    const LogicalDevice& device, PhysicalDevice physicalDevice,
+    const CommandPool& transferCommandPool, Queue transferQueue,
     std::string path
 ) {
     int width, height, channels;
@@ -96,7 +131,7 @@ void Image::initFromPath(
     stagingBuffer.destroy(device);
 }
 
-void Image::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
+void Image::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device.get(), image, &memRequirements);
 
@@ -114,7 +149,7 @@ void Image::alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryP
 }
 
 void Image::fillFromBuffer(
-    LogicalDevice device, CommandBuffer commandBuffer,
+    const LogicalDevice& device, const CommandBuffer& commandBuffer,
     const Buffer& buffer
 ) {
     VkBufferImageCopy region{};
@@ -140,7 +175,7 @@ void Image::fillFromBuffer(
     );
 }
 
-void Image::copyToBuffer(CommandBuffer commandBuffer, const Buffer& buffer) {
+void Image::copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffer) {
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -164,10 +199,19 @@ void Image::copyToBuffer(CommandBuffer commandBuffer, const Buffer& buffer) {
     );
 }
 
-void Image::free(LogicalDevice device) {
-    vkFreeMemory(device.get(), imageMemory, nullptr);
+void Image::free(const LogicalDevice& device) {
+    if (imageMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(device.get(), imageMemory, nullptr);
+    }
+    imageMemory = VK_NULL_HANDLE;
 }
 
-void Image::destroy(LogicalDevice device) {
-    vkDestroyImage(device.get(), image, nullptr);
+void Image::destroy(const LogicalDevice& device) {
+    if (image != VK_NULL_HANDLE) {
+        vkDestroyImage(device.get(), image, nullptr);
+    }
+    image = VK_NULL_HANDLE;
+    format = VK_FORMAT_UNDEFINED;
+    width = 0;
+    height = 0;
 }

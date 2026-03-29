@@ -1,10 +1,13 @@
 #include "shader.hpp"
 
+#include <filesystem>
+#include <fstream>
+
 #include "./logical_device.hpp"
 #include "./utils.hpp"
 
 // Public
-void Shader::init(LogicalDevice device, VkShaderStageFlagBits stage_, std::string filepath) {
+void Shader::init(const LogicalDevice& device, VkShaderStageFlagBits stage_, std::string filepath) {
     stage = stage_;
 
     bool isGLSL = filepath.find(".glsl") != std::string::npos;
@@ -25,18 +28,18 @@ void Shader::init(LogicalDevice device, VkShaderStageFlagBits stage_, std::strin
     createInfo.codeSize = code.size();
     createInfo.pCode = reinterpret_cast<uint32_t*>(code.data());
 
-    vkCheck(vkCreateShaderModule(device.get(), &createInfo, nullptr, &shaderModule), "Failed to create shader module");
+    vkCheck(vkCreateShaderModule(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create shader module");
 }
 
-void Shader::destroy(LogicalDevice device) {
-    vkDestroyShaderModule(device.get(), shaderModule, nullptr);
+void Shader::destroy(const LogicalDevice& device) {
+    vkDestroyShaderModule(device.get(), rawHandle(), nullptr);
 }
 
-VkPipelineShaderStageCreateInfo Shader::getShaderStageCreateInfo(std::string entryPoint) {
+VkPipelineShaderStageCreateInfo Shader::getShaderStageCreateInfo(std::string entryPoint) const {
     VkPipelineShaderStageCreateInfo shaderStageInfo{};
     shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStageInfo.stage = stage;
-    shaderStageInfo.module = shaderModule;
+    shaderStageInfo.module = rawHandle();
     shaderStageInfo.pName = entryPoint.c_str();
 
     return shaderStageInfo;

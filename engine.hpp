@@ -88,11 +88,11 @@ public:
     std::optional<FrameContext> beginFrame();
     void endFrame();
 
-    CommandBuffer beginRecordingRender();
-    void endRecoringRender(CommandBuffer commandBuffer);
+    CommandBuffer& beginRecordingRender();
+    void endRecoringRender(CommandBuffer& commandBuffer);
     
-    CommandBuffer beginRecordingUiRender();
-    void endRecoringUiRender(CommandBuffer commandBuffer);
+    CommandBuffer& beginRecordingUiRender();
+    void endRecoringUiRender(CommandBuffer& commandBuffer);
 
     void waitIdle();
     void terminate();
@@ -101,8 +101,8 @@ public:
 
     GraphicsPipeline initGraphicsPipeline(
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        std::vector<Shader> shaders,
-        std::vector<DescriptorSetLayout> setLayouts,
+        const std::vector<const Shader*>& shaders,
+        const std::vector<const DescriptorSetLayout*>& setLayouts,
         GraphicsPipeline other = GraphicsPipeline(),
         VkFormat colorFormat = VK_FORMAT_UNDEFINED
     );
@@ -153,15 +153,15 @@ public:
     void destroySampler(Sampler& sampler);
 
     void beginDynamicRenderer(
-        CommandBuffer commandBuffer, 
+        const CommandBuffer& commandBuffer, 
         VkImageView imageView, VkImageLayout imageLayout,
         VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
         VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }}
     );
-    void endDynamicRenderer(CommandBuffer commandBuffer);
+    void endDynamicRenderer(const CommandBuffer& commandBuffer);
 
     void barrier(
-        CommandBuffer commandBuffer,
+        const CommandBuffer& commandBuffer,
         VkImage image,
         VkImageLayout srcLayout, VkImageLayout dstLayout,
         VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
@@ -207,5 +207,5 @@ private:
     void recreateSwapchain();
     
     std::vector<const char*> getRequiredExtensions();
-    int scoreDevice(PhysicalDevice device);
+    int scoreDevice(const PhysicalDevice& device);
 };

@@ -11,7 +11,7 @@
 #include "../image/sampler.hpp"
 #include "../utils.hpp"
 
-void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
+void DescriptorSet::alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -25,7 +25,7 @@ void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool& descriptor
 
 // void DescriptorSet::alloc(
 //     std::vector<DescriptorSet>& descriptorSets,
-//     LogicalDevice device,
+//     const LogicalDevice& device,
 //     DescriptorPool descriptorPool,
 //     std::vector<DescriptorSetLayout> descriptorSetLayouts
 // ) {
@@ -47,7 +47,7 @@ void DescriptorSet::alloc(LogicalDevice device, const DescriptorPool& descriptor
 // }
 
 
-void DescriptorSet::free(LogicalDevice device, DescriptorSetGroup& allocation) {
+void DescriptorSet::free(const LogicalDevice& device, DescriptorSetGroup& allocation) {
     if (allocation.pool.get() == VK_NULL_HANDLE || allocation.sets.empty()) return;
 
     std::vector<VkDescriptorSet> sets(static_cast<size_t>(allocation.sets.size()));
@@ -81,7 +81,7 @@ void DescriptorSet::linkStorageBuffer(const Buffer& buffer, uint32_t binding) {
     storageInfos.push_back({ storageInfo, binding });
 }
 
-void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, uint32_t binding) {
+void DescriptorSet::linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler.get();
     imageInfo.imageView = view.get();
@@ -89,7 +89,7 @@ void DescriptorSet::linkCombinedImageSampler(ImageView view, Sampler sampler, ui
     imageInfos.push_back({ imageInfo, binding });
 }
 
-void DescriptorSet::update(LogicalDevice device) {
+void DescriptorSet::update(const LogicalDevice& device) {
     descriptorWrites.clear();
 
     for (const std::pair<VkDescriptorBufferInfo, uint32_t>& pair : bufferInfos) {
@@ -132,7 +132,7 @@ void DescriptorSet::update(LogicalDevice device) {
     vkUpdateDescriptorSets(device.get(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
-void DescriptorSet::bind(CommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {
+void DescriptorSet::bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {
     vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 }
 

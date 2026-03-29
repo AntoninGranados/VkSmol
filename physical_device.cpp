@@ -2,18 +2,19 @@
 
 #include "./instance.hpp"
 #include "./queue.hpp"
-#include "./utils.hpp"
 
 #include <map>
 
-PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) : physicalDevice(physicalDevice) {}
+PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) {
+    rawHandle() = physicalDevice;
+}
 PhysicalDevice::PhysicalDevice() {}
 
-void PhysicalDevice::init(Instance instance) {
+void PhysicalDevice::init(const Instance& instance) {
     init(instance, PhysicalDevice::scoreDeviceDefault);
 }
 
-void PhysicalDevice::init(Instance instance, std::function<int(PhysicalDevice)> scoringFunction) {
+void PhysicalDevice::init(const Instance& instance, std::function<int(const PhysicalDevice&)> scoringFunction) {
     // Find all the GPUs connected
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance.get(), &deviceCount, nullptr);
@@ -31,13 +32,13 @@ void PhysicalDevice::init(Instance instance, std::function<int(PhysicalDevice)> 
     
     // Select the highest ranked GPU
     if (candidates.rbegin()->first > 0)
-        physicalDevice = candidates.rbegin()->second;
+        rawHandle() = candidates.rbegin()->second;
     else
         throw std::runtime_error("Failed to locate a suitable GPU");
 }
 
 // Scores every device with no difference
-int PhysicalDevice::scoreDeviceDefault(PhysicalDevice device) {
+int PhysicalDevice::scoreDeviceDefault(const PhysicalDevice& device) {
     // VkPhysicalDeviceProperties deviceProperties;
     // vkGetPhysicalDeviceProperties(device, &deviceProperties);
     // VkPhysicalDeviceFeatures deviceFeatures;

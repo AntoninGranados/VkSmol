@@ -17,24 +17,24 @@ public:
     GraphicsPipeline() {};
 
     void init(
-        LogicalDevice device,
+        const LogicalDevice& device,
         VkPipelineRenderingCreateInfoKHR pipelineCreate,
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        std::vector<Shader> shaders,
-        std::vector<DescriptorSetLayout> setLayouts,
+        const std::vector<const Shader*>& shaders,
+        const std::vector<const DescriptorSetLayout*>& setLayouts,
         GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,
     );
-    void destroy(LogicalDevice device);
+    void destroy(const LogicalDevice& device);
     VkPipeline get() { return pipeline; };
     VkPipelineLayout getLayout() { return pipelineLayout; };
 
-    void bind(CommandBuffer commandBuffer);
-    void setViewport(CommandBuffer commandBuffer, VkViewport viewport); // In case it is set to be dynamic
-    void setScissor(CommandBuffer commandBuffer, VkRect2D scissor);     // In case it is set to be dynamic
+    void bind(const CommandBuffer& commandBuffer);
+    void setViewport(const CommandBuffer& commandBuffer, VkViewport viewport); // In case it is set to be dynamic
+    void setScissor(const CommandBuffer& commandBuffer, VkRect2D scissor);     // In case it is set to be dynamic
     
-    void draw(CommandBuffer commandBuffer, size_t vertexCount);
-    void drawIndexed(CommandBuffer commandBuffer, size_t indexCount);
+    void draw(const CommandBuffer& commandBuffer, size_t vertexCount);
+    void drawIndexed(const CommandBuffer& commandBuffer, size_t indexCount);
 
 private:
     VkPipeline pipeline = VK_NULL_HANDLE;

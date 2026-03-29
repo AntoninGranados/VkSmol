@@ -3,25 +3,21 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <vector>
+#include "../unique_handle.hpp"
 
 class LogicalDevice;
 class CommandPool;
 class Queue;
 
-class CommandBuffer {
+class CommandBuffer: public UniqueHandle<VkCommandBuffer, VK_NULL_HANDLE> {
 public:
-    void alloc(LogicalDevice device, CommandPool pool);
-    void free(LogicalDevice device, CommandPool pool);
-    VkCommandBuffer get() { return commandBuffer; };
+    void alloc(const LogicalDevice& device, const CommandPool& pool);
+    void free(const LogicalDevice& device, const CommandPool& pool);
 
     void beginRecording(VkCommandBufferUsageFlagBits flags = (VkCommandBufferUsageFlagBits)0);
     void endRecording();
     void reset();
 
-    static CommandBuffer beginSingleTimeCommands(LogicalDevice device, CommandPool pool);
-    static void endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer& commandBuffer);
-
-private:
-    VkCommandBuffer commandBuffer;
+    static CommandBuffer beginSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool);
+    static void endSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool, Queue queue, CommandBuffer& commandBuffer);
 };

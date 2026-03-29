@@ -2,12 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
-#include <set>
 #include <vector>
+
+#include "unique_handle.hpp"
 
 class PhysicalDevice;
 
-class LogicalDevice {
+class LogicalDevice: public UniqueHandle<VkDevice, VK_NULL_HANDLE> {
 public:
     void init(
         PhysicalDevice physicalDevice,
@@ -16,10 +17,6 @@ public:
         std::vector<const char*> validationLayers
     );
     void destroy();
-    VkDevice get() { return device; };
 
-    void waitIdle();
-
-private:
-    VkDevice device;
+    void waitIdle() const;
 };

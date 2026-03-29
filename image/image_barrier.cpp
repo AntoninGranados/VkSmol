@@ -3,7 +3,7 @@
 #include "../command/command_buffer.hpp"
 
 void ImageBarrier::call(
-    CommandBuffer commandBuffer,
+    const CommandBuffer& commandBuffer,
     VkImage image,
     VkImageLayout srcLayout, VkImageLayout dstLayout,
     VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,

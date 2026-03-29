@@ -9,10 +9,8 @@
 #include "./sync/fence.hpp"
 #include "./utils.hpp"
 
-#include <print>
-
 // Search for the graphics queue and the present queue
-QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surface) {
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
@@ -44,25 +42,25 @@ QueueFamilyIndices findQueueFamilies(PhysicalDevice physicalDevice, Surface surf
 }
 
 
-void Queue::init(LogicalDevice device, uint32_t queueFamilyIndex) {
-    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &queue);
+void Queue::init(const LogicalDevice& device, uint32_t queueFamilyIndex) {
+    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &rawHandle());
 }
 
 void Queue::submit(
-    std::vector<CommandBuffer> commandBuffers,
-    Fence fence,
-    std::vector<Semaphore> waitSemaphores, std::vector<VkPipelineStageFlags> waitStages,
-    std::vector<Semaphore> signalSemaphores
+    const std::vector<const CommandBuffer*>& commandBuffers,
+    const Fence& fence,
+    const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+    const std::vector<const Semaphore*>& signalSemaphores
 ) {
     std::vector<VkSemaphore> waitVkSemaphore, signalVkSemaphore;
-    for (Semaphore waitSemaphore: waitSemaphores)
-        waitVkSemaphore.emplace_back(waitSemaphore.get());
-    for (Semaphore signalSemaphore: signalSemaphores)
-        signalVkSemaphore.emplace_back(signalSemaphore.get());
+    for (const Semaphore* waitSemaphore: waitSemaphores)
+        waitVkSemaphore.emplace_back(waitSemaphore->get());
+    for (const Semaphore* signalSemaphore: signalSemaphores)
+        signalVkSemaphore.emplace_back(signalSemaphore->get());
 
     std::vector<VkCommandBuffer> vkCommandBuffers;
-    for (CommandBuffer commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer.get());
+    for (const CommandBuffer* commandBuffer: commandBuffers)
+        vkCommandBuffers.emplace_back(commandBuffer->get());
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -74,44 +72,44 @@ void Queue::submit(
     submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalVkSemaphore.size());
     submitInfo.pSignalSemaphores = signalVkSemaphore.data();
 
-    vkCheck(vkQueueSubmit(queue, 1, &submitInfo, fence.get()), "Failed to submit queue");
+    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, fence.get()), "Failed to submit queue");
 }
 
-void Queue::submit(std::vector<CommandBuffer> commandBuffers) {
+void Queue::submit(const std::vector<const CommandBuffer*>& commandBuffers) {
     std::vector<VkCommandBuffer> vkCommandBuffers;
-    for (CommandBuffer commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer.get());
+    for (const CommandBuffer* commandBuffer: commandBuffers)
+        vkCommandBuffers.emplace_back(commandBuffer->get());
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
     submitInfo.pCommandBuffers = vkCommandBuffers.data();
 
-    vkCheck(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
+    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
 }
 
 uint32_t Queue::present(
-    std::vector<Swapchain> swapchains,
-    std::vector<uint32_t> frameIndices,
-    std::vector<Semaphore> waitSemaphores
+    const std::vector<const Swapchain*>& swapchains,
+    const std::vector<uint32_t>& frameIndices,
+    const std::vector<const Semaphore*>& waitSemaphores
 ) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     
     std::vector<VkSemaphore> waitVkSemaphore;
-    for (Semaphore waitSemaphore: waitSemaphores)
-        waitVkSemaphore.emplace_back(waitSemaphore.get());
+    for (const Semaphore* waitSemaphore: waitSemaphores)
+        waitVkSemaphore.emplace_back(waitSemaphore->get());
     presentInfo.waitSemaphoreCount = static_cast<uint32_t>(waitVkSemaphore.size());
     presentInfo.pWaitSemaphores = waitVkSemaphore.data();
 
     std::vector<VkSwapchainKHR> vkSwapchain;
-    for (Swapchain swapchain: swapchains)
-        vkSwapchain.emplace_back(swapchain.get());
+    for (const Swapchain* swapchain: swapchains)
+        vkSwapchain.emplace_back(swapchain->get());
     presentInfo.swapchainCount = static_cast<uint32_t>(vkSwapchain.size());;
     presentInfo.pSwapchains = vkSwapchain.data();
     presentInfo.pImageIndices = frameIndices.data();
 
-    VkResult result = vkQueuePresentKHR(queue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(rawHandle(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         return RECREATE_SWAPCHAIN;
     else if (result != VK_SUCCESS)
@@ -121,5 +119,5 @@ uint32_t Queue::present(
 }
 
 void Queue::wait() {
-    vkQueueWaitIdle(queue);
+    vkQueueWaitIdle(rawHandle());
 }

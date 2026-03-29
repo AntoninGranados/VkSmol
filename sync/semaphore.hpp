@@ -2,14 +2,12 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../unique_handle.hpp"
+
 class LogicalDevice;
 
-class Semaphore {
+class Semaphore: public UniqueHandle<VkSemaphore, VK_NULL_HANDLE> {
 public:
-    void init(LogicalDevice device);
-    void destroy(LogicalDevice device);
-    VkSemaphore get() { return semaphore; };
-
-private:
-    VkSemaphore semaphore;
+    void init(const LogicalDevice& device);
+    void destroy(const LogicalDevice& device);
 };

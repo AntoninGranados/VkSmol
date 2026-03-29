@@ -4,20 +4,18 @@
 
 #include <functional>
 
+#include "borrowed_handle.hpp"
+
 class Instance;
 
-class PhysicalDevice {
+class PhysicalDevice: public BorrowedHandle<VkPhysicalDevice, VK_NULL_HANDLE> {
 public:
     PhysicalDevice(VkPhysicalDevice physicalDevice);
     PhysicalDevice();
 
-    void init(Instance instance);
-    void init(Instance instance, std::function<int(PhysicalDevice)> scoringFunction);
-    // void destroy();  //? We don't need to destroy the physical device
-    VkPhysicalDevice get() { return physicalDevice; };
+    void init(const Instance& instance);
+    void init(const Instance& instance, std::function<int(const PhysicalDevice&)> scoringFunction);
 
 private:
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-
-    static int scoreDeviceDefault(PhysicalDevice device);
+    static int scoreDeviceDefault(const PhysicalDevice& device);
 };

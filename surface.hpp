@@ -2,15 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
+#include "unique_handle.hpp"
+
 class Window;
 class Instance;
 
-class Surface {
+class Surface: public UniqueHandle<VkSurfaceKHR, VK_NULL_HANDLE> {
 public:
-    void init(Instance instance, Window window);
-    void destroy(Instance instance);
-    VkSurfaceKHR get() { return surface; };
-
-private:
-    VkSurfaceKHR surface;
+    void init(const Instance& instance, const Window& window);
+    void destroy(const Instance& instance);
 };

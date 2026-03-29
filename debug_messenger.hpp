@@ -2,19 +2,18 @@
 
 #include <vulkan/vulkan.h>
 
+#include "unique_handle.hpp"
+
 class Instance;
 
-class DebugMessenger {
+class DebugMessenger: public UniqueHandle<VkDebugUtilsMessengerEXT, VK_NULL_HANDLE> {
 public:
-    void init(Instance instance);
-    void destroy(Instance instance);
-    VkDebugUtilsMessengerEXT get() { return messenger; };
+    void init(const Instance& instance);
+    void destroy(const Instance& instance);
 
     static void populateCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
 private:
-    VkDebugUtilsMessengerEXT messenger;
-
     static VKAPI_ATTR VkBool32 VKAPI_CALL callback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -24,13 +23,13 @@ private:
 
     // We need this proxy function because we have to load `vkCreateDebugUtilsMessengerEXT` manually
     static VkResult CreateDebugUtilsMessengerEXT(
-        Instance instance,
+        const Instance& instance,
         const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
         const VkAllocationCallbacks* pAllocator,
         VkDebugUtilsMessengerEXT* pDebugMessenger
     );
 
-    static void DestroyDebugUtilsMessengerEXT(Instance instance,
+    static void DestroyDebugUtilsMessengerEXT(const Instance& instance,
         VkDebugUtilsMessengerEXT debugMessenger, const
         VkAllocationCallbacks* pAllocator
     );

@@ -8,15 +8,15 @@ class LogicalDevice;
 
 class DynamicRenderer {
 public:
-    void init(LogicalDevice device);
+    void init(const LogicalDevice& device);
     
     void begin(
-        CommandBuffer commandBuffer,
+        const CommandBuffer& commandBuffer,
         VkImageView imageView, VkImageLayout imageLayout,
         VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
         VkClearColorValue clearColor, VkRect2D renderArea
     );
-    void end(CommandBuffer commandBuffer);
+    void end(const CommandBuffer& commandBuffer);
 
 private:
     PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;

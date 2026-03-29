@@ -4,10 +4,10 @@
 #include "./instance.hpp"
 #include "./utils.hpp"
 
-void Surface::init(Instance instance, Window window) {
-    vkCheck(glfwCreateWindowSurface(instance.get(), window.get(), nullptr, &surface), "Failed to create window surface");
+void Surface::init(const Instance& instance, const Window& window) {
+    vkCheck(glfwCreateWindowSurface(instance.get(), window.get(), nullptr, &rawHandle()), "Failed to create window surface");
 }
 
-void Surface::destroy(Instance instance) {
-    vkDestroySurfaceKHR(instance.get(), surface, nullptr);
+void Surface::destroy(const Instance& instance) {
+    vkDestroySurfaceKHR(instance.get(), rawHandle(), nullptr);
 }

@@ -6,9 +6,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <limits>
-#include <algorithm>
-#include <optional>
 
 class Window;
 class PhysicalDevice;
@@ -22,17 +19,18 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-SwapChainSupportDetails querySwapChainSupport(PhysicalDevice device, Surface surface);
+SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, const Surface& surface);
 
 
 class Swapchain {
 public:
-    void init(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window, std::optional<Swapchain> oldSwapChain = std::nullopt);
-    void destroy(LogicalDevice device);
+    void init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window, const Swapchain* oldSwapChain = nullptr);
+    void destroy(const LogicalDevice& device);
     // Does not currently support using the old swapchain
     // Recreate the swapchain (and its associated framebuffer)
-    void recreate(LogicalDevice device, PhysicalDevice physicalDevice, Surface surface, Window window);
-    VkSwapchainKHR get() { return swapchain; };
+    void recreate(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window);
+    VkSwapchainKHR& get() { return swapchain; };
+    const VkSwapchainKHR& get() const { return swapchain; };
 
     std::vector<VkImage> getImages() { return images; };
     VkImage getImage(size_t i) { return images[i]; };
@@ -43,7 +41,7 @@ public:
     VkExtent2D getExtent() { return extent; };
 
     // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
-    uint32_t getNextImageIndex(LogicalDevice device, Semaphore semaphore);
+    uint32_t getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);
 
 private:
     VkSwapchainKHR swapchain;
@@ -55,9 +53,9 @@ private:
     VkExtent2D extent;
 
     // TODO: switch to the wrappers Image and ImageView
-    void initImages(LogicalDevice device);
-    void initImageViews(LogicalDevice device);
-    void destroyImageViews(LogicalDevice device);
+    void initImages(const LogicalDevice& device);
+    void initImageViews(const LogicalDevice& device);
+    void destroyImageViews(const LogicalDevice& device);
 
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);

@@ -5,18 +5,18 @@
 #include "../queue.hpp"
 #include "../utils.hpp"
 
-void CommandBuffer::alloc(LogicalDevice device, CommandPool pool) {
+void CommandBuffer::alloc(const LogicalDevice& device, const CommandPool& pool) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = pool.get();
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;  // Needs to be a component (variable)
     allocInfo.commandBufferCount = 1;   // Would need a static function to allocation multiple command buffers and return a std::vector
 
-    vkCheck(vkAllocateCommandBuffers(device.get(), &allocInfo, &commandBuffer), "Failed to allocate command buffer");
+    vkCheck(vkAllocateCommandBuffers(device.get(), &allocInfo, &rawHandle()), "Failed to allocate command buffer");
 }
 
-void CommandBuffer::free(LogicalDevice device, CommandPool pool) {
-    vkFreeCommandBuffers(device.get(), pool.get(), 1, &commandBuffer);
+void CommandBuffer::free(const LogicalDevice& device, const CommandPool& pool) {
+    vkFreeCommandBuffers(device.get(), pool.get(), 1, &rawHandle());
 }
 
 void CommandBuffer::beginRecording(VkCommandBufferUsageFlagBits flags) {
@@ -24,28 +24,28 @@ void CommandBuffer::beginRecording(VkCommandBufferUsageFlagBits flags) {
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = flags;
 
-    vkCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin recording command buffer");
+    vkCheck(vkBeginCommandBuffer(rawHandle(), &beginInfo), "Failed to begin recording command buffer");
 }
 
 void CommandBuffer::endRecording() {
-    vkCheck(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer");
+    vkCheck(vkEndCommandBuffer(rawHandle()), "Failed to record command buffer");
 }
 
 void CommandBuffer::reset() {
-    vkResetCommandBuffer(commandBuffer, 0);
+    vkResetCommandBuffer(rawHandle(), 0);
 }
 
-CommandBuffer CommandBuffer::beginSingleTimeCommands(LogicalDevice device, CommandPool pool) {
+CommandBuffer CommandBuffer::beginSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool) {
     CommandBuffer commandBuffer;
     commandBuffer.alloc(device, pool);
     commandBuffer.beginRecording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     return commandBuffer;
 }
 
-void CommandBuffer::endSingleTimeCommands(LogicalDevice device, CommandPool pool, Queue queue, CommandBuffer& commandBuffer) {
+void CommandBuffer::endSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool, Queue queue, CommandBuffer& commandBuffer) {
     commandBuffer.endRecording();
 
-    queue.submit({ commandBuffer });
+    queue.submit({ &commandBuffer });
     queue.wait();
 
     commandBuffer.free(device, pool);

@@ -7,7 +7,7 @@ class CommandBuffer;
 class ImageBarrier {
 public:
     void call(
-        CommandBuffer commandBuffer,
+        const CommandBuffer& commandBuffer,
         VkImage image,
         VkImageLayout srcLayout, VkImageLayout dstLayout,
         VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,

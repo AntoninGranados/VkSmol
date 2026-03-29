@@ -4,13 +4,13 @@
 #include "./swapchain.hpp"
 #include "./logical_device.hpp"
 
-void DynamicRenderer::init(LogicalDevice device) {
+void DynamicRenderer::init(const LogicalDevice& device) {
     vkCmdBeginRenderingKHR = (PFN_vkCmdBeginRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdBeginRenderingKHR");
     vkCmdEndRenderingKHR = ((PFN_vkCmdEndRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdEndRenderingKHR"));
 }
 
 void DynamicRenderer::begin(
-    CommandBuffer commandBuffer, 
+    const CommandBuffer& commandBuffer, 
     VkImageView imageView, VkImageLayout imageLayout,
     VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
     VkClearColorValue clearColor, VkRect2D renderArea
@@ -33,6 +33,6 @@ void DynamicRenderer::begin(
     vkCmdBeginRenderingKHR(commandBuffer.get(), &renderInfo);
 }
 
-void DynamicRenderer::end(CommandBuffer commandBuffer) {
+void DynamicRenderer::end(const CommandBuffer& commandBuffer) {
     vkCmdEndRenderingKHR(commandBuffer.get());
 }

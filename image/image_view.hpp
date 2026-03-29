@@ -2,16 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../unique_handle.hpp"
+
 class LogicalDevice;
 class Image;
 
-class ImageView {
+class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE> {
 public:
-    void init(LogicalDevice device, Image image);
-    void destroy(LogicalDevice device);
-
-    VkImageView get() { return imageView; }
-
-private:
-    VkImageView imageView;
+    void init(const LogicalDevice& device, const Image& image);
+    void destroy(const LogicalDevice& device);
 };

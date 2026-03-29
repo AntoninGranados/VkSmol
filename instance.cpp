@@ -1,5 +1,7 @@
 #include "instance.hpp"
 
+#include <algorithm>
+
 #include "./debug_messenger.hpp"
 #include "./utils.hpp"
 
@@ -36,11 +38,11 @@ void Instance::init(
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     #endif
 
-    vkCheck(vkCreateInstance(&createInfo, nullptr, &instance), "Failed to create instance");
+    vkCheck(vkCreateInstance(&createInfo, nullptr, &rawHandle()), "Failed to create instance");
 }
 
 void Instance::destroy() {
-    vkDestroyInstance(instance, nullptr);
+    vkDestroyInstance(rawHandle(), nullptr);
 }
 
 

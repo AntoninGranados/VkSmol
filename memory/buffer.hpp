@@ -19,21 +19,21 @@ public:
 
     // TODO: maybe combine init/alloc and destroye/free ?
     void init(
-        LogicalDevice device,
+        const LogicalDevice& device,
         VkBufferUsageFlags usage,
         size_t size,
         bool persistentMapping = false
     );
     void initFilled(
-        LogicalDevice device, PhysicalDevice physicalDevice,
+        const LogicalDevice& device, PhysicalDevice physicalDevice,
         VkBufferUsageFlags usage,
-        CommandPool transferCommandPool, Queue transferQueue,
+        const CommandPool& transferCommandPool, Queue transferQueue,
         size_t size, void* data
     );
 
-    void alloc(LogicalDevice device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
-    void free(LogicalDevice device);
-    void destroy(LogicalDevice device);
+    void alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
+    void free(const LogicalDevice& device);
+    void destroy(const LogicalDevice& device);
 
     VkBuffer& get() { return buffer; };
     const VkBuffer& get() const { return buffer; };
@@ -42,13 +42,13 @@ public:
     VkBufferUsageFlags getUsage() { return usage; };
     const VkBufferUsageFlags getUsage() const { return usage; };
     
-    void fill(LogicalDevice device, void* data);
-    void read(LogicalDevice device, void* out, size_t bytes, size_t offset = 0);
-    static void copy(const Buffer& srcBuffer, const Buffer& dstBuffer, LogicalDevice device, CommandPool transferCommandPool, Queue transferQueue);
+    void fill(const LogicalDevice& device, void* data);
+    void read(const LogicalDevice& device, void* out, size_t bytes, size_t offset = 0);
+    static void copy(const Buffer& srcBuffer, const Buffer& dstBuffer, const LogicalDevice& device, const CommandPool& transferCommandPool, Queue transferQueue);
 
     // TODO: make a static version to bind multiple buffer
-    void bindVertex(CommandBuffer commandBuffer);
-    void bindIndex(CommandBuffer commandBuffer, VkIndexType indexType);
+    void bindVertex(const CommandBuffer& commandBuffer);
+    void bindIndex(const CommandBuffer& commandBuffer, VkIndexType indexType);
 
     static uint32_t findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 

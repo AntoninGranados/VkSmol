@@ -6,7 +6,9 @@
 #include <string>
 #include <functional>
 
-class Window {
+#include "unique_handle.hpp"
+
+class Window: public UniqueHandle<GLFWwindow*, nullptr> {
 public:
     using FramebufferResizeFn = std::function<void(int, int)>;
     using CursorPosFn = std::function<void(double, double)>;
@@ -14,8 +16,6 @@ public:
 
     void init(int width, int height, std::string name);
     void destroy();
-    GLFWwindow* get() { return window; };
-    const GLFWwindow* get() const { return window; };
 
     bool shouldClose();
     void pauseWhileMinimized();
@@ -29,7 +29,6 @@ private:
     static void cursorPosBridge(GLFWwindow* window, double x, double y);
     static void scrollBridge(GLFWwindow* window, double xoffset, double yoffset);
 
-    GLFWwindow* window = nullptr;
     FramebufferResizeFn onFramebufferResize;
     CursorPosFn onCursorPos;
     ScrollFn onScroll;

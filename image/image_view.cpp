@@ -4,7 +4,7 @@
 #include "../logical_device.hpp"
 #include "../utils.hpp"
 
-void ImageView::init(LogicalDevice device, Image image) {
+void ImageView::init(const LogicalDevice& device, const Image& image) {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image.get();
@@ -16,9 +16,12 @@ void ImageView::init(LogicalDevice device, Image image) {
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    vkCheck(vkCreateImageView(device.get(), &viewInfo, nullptr, &imageView), "Failed to create the image view");
+    vkCheck(vkCreateImageView(device.get(), &viewInfo, nullptr, &rawHandle()), "Failed to create the image view");
 }
 
-void ImageView::destroy(LogicalDevice device) {
-    vkDestroyImageView(device.get(), imageView, nullptr);
+void ImageView::destroy(const LogicalDevice& device) {
+    if (isValid()) {
+        vkDestroyImageView(device.get(), rawHandle(), nullptr);
+    }
+    resetHandle();
 }

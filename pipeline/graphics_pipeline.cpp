@@ -7,11 +7,11 @@
 #include "../utils.hpp"
 
 void GraphicsPipeline::init(
-    LogicalDevice device,
+    const LogicalDevice& device,
     VkPipelineRenderingCreateInfoKHR pipelineCreate,
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-    std::vector<Shader> shaders,
-    std::vector<DescriptorSetLayout> setLayouts,
+    const std::vector<const Shader*>& shaders,
+    const std::vector<const DescriptorSetLayout*>& setLayouts,
     GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
 ) {
@@ -71,8 +71,8 @@ void GraphicsPipeline::init(
 
     // Pipeline layout
     std::vector<VkDescriptorSetLayout> vkSetLayouts;
-    for (DescriptorSetLayout setLayout : setLayouts)
-        vkSetLayouts.emplace_back(setLayout.get());
+    for (const DescriptorSetLayout* setLayout : setLayouts)
+        vkSetLayouts.emplace_back(setLayout->get());
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -81,8 +81,8 @@ void GraphicsPipeline::init(
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create pipeline layout");
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
-    for (Shader shader : shaders)
-        shaderStages.emplace_back(shader.getShaderStageCreateInfo());
+    for (const Shader* shader : shaders)
+        shaderStages.emplace_back(shader->getShaderStageCreateInfo());
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -112,27 +112,27 @@ void GraphicsPipeline::init(
 
 }
 
-void GraphicsPipeline::destroy(LogicalDevice device) {
+void GraphicsPipeline::destroy(const LogicalDevice& device) {
     vkDestroyPipeline(device.get(), pipeline, nullptr);
     vkDestroyPipelineLayout(device.get(), pipelineLayout, nullptr);
 }
 
-void GraphicsPipeline::bind(CommandBuffer commandBuffer) {
+void GraphicsPipeline::bind(const CommandBuffer& commandBuffer) {
     vkCmdBindPipeline(commandBuffer.get(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
-void GraphicsPipeline::setViewport(CommandBuffer commandBuffer, VkViewport viewport) {
+void GraphicsPipeline::setViewport(const CommandBuffer& commandBuffer, VkViewport viewport) {
     vkCmdSetViewport(commandBuffer.get(), 0, 1, &viewport);
 }
 
-void GraphicsPipeline::setScissor(CommandBuffer commandBuffer, VkRect2D scissor) {
+void GraphicsPipeline::setScissor(const CommandBuffer& commandBuffer, VkRect2D scissor) {
     vkCmdSetScissor(commandBuffer.get(), 0, 1, &scissor);
 }
 
-void GraphicsPipeline::draw(CommandBuffer commandBuffer, size_t vertexCount) {
+void GraphicsPipeline::draw(const CommandBuffer& commandBuffer, size_t vertexCount) {
     vkCmdDraw(commandBuffer.get(), vertexCount, 1, 0, 0);
 }
 
-void GraphicsPipeline::drawIndexed(CommandBuffer commandBuffer, size_t indexCount) {
+void GraphicsPipeline::drawIndexed(const CommandBuffer& commandBuffer, size_t indexCount) {
     vkCmdDrawIndexed(commandBuffer.get(), indexCount, 1, 0, 0, 0);
 }

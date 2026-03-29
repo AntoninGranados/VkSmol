@@ -1,5 +1,7 @@
 #include "logical_device.hpp"
 
+#include <set>
+
 #include "./queue.hpp"
 #include "./physical_device.hpp"
 #include "./utils.hpp"
@@ -50,13 +52,13 @@ void LogicalDevice::init(
         createInfo.enabledLayerCount = 0;
     #endif
 
-    vkCheck(vkCreateDevice(physicalDevice.get(), &createInfo, nullptr, &device), "Failed to create logical device");
+    vkCheck(vkCreateDevice(physicalDevice.get(), &createInfo, nullptr, &rawHandle()), "Failed to create logical device");
 }
 
 void LogicalDevice::destroy() {
-    vkDestroyDevice(device, nullptr);
+    vkDestroyDevice(rawHandle(), nullptr);
 }
 
-void LogicalDevice::waitIdle() {
-    vkDeviceWaitIdle(device);
+void LogicalDevice::waitIdle() const {
+    vkDeviceWaitIdle(rawHandle());
 }

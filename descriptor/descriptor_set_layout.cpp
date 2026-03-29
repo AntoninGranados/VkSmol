@@ -3,17 +3,17 @@
 #include "../logical_device.hpp"
 #include "../utils.hpp"
 
-void DescriptorSetLayout::init(LogicalDevice device) {
+void DescriptorSetLayout::init(const LogicalDevice& device) {
     VkDescriptorSetLayoutCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     createInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     createInfo.pBindings = bindings.data();
 
-    vkCheck(vkCreateDescriptorSetLayout(device.get(), &createInfo, nullptr, &descritorSetLayout), "Failed to create descriptor set layout");
+    vkCheck(vkCreateDescriptorSetLayout(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create descriptor set layout");
 }
 
-void DescriptorSetLayout::destroy(LogicalDevice device) {
-    vkDestroyDescriptorSetLayout(device.get(), descritorSetLayout, nullptr);
+void DescriptorSetLayout::destroy(const LogicalDevice& device) {
+    vkDestroyDescriptorSetLayout(device.get(), rawHandle(), nullptr);
 }
 
 void DescriptorSetLayout::addBinding(VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount) {

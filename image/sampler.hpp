@@ -2,16 +2,14 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../unique_handle.hpp"
+
 class LogicalDevice;
 class PhysicalDevice;
 
 
-class Sampler {
+class Sampler: public UniqueHandle<VkSampler, VK_NULL_HANDLE> {
 public:
-    void init(LogicalDevice device, PhysicalDevice physicalDevice);
-    void destroy(LogicalDevice device);
-
-    VkSampler get() { return sampler; }
-private:
-    VkSampler sampler;
+    void init(const LogicalDevice& device, PhysicalDevice physicalDevice);
+    void destroy(const LogicalDevice& device);
 };

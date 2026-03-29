@@ -17,8 +17,8 @@ public:
 
     DescriptorPool() = default;
 
-    void init(LogicalDevice device);
-    void destroy(LogicalDevice device);
+    void init(const LogicalDevice& device);
+    void destroy(const LogicalDevice& device);
     VkDescriptorPool get() const { return descriptorPool; };
 
     void addPoolSize(VkDescriptorType descriptorType, uint32_t descriptorCount);

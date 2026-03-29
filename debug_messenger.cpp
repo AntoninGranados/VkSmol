@@ -1,23 +1,23 @@
 #include "debug_messenger.hpp"
 
 #include "./instance.hpp"
-#include "./utils.hpp"
 
-void DebugMessenger::init(Instance instance) {
+void DebugMessenger::init(const Instance& instance) {
     // Only init the debug messenger if we are in debug mode
-    #ifndef NDEBUG
-        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-        populateCreateInfo(createInfo);
-        vkCheck(CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &messenger), "Failed to set up debug messenger");
-    #else
-        return;
-    #endif
+#ifndef NDEBUG
+    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    populateCreateInfo(createInfo);
+    vkCheck(CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &rawHandle()), "Failed to set up debug messenger");
+#else
+    return;
+#endif
 }
 
-void DebugMessenger::destroy(Instance instance) {
-    #ifndef NDEBUG
-        DestroyDebugUtilsMessengerEXT(instance, messenger, nullptr);
-    #endif
+void DebugMessenger::destroy(const Instance& instance) {
+    if (isValid()) {
+        DestroyDebugUtilsMessengerEXT(instance, rawHandle(), nullptr);
+    }
+    resetHandle();
 }
 
 void DebugMessenger::populateCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
@@ -51,7 +51,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessenger::callback(
 
 // Find the `vkCreateDebugUtilsMessengerEXT` function
 VkResult DebugMessenger::CreateDebugUtilsMessengerEXT(
-    Instance instance,
+    const Instance& instance,
     const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
     VkDebugUtilsMessengerEXT* pDebugMessenger
@@ -63,7 +63,8 @@ VkResult DebugMessenger::CreateDebugUtilsMessengerEXT(
 }
 
 // Find the `vkDestroyDebugUtilsMessengerEXT` function
-void DebugMessenger::DestroyDebugUtilsMessengerEXT(Instance instance,
+void DebugMessenger::DestroyDebugUtilsMessengerEXT(
+    const Instance& instance,
     VkDebugUtilsMessengerEXT debugMessenger, const
     VkAllocationCallbacks* pAllocator
 ) {

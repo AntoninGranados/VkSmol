@@ -5,7 +5,7 @@
 
 #include "../logical_device.hpp"
 
-void DescriptorSetGroup::destroy(LogicalDevice device) {
+void DescriptorSetGroup::destroy(const LogicalDevice& device) {
     DescriptorSet::free(device, *this);
     pool.destroy(device);
 }

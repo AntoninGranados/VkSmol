@@ -4,29 +4,29 @@
 void Window::init(int width, int height, std::string name) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    window = glfwCreateWindow(width, height, name.c_str(), nullptr, nullptr);
-    if (!window) throw std::runtime_error("Could not create GLFW window");
+    rawHandle() = glfwCreateWindow(width, height, name.c_str(), nullptr, nullptr);
+    if (!isValid()) throw std::runtime_error("Could not create GLFW window");
 
-    glfwSetWindowUserPointer(window, this);
+    glfwSetWindowUserPointer(rawHandle(), this);
 
-    glfwSetFramebufferSizeCallback(window, &Window::framebufferResizeBridge);
-    glfwSetCursorPosCallback(window, &Window::cursorPosBridge);
-    glfwSetScrollCallback(window, &Window::scrollBridge);
+    glfwSetFramebufferSizeCallback(rawHandle(), &Window::framebufferResizeBridge);
+    glfwSetCursorPosCallback(rawHandle(), &Window::cursorPosBridge);
+    glfwSetScrollCallback(rawHandle(), &Window::scrollBridge);
 }
 
 void Window::destroy() {
-    glfwDestroyWindow(window);
+    glfwDestroyWindow(rawHandle());
 }
 
 bool Window::shouldClose() {
-    return glfwWindowShouldClose(window);
+    return glfwWindowShouldClose(rawHandle());
 }
 
 void Window::pauseWhileMinimized() {
     int width = 0, height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
+    glfwGetFramebufferSize(rawHandle(), &width, &height);
     while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
+        glfwGetFramebufferSize(rawHandle(), &width, &height);
         glfwWaitEvents();
     }
 }
