@@ -2,8 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
-#include "../unique_handle.hpp"
-#include "../tracked_resource.hpp"
+#include "../base/unique_handle.hpp"
+#include "../base/tracked_resource.hpp"
 #include "engine/resource_registry.hpp"
 
 class LogicalDevice;

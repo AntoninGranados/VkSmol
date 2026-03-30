@@ -1,6 +1,6 @@
 #pragma once
 
-#include "resource_registry.hpp"
+#include "../resource_registry.hpp"
 
 template <ResourceType Type>
 class TrackedResource {
@@ -20,17 +20,15 @@ public:
         return *this;
     }
 
-
     ResourceId getResourceId() const { return resourceId; }
     bool hasResourceId() const { return resourceId != InvalidResourceId; }
-    
+
 protected:
     void setResourceId(ResourceId id) { resourceId = id; }
     void resetResourceId() { resourceId = InvalidResourceId; }
 
     friend class VkSmol;
-    
+
 private:
     ResourceId resourceId = InvalidResourceId;
-
 };

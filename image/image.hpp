@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "../tracked_resource.hpp"
+#include "../base/tracked_resource.hpp"
 
 class LogicalDevice;
 class PhysicalDevice;

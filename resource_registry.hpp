@@ -19,7 +19,7 @@ enum class ResourceType {
     Image,
     ImageView,
     Sampler,
-    DescriptorSetGroup,
+    DescriptorSet,
 };
 
 struct ResourceRecord {

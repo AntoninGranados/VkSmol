@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include "../base/tracked_resource.hpp"
+
 class LogicalDevice;
 class Buffer;
 class CommandBuffer;
@@ -13,7 +15,7 @@ class DescriptorSetLayout;
 class DescriptorPool;
 class DescriptorSetGroup;
 
-class DescriptorSet {
+class DescriptorSet: public TrackedResource<ResourceType::DescriptorSet> {
 public:
     void alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout);
     static void free(const LogicalDevice& device, DescriptorSetGroup& descriptorSetGroup);

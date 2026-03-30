@@ -7,11 +7,11 @@ public:
     const HandleT& get() const { return handle; }
 
     bool isValid() const { return handle != NullHandle; }
-    
+
 protected:
-      void resetHandle() { handle = NullHandle; }
-      HandleT& rawHandle() { return handle; }
-      const HandleT& rawHandle() const { return handle; }
+    void resetHandle() { handle = NullHandle; }
+    HandleT& rawHandle() { return handle; }
+    const HandleT& rawHandle() const { return handle; }
 
 private:
     HandleT handle = NullHandle;

@@ -9,7 +9,7 @@ public:
     UniqueHandle() = default;
     UniqueHandle(const UniqueHandle&) = delete;
     UniqueHandle& operator=(const UniqueHandle&) = delete;
-    
+
     UniqueHandle(UniqueHandle&& other) noexcept
         : handle(std::exchange(other.handle, NullHandle)) {}
 
@@ -28,9 +28,9 @@ public:
     bool isValid() const { return handle != NullHandle; }
 
 protected:
-      void resetHandle() { handle = NullHandle; }
-      HandleT& rawHandle() { return handle; }
-      const HandleT& rawHandle() const { return handle; }
+    void resetHandle() { handle = NullHandle; }
+    HandleT& rawHandle() { return handle; }
+    const HandleT& rawHandle() const { return handle; }
 
 private:
     HandleT handle = NullHandle;

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <vector>
 
-#include "borrowed_handle.hpp"
+#include "base/borrowed_handle.hpp"
 
 class Surface;
 class PhysicalDevice;

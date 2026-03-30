@@ -3,7 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "../unique_handle.hpp"
+#include "../base/unique_handle.hpp"
 
 class LogicalDevice;
 

@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include "../unique_handle.hpp"
+#include "../base/unique_handle.hpp"
 
 class LogicalDevice;
 

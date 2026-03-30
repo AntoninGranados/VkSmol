@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>
-#include <print>
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -12,29 +11,6 @@
 #include "./utils.hpp"
 #include "engine/resource_registry.hpp"
 
-namespace {
-bool containsResourceId(const std::vector<ResourceId>& resourceIds, ResourceId resourceId) {
-    return std::find(resourceIds.begin(), resourceIds.end(), resourceId) != resourceIds.end();
-}
-
-void appendUniqueResourceId(std::vector<ResourceId>& resourceIds, ResourceId resourceId) {
-    if (!containsResourceId(resourceIds, resourceId)) {
-        resourceIds.push_back(resourceId);
-    }
-}
-
-template <typename ResourceT>
-void ensureTrackedResource(const ResourceT& resource, const char* resourceName, uint32_t binding, uint32_t frameIndex) {
-    if (resource.hasResourceId()) return;
-
-    std::ostringstream message;
-    message << "VkSmol::updateDescriptorSetGroup: binding " << binding
-            << " on frame " << frameIndex
-            << " received an untracked " << resourceName;
-    throw std::runtime_error(message.str());
-}
-}
-
 // TODO: get this values from the application (and pass them in the engine.init function)
 const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
@@ -42,6 +18,7 @@ const uint32_t HEIGHT = 720;
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
 #ifndef NDEBUG
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -304,18 +281,18 @@ DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout)
     }
 
     DescriptorSetGroup group(std::move(descriptorPool), std::move(descriptorSetList));
-    group.setResourceId(resourceRegistry.create(ResourceType::DescriptorSetGroup));
-    group.initDependencyTracking(MAX_FRAME_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        group.at(i).setResourceId(resourceRegistry.create(ResourceType::DescriptorSet));
+    }
     return group;
 }
 
 void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
     writer.validate();
 
-    const std::vector<ResourceId> oldDependencies = group.getAllDependencies();
-    std::vector<ResourceId> newFrameDependencies;
-
-    DescriptorSet& set = group.current(frameIndex);
+    DescriptorSet& set = group.at(frameIndex);
+    resourceRegistry.removeAllParents(set.getResourceId());
     set.clear();
 
     for (const DescriptorWrite& write : writer.getWrites()) {
@@ -329,9 +306,8 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
                             << " on frame " << frameIndex << " received a null uniform buffer payload";
                     throw std::runtime_error(message.str());
                 }
-                ensureTrackedResource(*payload.buffer, "uniform buffer", write.binding, frameIndex);
                 set.linkUniformBuffer(*payload.buffer, write.binding);
-                appendUniqueResourceId(newFrameDependencies, payload.buffer->getResourceId());
+                resourceRegistry.addDependency(set.getResourceId(), payload.buffer->getResourceId());
             } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
                 if (!payload.buffer) {
                     std::ostringstream message;
@@ -339,9 +315,8 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
                             << " on frame " << frameIndex << " received a null storage buffer payload";
                     throw std::runtime_error(message.str());
                 }
-                ensureTrackedResource(*payload.buffer, "storage buffer", write.binding, frameIndex);
                 set.linkStorageBuffer(*payload.buffer, write.binding);
-                appendUniqueResourceId(newFrameDependencies, payload.buffer->getResourceId());
+                resourceRegistry.addDependency(set.getResourceId(), payload.buffer->getResourceId());
             } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
                 if (!payload.view || !payload.sampler) {
                     std::ostringstream message;
@@ -350,27 +325,11 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
                             << " received an incomplete combined image sampler payload";
                     throw std::runtime_error(message.str());
                 }
-                ensureTrackedResource(*payload.view, "image view", write.binding, frameIndex);
-                ensureTrackedResource(*payload.sampler, "sampler", write.binding, frameIndex);
                 set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
-                appendUniqueResourceId(newFrameDependencies, payload.view->getResourceId());
-                appendUniqueResourceId(newFrameDependencies, payload.sampler->getResourceId());
+                resourceRegistry.addDependency(set.getResourceId(), payload.view->getResourceId());
+                resourceRegistry.addDependency(set.getResourceId(), payload.sampler->getResourceId());
             }
         }, write.payload);
-    }
-
-    group.replaceDependencies(frameIndex, std::move(newFrameDependencies));
-
-    const std::vector<ResourceId> newDependencies = group.getAllDependencies();
-    for (ResourceId dependency : oldDependencies) {
-        if (!containsResourceId(newDependencies, dependency)) {
-            resourceRegistry.removeDependency(group.getResourceId(), dependency);
-        }
-    }
-    for (ResourceId dependency : newDependencies) {
-        if (!containsResourceId(oldDependencies, dependency)) {
-            resourceRegistry.addDependency(group.getResourceId(), dependency);
-        }
     }
 
     set.update(device);
@@ -380,7 +339,10 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
 void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
     if (!group.isValide()) return;
 
-    resourceRegistry.destroy(group.getResourceId());
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+        resourceRegistry.destroy(group.at(i).getResourceId());
+    }
+
     group.destroy(device);
     group = DescriptorSetGroup{};
 }
