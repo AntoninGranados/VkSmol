@@ -8,7 +8,8 @@
 #include "../utils.hpp"
 
 Buffer::Buffer(Buffer&& other)
-    : persistentMapping(other.persistentMapping),
+    : TrackedResource(std::move(other)),
+      persistentMapping(other.persistentMapping),
       buffer(other.buffer),
       bufferMemory(other.bufferMemory),
       usage(other.usage),
@@ -28,6 +29,8 @@ Buffer& Buffer::operator=(Buffer&& other) {
     if (buffer != VK_NULL_HANDLE || bufferMemory != VK_NULL_HANDLE || bufferMapped != nullptr) {
         throw std::runtime_error("Buffer move assignment requires an empty destination");
     }
+
+    TrackedResource::operator=(std::move(other));
 
     persistentMapping = other.persistentMapping;
     buffer = other.buffer;

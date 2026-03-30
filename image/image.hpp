@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "../tracked_resource.hpp"
+
 class LogicalDevice;
 class PhysicalDevice;
 
@@ -13,7 +15,7 @@ class Queue;
 
 class Buffer;
 
-class Image {
+class Image: public TrackedResource<ResourceType::Image> {
 public:
     Image() = default;
     Image(const Image&) = delete;

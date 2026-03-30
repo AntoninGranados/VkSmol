@@ -13,7 +13,8 @@
 #include "../utils.hpp"
 
 Image::Image(Image&& other)
-    : image(other.image),
+    : TrackedResource(std::move(other)),
+      image(other.image),
       imageMemory(other.imageMemory),
       format(other.format),
       width(other.width),
@@ -31,6 +32,8 @@ Image& Image::operator=(Image&& other) {
     if (image != VK_NULL_HANDLE || imageMemory != VK_NULL_HANDLE) {
         throw std::runtime_error("Image move assignment requires an empty destination");
     }
+
+    TrackedResource::operator=(std::move(other));
 
     image = other.image;
     imageMemory = other.imageMemory;

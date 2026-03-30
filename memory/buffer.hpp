@@ -3,13 +3,15 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "../tracked_resource.hpp"
+
 class PhysicalDevice;
 class LogicalDevice;
 class CommandBuffer;
 class CommandPool;
 class Queue;
 
-class Buffer {
+class Buffer: public TrackedResource<ResourceType::Buffer> {
 public:
     Buffer() = default;
     Buffer(const Buffer&) = delete;

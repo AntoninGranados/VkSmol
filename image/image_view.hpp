@@ -3,11 +3,13 @@
 #include <vulkan/vulkan.h>
 
 #include "../unique_handle.hpp"
+#include "../tracked_resource.hpp"
+#include "engine/resource_registry.hpp"
 
 class LogicalDevice;
 class Image;
 
-class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE> {
+class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE>, public TrackedResource<ResourceType::ImageView> {
 public:
     void init(const LogicalDevice& device, const Image& image);
     void destroy(const LogicalDevice& device);

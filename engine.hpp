@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/utils.hpp"
 #include <vulkan/vulkan.h>
 
 #define GLFW_INCLUDE_VULKAN
@@ -9,8 +10,6 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#include <string>
 
 #include "./window.hpp"
 
@@ -49,6 +48,8 @@
 #include "./image/image_view.hpp"
 #include "./image/sampler.hpp"
 #include "./image/image_barrier.hpp"
+
+#include "engine/resource_registry.hpp"
 
 #include "./frame_context.hpp"
 
@@ -125,19 +126,48 @@ public:
     void destroyBuffer(Buffer& buffer);
     
     template<typename T>
-    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) { return PerFrameBuffer<T>::create(device, physicalDevice, usage, count); }
+    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) {
+        PerFrameBuffer<T> buffer = PerFrameBuffer<T>::create(device, physicalDevice, usage, count);
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            buffer.at(i).setResourceId(resourceRegistry.create(ResourceType::Buffer));
+        }
+        return buffer;
+    }
     template<typename T>
-    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) { buffer.destroy(device); }
+    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) {
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            resourceRegistry.destroy(buffer.at(i).getResourceId());
+        }
+        buffer.destroy(device);
+    }
     
     template<typename T>
-    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) { return SharedBuffer<T>::create(device, physicalDevice, usage, count); }
+    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) {
+        SharedBuffer<T> buffer = SharedBuffer<T>::create(device, physicalDevice, usage, count);
+        buffer.buffer.setResourceId(resourceRegistry.create(ResourceType::Buffer));
+        return buffer;
+    }
     template<typename T>
-    void destroySharedBuffer(SharedBuffer<T>& buffer) { buffer.destroy(device); }
+    void destroySharedBuffer(SharedBuffer<T>& buffer) {
+        resourceRegistry.destroy(buffer.buffer.getResourceId());
+        buffer.destroy(device);
+    }
     
     template <typename T, typename Header = std::monostate>
-    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) { return DynamicPerFrameBuffer<T, Header>::create(device, physicalDevice, usage, count); }
+    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) {
+        DynamicPerFrameBuffer<T, Header> buffer = DynamicPerFrameBuffer<T, Header>::create(device, physicalDevice, usage, count);
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            buffer.at(i).setResourceId(resourceRegistry.create(ResourceType::Buffer));
+        }
+        return buffer;
+    }
     template <typename T, typename Header = std::monostate>
-    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) { buffer.destroy(device); }
+    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
+        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
+            resourceRegistry.destroy(buffer.at(i).getResourceId());
+        }
+        buffer.destroy(device);
+    }
     template <typename T, typename Header = std::monostate>
     bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) { return buffer.setElementCount(device, physicalDevice, count); }
     template <typename T, typename Header = std::monostate>
@@ -148,7 +178,6 @@ public:
     void destroyImage(Image& image);
     ImageView createImageView(Image& image);
     void destroyImageView(ImageView& imageView);
-
     Sampler createSampler();
     void destroySampler(Sampler& sampler);
 
@@ -200,6 +229,8 @@ private:
     uint32_t currentFrame = 0, imageIndex;
 
     bool framebufferResized = false;
+
+    ResourceRegistry resourceRegistry;
 
     void initImgui();
 
