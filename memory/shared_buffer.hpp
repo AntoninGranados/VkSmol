@@ -12,6 +12,7 @@ A buffer that is shared across frames
 
 class PhysicalDevice;
 class LogicalDevice;
+class ResourceManager;
 
 template <typename T, typename Header = std::monostate>
 class SharedBuffer {
@@ -44,5 +45,5 @@ private:
 
     Buffer buffer;
 
-    friend class VkSmol;
+    friend class ResourceManager;
 };

@@ -1,15 +1,11 @@
 #include "engine.hpp"
 
 #include <algorithm>
-#include <sstream>
 #include <vector>
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
-
-#include "./utils.hpp"
-#include "engine/resource_registry.hpp"
 
 // TODO: get this values from the application (and pass them in the engine.init function)
 const uint32_t WIDTH = 1280;
@@ -112,6 +108,13 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
             uiInFlightFences[i].init(device, true);
         }
     }
+
+    resourceManager.init({
+        .device = &device,
+        .physicalDevice = &physicalDevice,
+        .transferCommandPool = &transferCommandPool,
+        .transferQueue = &transferQueue,
+    });
 }
 
 std::optional<FrameContext> VkSmol::beginFrame() {
@@ -186,6 +189,8 @@ void VkSmol::terminate() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
+    resourceManager.terminate();
+
     uiDescriptorPool.destroy(device);
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
@@ -248,7 +253,7 @@ void VkSmol::destroyGraphicsPipeline(GraphicsPipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-Shader VkSmol::initShader(VkShaderStageFlagBits stage, std::string filepath) {
+Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath) {
     Shader shader;
     shader.init(device, stage, filepath);
     return shader;
@@ -259,183 +264,71 @@ void VkSmol::destroyShader(Shader& shader) {
 }
 
 void VkSmol::initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout) {
-    descriptorSetLayout.init(device);
+    resourceManager.initDescriptorSetLayout(descriptorSetLayout);
 }
 
 void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout) {
-    descriptorSetLayout.destroy(device);
+    resourceManager.destroyDescriptorSetLayout(descriptorSetLayout);
 }
 
 DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout) {
-    std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
-
-    DescriptorPool descriptorPool;
-    for (VkDescriptorSetLayoutBinding& binding : bindings)
-        descriptorPool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
-    descriptorPool.init(device);
-
-    std::vector<DescriptorSet> descriptorSetList;
-    descriptorSetList.resize(MAX_FRAME_IN_FLIGHT);
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        descriptorSetList[i].alloc(device, descriptorPool, layout);
-    }
-
-    DescriptorSetGroup group(std::move(descriptorPool), std::move(descriptorSetList));
-
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        group.at(i).setResourceId(resourceRegistry.create(ResourceType::DescriptorSet));
-    }
-    return group;
+    return resourceManager.createDescriptorSetGroup(layout);
 }
 
 void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
-    writer.validate();
-
-    DescriptorSet& set = group.at(frameIndex);
-    resourceRegistry.removeAllParents(set.getResourceId());
-    set.clear();
-
-    for (const DescriptorWrite& write : writer.getWrites()) {
-        std::visit([&](const auto& payload) {
-            using T = std::decay_t<decltype(payload)>;
-
-            if constexpr (std::is_same_v<T, UniformBufferPayload>) {
-                if (!payload.buffer) {
-                    std::ostringstream message;
-                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
-                            << " on frame " << frameIndex << " received a null uniform buffer payload";
-                    throw std::runtime_error(message.str());
-                }
-                set.linkUniformBuffer(*payload.buffer, write.binding);
-                resourceRegistry.addDependency(set.getResourceId(), payload.buffer->getResourceId());
-            } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
-                if (!payload.buffer) {
-                    std::ostringstream message;
-                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
-                            << " on frame " << frameIndex << " received a null storage buffer payload";
-                    throw std::runtime_error(message.str());
-                }
-                set.linkStorageBuffer(*payload.buffer, write.binding);
-                resourceRegistry.addDependency(set.getResourceId(), payload.buffer->getResourceId());
-            } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
-                if (!payload.view || !payload.sampler) {
-                    std::ostringstream message;
-                    message << "VkSmol::updateDescriptorSetGroup: binding " << write.binding
-                            << " on frame " << frameIndex
-                            << " received an incomplete combined image sampler payload";
-                    throw std::runtime_error(message.str());
-                }
-                set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
-                resourceRegistry.addDependency(set.getResourceId(), payload.view->getResourceId());
-                resourceRegistry.addDependency(set.getResourceId(), payload.sampler->getResourceId());
-            }
-        }, write.payload);
-    }
-
-    set.update(device);
+    resourceManager.updateDescriptorSetGroup(group, frameIndex, writer);
 }
 
-// TODO: needs to store the available spots to refill them
 void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
-    if (!group.isValide()) return;
-
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        resourceRegistry.destroy(group.at(i).getResourceId());
-    }
-
-    group.destroy(device);
-    group = DescriptorSetGroup{};
+    resourceManager.destroyDescriptorSetGroup(group);
 }
-
 
 Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
-    Buffer buffer;
-
-    if (data == nullptr) {
-        buffer.init(device, usage, size);
-    } else {
-        buffer.initFilled(
-            device, physicalDevice,
-            usage,
-            transferCommandPool, transferQueue,
-            size, data
-        );
-    }
-
-    buffer.setResourceId(resourceRegistry.create(ResourceType::Buffer));
-    return buffer;
+    return resourceManager.createBuffer(usage, size, data);
 }
 
 Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping) {
-    Buffer buffer;
-    buffer.init(device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
-    buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    buffer.setResourceId(resourceRegistry.create(ResourceType::Buffer));
-    return buffer;
+    return resourceManager.createReadbackBuffer(size, persistentMapping);
 }
 
 void VkSmol::fillBuffer(Buffer& buffer, void* data) {
-    buffer.fill(device, data);
+    resourceManager.fillBuffer(buffer, data);
 }
 
 void VkSmol::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {
-    buffer.read(device, out, bytes, offset);
+    resourceManager.readBuffer(buffer, out, bytes, offset);
 }
 
 void VkSmol::destroyBuffer(Buffer& buffer) {
-    resourceRegistry.destroy(buffer.getResourceId());
-    buffer.free(device);
-    buffer.destroy(device);
-    buffer.resetResourceId();
+    resourceManager.destroyBuffer(buffer);
 }
 
 Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
-    Image image;
-    image.init(device, width, height, format, usage);
-    image.alloc(device, physicalDevice, properties);
-    image.setResourceId(resourceRegistry.create(ResourceType::Image));
-    return image;
+    return resourceManager.createImage(width, height, format, usage, properties);
 }
 
 Image VkSmol::createImageFromPath(std::string path) {
-    Image image;
-    image.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
-    image.setResourceId(resourceRegistry.create(ResourceType::Image));
-    return image;
+    return resourceManager.createImageFromPath(path);
 }
 
 void VkSmol::destroyImage(Image& image) {
-    resourceRegistry.destroy(image.getResourceId());
-    image.free(device);
-    image.destroy(device);
-    image.resetResourceId();
+    resourceManager.destroyImage(image);
 }
 
 ImageView VkSmol::createImageView(Image& image) {
-    ImageView imageView;
-    imageView.init(device, image);
-    imageView.setResourceId(resourceRegistry.create(ResourceType::ImageView));
-    resourceRegistry.addDependency(imageView.getResourceId(), image.getResourceId());
-    return imageView;
+    return resourceManager.createImageView(image);
 }
 
 void VkSmol::destroyImageView(ImageView& imageView) {
-    resourceRegistry.destroy(imageView.getResourceId());
-    imageView.destroy(device);
-    imageView.resetResourceId();
+    resourceManager.destroyImageView(imageView);
 }
 
 Sampler VkSmol::createSampler() {
-    Sampler sampler;
-    sampler.init(device, physicalDevice);
-    sampler.setResourceId(resourceRegistry.create(ResourceType::Sampler));
-    return sampler;
+    return resourceManager.createSampler();
 }
 
 void VkSmol::destroySampler(Sampler& sampler) {
-    resourceRegistry.destroy(sampler.getResourceId());
-    sampler.destroy(device);
-    sampler.resetResourceId();
+    resourceManager.destroySampler(sampler);
 }
 
 //! The render area is fixed to the screen size for now

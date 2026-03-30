@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../resource_registry.hpp"
+#include "engine/resource/resource_types.hpp"
 
 template <ResourceType Type>
 class TrackedResource {
@@ -27,7 +27,7 @@ protected:
     void setResourceId(ResourceId id) { resourceId = id; }
     void resetResourceId() { resourceId = InvalidResourceId; }
 
-    friend class VkSmol;
+    friend class ResourceManager;
 
 private:
     ResourceId resourceId = InvalidResourceId;

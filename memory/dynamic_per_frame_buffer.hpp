@@ -17,7 +17,7 @@ A storage for per frame dynamically resizable buffers
 
 class PhysicalDevice;
 class LogicalDevice;
-class VkSmol;
+class ResourceManager;
 
 template <typename T, typename Header = std::monostate>
 class DynamicPerFrameBuffer: public PerFrameBufferBase {
@@ -111,5 +111,5 @@ private:
     size_t count = 0;
     VkBufferUsageFlags usage = 0;
     
-    friend class VkSmol;
+    friend class ResourceManager;
 };

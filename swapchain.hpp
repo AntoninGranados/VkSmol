@@ -34,11 +34,15 @@ public:
 
     std::vector<VkImage> getImages() { return images; };
     VkImage getImage(size_t i) { return images[i]; };
+
     std::vector<VkImageView> getImageViews() { return imageViews; };
     VkImageView getImageView(size_t i) { return imageViews[i]; };
+    
     uint32_t getImageCount() { return imageCount; };
     VkFormat* getImageFormat() { return &imageFormat; };
-    VkExtent2D getExtent() { return extent; };
+    
+    VkExtent2D& getExtent() { return extent; };
+    const VkExtent2D& getExtent() const { return extent; };
 
     // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
     uint32_t getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);

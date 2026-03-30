@@ -1,6 +1,5 @@
 #pragma once
 
-#include "engine/utils.hpp"
 #include <vulkan/vulkan.h>
 
 #define GLFW_INCLUDE_VULKAN
@@ -28,7 +27,7 @@
 #include "./descriptor/descriptor_pool.hpp"
 #include "./descriptor/descriptor_set.hpp"
 #include "./descriptor/descriptor_set_group.hpp"
-#include "./descriptor/descriptor_writer.hpp"
+// #include "./descriptor/descriptor_writer.hpp"
 
 #include "./shader.hpp"
 #include "./pipeline/graphics_pipeline.hpp"
@@ -49,7 +48,8 @@
 #include "./image/sampler.hpp"
 #include "./image/image_barrier.hpp"
 
-#include "engine/resource_registry.hpp"
+// #include "./resource/resource_registry.hpp"
+#include "./resource/resource_manager.hpp"
 
 #include "./frame_context.hpp"
 
@@ -98,8 +98,6 @@ public:
     void waitIdle();
     void terminate();
 
-    VkExtent2D getExtent() { return swapchain.getExtent(); };
-
     GraphicsPipeline initGraphicsPipeline(
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         const std::vector<const Shader*>& shaders,
@@ -109,77 +107,8 @@ public:
     );
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
 
-    Shader initShader(VkShaderStageFlagBits stage_, std::string filepath);
+    Shader createShader(VkShaderStageFlagBits stage_, std::string filepath);
     void destroyShader(Shader& shader);
-
-    void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
-    void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
-
-    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
-    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
-    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
-
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
-    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true);
-    void fillBuffer(Buffer& buffer, void* data);
-    void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
-    void destroyBuffer(Buffer& buffer);
-    
-    template<typename T>
-    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) {
-        PerFrameBuffer<T> buffer = PerFrameBuffer<T>::create(device, physicalDevice, usage, count);
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            buffer.at(i).setResourceId(resourceRegistry.create(ResourceType::Buffer));
-        }
-        return buffer;
-    }
-    template<typename T>
-    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) {
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            resourceRegistry.destroy(buffer.at(i).getResourceId());
-        }
-        buffer.destroy(device);
-    }
-    
-    template<typename T>
-    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) {
-        SharedBuffer<T> buffer = SharedBuffer<T>::create(device, physicalDevice, usage, count);
-        buffer.buffer.setResourceId(resourceRegistry.create(ResourceType::Buffer));
-        return buffer;
-    }
-    template<typename T>
-    void destroySharedBuffer(SharedBuffer<T>& buffer) {
-        resourceRegistry.destroy(buffer.buffer.getResourceId());
-        buffer.destroy(device);
-    }
-    
-    template <typename T, typename Header = std::monostate>
-    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) {
-        DynamicPerFrameBuffer<T, Header> buffer = DynamicPerFrameBuffer<T, Header>::create(device, physicalDevice, usage, count);
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            buffer.at(i).setResourceId(resourceRegistry.create(ResourceType::Buffer));
-        }
-        return buffer;
-    }
-    template <typename T, typename Header = std::monostate>
-    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            resourceRegistry.destroy(buffer.at(i).getResourceId());
-        }
-        buffer.destroy(device);
-    }
-    template <typename T, typename Header = std::monostate>
-    bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) { return buffer.setElementCount(device, physicalDevice, count); }
-    template <typename T, typename Header = std::monostate>
-    void clearDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) { buffer.clear(device, physicalDevice); }
-
-    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
-    Image createImageFromPath(std::string path);
-    void destroyImage(Image& image);
-    ImageView createImageView(Image& image);
-    void destroyImageView(ImageView& imageView);
-    Sampler createSampler();
-    void destroySampler(Sampler& sampler);
 
     void beginDynamicRenderer(
         const CommandBuffer& commandBuffer, 
@@ -197,10 +126,68 @@ public:
         VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
     );
     
+    VkExtent2D& getExtent() { return swapchain.getExtent(); };
+    const VkExtent2D& getExtent() const { return swapchain.getExtent(); };
     Window& getWindow() { return window; }
     const Window& getWindow() const { return window; }
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
+
+    void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
+    void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
+
+    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
+    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
+    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
+
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
+    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true);
+    void fillBuffer(Buffer& buffer, void* data);
+    void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
+    void destroyBuffer(Buffer& buffer);
+
+    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+    Image createImageFromPath(std::string path);
+    void destroyImage(Image& image);
+    ImageView createImageView(Image& image);
+    void destroyImageView(ImageView& imageView);
+    Sampler createSampler();
+    void destroySampler(Sampler& sampler);
+    
+    template<typename T>
+    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) {
+        return resourceManager.createPerFrameBuffer<T>(usage, count);
+    }
+    template<typename T>
+    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) {
+        resourceManager.destroyPerFrameBuffer<T>(buffer);
+    }
+    
+    template<typename T>
+    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) {
+        return resourceManager.createSharedBuffer<T>(usage, count);
+    }
+    template<typename T>
+    void destroySharedBuffer(SharedBuffer<T>& buffer) {
+        resourceManager.destroySharedBuffer<T>(buffer);
+    }
+    
+    template <typename T, typename Header = std::monostate>
+    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) {
+        return resourceManager.createDynamicPerFrameBuffer<T, Header>(usage, count);
+    }
+    template <typename T, typename Header = std::monostate>
+    bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) {
+        return resourceManager.setDynamicPerFrameBufferCount<T, Header>(buffer, count);
+    }
+    template <typename T, typename Header = std::monostate>
+    void clearDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
+        resourceManager.clearDynamicPerFrameBuffer<T, Header>(buffer);
+    }
+    template <typename T, typename Header = std::monostate>
+    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
+        resourceManager.destroyDynamicPerFrameBuffer<T, Header>(buffer);
+    }
 
 private:
     Window window;
@@ -230,7 +217,7 @@ private:
 
     bool framebufferResized = false;
 
-    ResourceRegistry resourceRegistry;
+    ResourceManager resourceManager;
 
     void initImgui();
 

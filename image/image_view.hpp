@@ -4,7 +4,6 @@
 
 #include "../base/unique_handle.hpp"
 #include "../base/tracked_resource.hpp"
-#include "engine/resource_registry.hpp"
 
 class LogicalDevice;
 class Image;

@@ -1,7 +1,9 @@
 #include "resource_registry.hpp"
+#include "resource_reporting.hpp"
 
-#include <stdexcept>
 #include <algorithm>
+#include <stdexcept>
+#include <sstream>
 
 namespace {
 bool contains(const std::vector<ResourceId>& ids, ResourceId id) {
@@ -9,7 +11,7 @@ bool contains(const std::vector<ResourceId>& ids, ResourceId id) {
 }
 }
 
-ResourceId ResourceRegistry::create(ResourceType type, std::string name) {
+ResourceId ResourceRegistry::create(ResourceType type) {
     uint32_t index;
 
     if (!freeSpaces.empty()) {
@@ -19,7 +21,6 @@ ResourceId ResourceRegistry::create(ResourceType type, std::string name) {
         record[index-1] = {
             .id = { index, record[index-1].id.generation + 1 },
             .type = type,
-            .name = name,
             .alive = true,
             .parents = {},
             .children = {},
@@ -31,7 +32,6 @@ ResourceId ResourceRegistry::create(ResourceType type, std::string name) {
         record.push_back({
             .id = { index, 1 },
             .type = type,
-            .name = name,
             .alive = true,
             .parents = {},
             .children = {},
@@ -43,34 +43,48 @@ ResourceId ResourceRegistry::create(ResourceType type, std::string name) {
 
 void ResourceRegistry::destroy(ResourceId id) {
     if (!isAlive(id)) {
-        throw std::runtime_error("Can't destroy a dead or uninitialised resource");
+        std::ostringstream message;
+        message << "ResourceRegistry::destroy: can't destroy a dead or uninitialised resource, "
+                << describeResourceSlot(record, id);
+        throw std::runtime_error(message.str());
     }
-    if (hasDependents(id)) {
-        throw std::runtime_error("Can't destroy a resource that still has dependencies");
+
+    ResourceRecord& slot = record[id.index - 1];
+    if (!slot.children.empty()) {
+        std::ostringstream message;
+        message << "ResourceRegistry::destroy: can't destroy " << formatResourceRecord(slot)
+                << " because it still has dependents "
+                << formatResourceList(record, slot.children);
+        throw std::runtime_error(message.str());
     }
-    
+
     removeAllParents(id);
 
-    ResourceRecord& record = get(id);
-    record.type = ResourceType::Dead;
-    record.name = {};
-    record.alive = false;
-    record.parents.clear();
-    record.children.clear();
+    slot.type = ResourceType::Dead;
+    slot.alive = false;
+    slot.parents.clear();
+    slot.children.clear();
 
     freeSpaces.push_back(id.index);
 }
 
 void ResourceRegistry::addDependency(ResourceId child, ResourceId parent) {
     if (child == parent) {
-        throw std::runtime_error("Can't add a resource dependency to itself");
+        std::ostringstream message;
+        message << "ResourceRegistry::addDependency: can't add a resource dependency to itself "
+                << describeResourceSlot(record, child);
+        throw std::runtime_error(message.str());
     }
 
     ResourceRecord& childRecord = get(child);
     ResourceRecord& parentRecord = get(parent);
 
     if (contains(childRecord.parents, parent)) {
-        throw std::runtime_error("Dependency already exists in resource registry");
+        std::ostringstream message;
+        message << "ResourceRegistry::addDependency: dependency already exists between child "
+                << formatResourceRecord(childRecord) << " and parent "
+                << formatResourceRecord(parentRecord);
+        throw std::runtime_error(message.str());
     }
 
     childRecord.parents.push_back(parent);
@@ -83,13 +97,20 @@ void ResourceRegistry::removeDependency(ResourceId child, ResourceId parent) {
 
     auto parentIt = std::find(childRecord.parents.begin(), childRecord.parents.end(), parent);
     if (parentIt == childRecord.parents.end()) {
-        throw std::runtime_error("Can't remove a missing parent dependency from resource registry");
+        std::ostringstream message;
+        message << "ResourceRegistry::removeDependency: missing parent dependency between child "
+                << formatResourceRecord(childRecord) << " and parent "
+                << formatResourceRecord(parentRecord);
+        throw std::runtime_error(message.str());
     }
 
-    auto childIt = std::find(parentRecord.children.begin(), parentRecord.children.end(), child
-        );
+    auto childIt = std::find(parentRecord.children.begin(), parentRecord.children.end(), child);
     if (childIt == parentRecord.children.end()) {
-        throw std::runtime_error("Can't remove a missing child dependency from resource registry");
+        std::ostringstream message;
+        message << "ResourceRegistry::removeDependency: missing child dependency between child "
+                << formatResourceRecord(childRecord) << " and parent "
+                << formatResourceRecord(parentRecord);
+        throw std::runtime_error(message.str());
     }
 
     childRecord.parents.erase(parentIt);
@@ -118,7 +139,10 @@ bool ResourceRegistry::isAlive(ResourceId id) const {
 
 ResourceRecord& ResourceRegistry::get(ResourceId id) {
     if (!isAlive(id)) {
-        throw std::runtime_error("Can't retrieve a dead resource");
+        std::ostringstream message;
+        message << "ResourceRegistry::get: can't retrieve a dead resource, "
+                << describeResourceSlot(record, id);
+        throw std::runtime_error(message.str());
     }
 
     return record[id.index-1];
@@ -126,7 +150,10 @@ ResourceRecord& ResourceRegistry::get(ResourceId id) {
 
 const ResourceRecord& ResourceRegistry::get(ResourceId id) const {
     if (!isAlive(id)) {
-        throw std::runtime_error("Can't retrieve a dead resource");
+        std::ostringstream message;
+        message << "ResourceRegistry::get: can't retrieve a dead resource, "
+                << describeResourceSlot(record, id);
+        throw std::runtime_error(message.str());
     }
 
     return record[id.index-1];
