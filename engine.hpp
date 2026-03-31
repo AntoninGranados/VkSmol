@@ -27,10 +27,11 @@
 #include "./descriptor/descriptor_pool.hpp"
 #include "./descriptor/descriptor_set.hpp"
 #include "./descriptor/descriptor_set_group.hpp"
-// #include "./descriptor/descriptor_writer.hpp"
+#include "./descriptor/descriptor_writer.hpp"
 
 #include "./shader.hpp"
 #include "./pipeline/graphics_pipeline.hpp"
+#include "./pipeline/vertex_input.hpp"
 
 #include "./command/command_pool.hpp"
 #include "./command/command_buffer.hpp"
@@ -48,7 +49,7 @@
 #include "./image/sampler.hpp"
 #include "./image/image_barrier.hpp"
 
-// #include "./resource/resource_registry.hpp"
+#include "./resource/resource_registry.hpp"
 #include "./resource/resource_manager.hpp"
 
 #include "./frame_context.hpp"

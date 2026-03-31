@@ -120,6 +120,9 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
 std::optional<FrameContext> VkSmol::beginFrame() {
     Fence::wait({ &renderInFlightFences[currentFrame], &uiInFlightFences[currentFrame] }, device);
 
+    resourceManager.collectFrame(currentFrame);
+    resourceManager.setRetirementFrame(currentFrame);
+
     const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
     if (result == RECREATE_SWAPCHAIN) {
         recreateSwapchain();
@@ -182,13 +185,18 @@ void VkSmol::endRecoringUiRender(CommandBuffer& commandBuffer) {
 
 void VkSmol::waitIdle() {
     device.waitIdle();
+
+    resourceManager.flushAll();
 }
 
 void VkSmol::terminate() {
+    device.waitIdle();
+    
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
+    resourceManager.flushAll();
     resourceManager.terminate();
 
     uiDescriptorPool.destroy(device);

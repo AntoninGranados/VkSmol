@@ -1,5 +1,6 @@
 #include "resource_manager.hpp"
 
+#include "engine/utils.hpp"
 #include "resource_reporting.hpp"
 
 #include "engine/physical_device.hpp"
@@ -7,29 +8,19 @@
 #include "engine/image/image.hpp"
 
 #include <sstream>
+#include <stdexcept>
 
 void ResourceManager::init(ResourceManagerContext context) {
     ctx = context;
 }
 
 void ResourceManager::terminate() {
+    for (size_t frameIndex = 0; frameIndex < MAX_FRAME_IN_FLIGHT; frameIndex++) {
+        if (!retirementQueue.at(frameIndex).empty()) {
+            throw std::runtime_error("[ERROR] ResourceManager::terminate: Not all the resources where destroyed before the end of the application");
+        }
+    }
     ctx = {};
-}
-
-const ResourceManagerContext& ResourceManager::requireInitialized(const char* functionName, bool requireTransferContext) const {
-    if (!ctx.device || !ctx.physicalDevice) {
-        std::ostringstream message;
-        message << functionName << ": ResourceManager is not initialized";
-        throw std::runtime_error(message.str());
-    }
-
-    if (requireTransferContext && (!ctx.transferCommandPool || !ctx.transferQueue)) {
-        std::ostringstream message;
-        message << functionName << ": ResourceManager is missing transfer command pool or transfer queue";
-        throw std::runtime_error(message.str());
-    }
-
-    return ctx;
 }
 
 void ResourceManager::initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout) {
@@ -201,7 +192,6 @@ void ResourceManager::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32
 
 // TODO: needs to store the available spots to refill them
 void ResourceManager::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::destroyDescriptorSetGroup");
     if (!group.isValide()) return;
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
@@ -215,10 +205,98 @@ void ResourceManager::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
         group.at(i).resetResourceId();
     }
 
-    group.destroy(*context.device);
+    auto retired = std::make_shared<DescriptorSetGroup>(std::move(group));
+    retirementQueue.at(currentRetirementFrame).push_back(
+        [retired](const LogicalDevice& device) {
+            retired->destroy(device);
+        }
+    );
     group = DescriptorSetGroup{};
 }
 
+
+Image ResourceManager::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImage");
+    Image image;
+    image.init(*context.device, width, height, format, usage);
+    image.alloc(*context.device, *context.physicalDevice, properties);
+    image.setResourceId(registry.create(ResourceType::Image));
+    return image;
+}
+
+Image ResourceManager::createImageFromPath(std::string path) {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageFromPath", true);
+    Image image;
+    image.initFromPath(*context.device, *context.physicalDevice, *context.transferCommandPool, *context.transferQueue, path);
+    image.setResourceId(registry.create(ResourceType::Image));
+    return image;
+}
+
+void ResourceManager::destroyImage(Image& image) {
+    if (!image.hasResourceId()) {
+        throw std::runtime_error("ResourceManager::destroyImage: can't destroy an untracked image");
+    }
+    registry.destroy(image.getResourceId());
+    image.resetResourceId();
+    auto retired = std::make_shared<Image>(std::move(image));
+    retirementQueue.at(currentRetirementFrame).push_back(
+        [retired](const LogicalDevice& device) {
+            retired->free(device);
+            retired->destroy(device);
+        }
+    );
+    image = Image{};
+}
+
+ImageView ResourceManager::createImageView(Image& image) {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageView");
+    if (!image.hasResourceId()) {
+        throw std::runtime_error("ResourceManager::createImageView: can't create an image view from an untracked image");
+    }
+    ImageView imageView;
+    imageView.init(*context.device, image);
+    imageView.setResourceId(registry.create(ResourceType::ImageView));
+    registry.addDependency(imageView.getResourceId(), image.getResourceId());
+    return imageView;
+}
+
+void ResourceManager::destroyImageView(ImageView& imageView) {
+    if (!imageView.hasResourceId()) {
+        throw std::runtime_error("ResourceManager::destroyImageView: can't destroy an untracked image view");
+    }
+    registry.destroy(imageView.getResourceId());
+    imageView.resetResourceId();
+    auto retired = std::make_shared<ImageView>(std::move(imageView));
+    retirementQueue.at(currentRetirementFrame).push_back(
+        [retired](const LogicalDevice& device) {
+            retired->destroy(device);
+        }
+    );
+    imageView = ImageView{};
+}
+
+Sampler ResourceManager::createSampler() {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::createSampler");
+    Sampler sampler;
+    sampler.init(*context.device, *context.physicalDevice);
+    sampler.setResourceId(registry.create(ResourceType::Sampler));
+    return sampler;
+}
+
+void ResourceManager::destroySampler(Sampler& sampler) {
+    if (!sampler.hasResourceId()) {
+        throw std::runtime_error("ResourceManager::destroySampler: can't destroy an untracked sampler");
+    }
+    registry.destroy(sampler.getResourceId());
+    sampler.resetResourceId();
+    auto retired = std::make_shared<Sampler>(std::move(sampler));
+    retirementQueue.at(currentRetirementFrame).push_back(
+        [retired](const LogicalDevice& device) {
+            retired->destroy(device);
+        }
+    );
+    sampler = Sampler{};
+}
 
 Buffer ResourceManager::createBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createBuffer", data != nullptr);
@@ -257,80 +335,55 @@ void ResourceManager::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t
 }
 
 void ResourceManager::destroyBuffer(Buffer& buffer) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::destroyBuffer");
     if (!buffer.hasResourceId()) {
         throw std::runtime_error("ResourceManager::destroyBuffer: can't destroy an untracked buffer");
     }
     registry.destroy(buffer.getResourceId());
-    buffer.free(*context.device);
-    buffer.destroy(*context.device);
     buffer.resetResourceId();
+    auto retired = std::make_shared<Buffer>(std::move(buffer));
+    retirementQueue.at(currentRetirementFrame).push_back(
+        [retired](const LogicalDevice& device) {
+            retired->free(device);
+            retired->destroy(device);
+        }
+    );
+    buffer = Buffer{};
 }
 
-Image ResourceManager::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImage");
-    Image image;
-    image.init(*context.device, width, height, format, usage);
-    image.alloc(*context.device, *context.physicalDevice, properties);
-    image.setResourceId(registry.create(ResourceType::Image));
-    return image;
+void ResourceManager::setRetirementFrame(uint32_t frameIndex) {
+    currentRetirementFrame = frameIndex;
 }
 
-Image ResourceManager::createImageFromPath(std::string path) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageFromPath", true);
-    Image image;
-    image.initFromPath(*context.device, *context.physicalDevice, *context.transferCommandPool, *context.transferQueue, path);
-    image.setResourceId(registry.create(ResourceType::Image));
-    return image;
-}
+void ResourceManager::collectFrame(uint32_t frameIndex) {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::collectFrame");
 
-void ResourceManager::destroyImage(Image& image) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::destroyImage");
-    if (!image.hasResourceId()) {
-        throw std::runtime_error("ResourceManager::destroyImage: can't destroy an untracked image");
+    for (RetirementPayload& payload : retirementQueue.at(frameIndex)) {
+        payload(*context.device);
     }
-    registry.destroy(image.getResourceId());
-    image.free(*context.device);
-    image.destroy(*context.device);
-    image.resetResourceId();
+
+    retirementQueue.at(frameIndex).clear();
 }
 
-ImageView ResourceManager::createImageView(Image& image) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageView");
-    if (!image.hasResourceId()) {
-        throw std::runtime_error("ResourceManager::createImageView: can't create an image view from an untracked image");
+void ResourceManager::flushAll() {
+    requireInitialized("ResourceManager::flushAll");
+
+    for (uint32_t frameIndex = 0; frameIndex < MAX_FRAME_IN_FLIGHT; frameIndex++) {
+        collectFrame(frameIndex);
     }
-    ImageView imageView;
-    imageView.init(*context.device, image);
-    imageView.setResourceId(registry.create(ResourceType::ImageView));
-    registry.addDependency(imageView.getResourceId(), image.getResourceId());
-    return imageView;
 }
 
-void ResourceManager::destroyImageView(ImageView& imageView) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::destroyImageView");
-    if (!imageView.hasResourceId()) {
-        throw std::runtime_error("ResourceManager::destroyImageView: can't destroy an untracked image view");
+const ResourceManagerContext& ResourceManager::requireInitialized(const char* functionName, bool requireTransferContext) const {
+    if (!ctx.device || !ctx.physicalDevice) {
+        std::ostringstream message;
+        message << "[ERROR] " << functionName << ": ResourceManager is not initialized";
+        throw std::runtime_error(message.str());
     }
-    registry.destroy(imageView.getResourceId());
-    imageView.destroy(*context.device);
-    imageView.resetResourceId();
-}
 
-Sampler ResourceManager::createSampler() {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::createSampler");
-    Sampler sampler;
-    sampler.init(*context.device, *context.physicalDevice);
-    sampler.setResourceId(registry.create(ResourceType::Sampler));
-    return sampler;
-}
-
-void ResourceManager::destroySampler(Sampler& sampler) {
-    const ResourceManagerContext& context = requireInitialized("ResourceManager::destroySampler");
-    if (!sampler.hasResourceId()) {
-        throw std::runtime_error("ResourceManager::destroySampler: can't destroy an untracked sampler");
+    if (requireTransferContext && (!ctx.transferCommandPool || !ctx.transferQueue)) {
+        std::ostringstream message;
+        message << functionName << ": ResourceManager is missing transfer command pool or transfer queue";
+        throw std::runtime_error(message.str());
     }
-    registry.destroy(sampler.getResourceId());
-    sampler.destroy(*context.device);
-    sampler.resetResourceId();
+
+    return ctx;
 }

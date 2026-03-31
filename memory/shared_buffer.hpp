@@ -3,6 +3,8 @@ SHARED BUFFER
 A buffer that is shared across frames
 */
 
+// @note this storage don't have a destroy function as it shoud not handle buffer destruction, this is the role of the ResourceManager
+
 #pragma once
 
 #include <variant>
@@ -14,8 +16,25 @@ class PhysicalDevice;
 class LogicalDevice;
 class ResourceManager;
 
+class SharedBufferBase {
+public:
+    Buffer& get() { return buffer; }
+    const Buffer& get() const { return buffer; }
+
+    size_t getByteSize() { return byteSize; }
+    VkBufferUsageFlags getUsage() { return usage; }
+
+protected:
+    Buffer buffer;
+
+    VkBufferUsageFlags usage;
+    size_t byteSize;
+
+    friend class ResourceManager;
+};
+
 template <typename T, typename Header = std::monostate>
-class SharedBuffer {
+class SharedBuffer: public SharedBufferBase {
 public:
     SharedBuffer() = default;
     SharedBuffer(const SharedBuffer&) = delete;
@@ -23,27 +42,15 @@ public:
     SharedBuffer(SharedBuffer&&) = default;
     SharedBuffer& operator=(SharedBuffer&&) = default;
 
-    Buffer& get() { return buffer; }
-    const Buffer& get() const { return buffer; }
-
 private:
-    static SharedBuffer<T, Header> create(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const VkBufferUsageFlags& usage, size_t count) {
+    static SharedBuffer<T, Header> create(const VkBufferUsageFlags& usage, size_t count) {
         SharedBuffer<T, Header> buffer;
 
-        size_t size = sizeof(T) * count;
-        if (!std::is_same_v<Header, std::monostate>) size += sizeof(Header);
-
-        buffer.buffer.init(device, usage, size, true);
-        buffer.buffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        buffer.usage = usage;
+        buffer.byteSize = sizeof(T) * count;
+        if (!std::is_same_v<Header, std::monostate>) buffer.byteSize += sizeof(Header);
         return buffer;
     }
-
-    void destroy(const LogicalDevice& device) {
-        buffer.free(device);
-        buffer.destroy(device);
-    }
-
-    Buffer buffer;
 
     friend class ResourceManager;
 };
