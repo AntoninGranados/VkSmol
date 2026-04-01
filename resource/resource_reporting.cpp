@@ -24,7 +24,11 @@ std::string formatResourceId(ResourceId id) {
 
 std::string formatResourceRecord(const ResourceRecord& record) {
     std::ostringstream message;
-    message << resourceTypeName(record.type) << ' ' << formatResourceId(record.id);
+    message << resourceTypeName(record.type);
+    if (!record.name.empty()) {
+        message << " \"" << record.name << '"';
+    }
+    message << ' ' << formatResourceId(record.id);
     message << " [" << (record.alive ? "alive" : "dead") << ']';
     return message.str();
 }
@@ -84,6 +88,6 @@ std::string describeTrackedResource(const ResourceRegistry& registry, ResourceId
     }
 
     const ResourceRecord& record = registry.get(id);
-    message << resourceTypeName(record.type) << ' ' << formatResourceId(record.id) << " [alive]";
+    message << formatResourceRecord(record);
     return message.str();
 }

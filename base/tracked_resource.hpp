@@ -2,6 +2,9 @@
 
 #include "engine/resource/resource_types.hpp"
 
+#include <string>
+#include <utility>
+
 template <ResourceType Type>
 class TrackedResource {
 public:
@@ -9,26 +12,32 @@ public:
     TrackedResource(const TrackedResource&) = delete;
     TrackedResource& operator=(const TrackedResource&) = delete;
     TrackedResource(TrackedResource&& other) noexcept
-        : resourceId(other.resourceId) {
-        other.resourceId = InvalidResourceId;
+        : id(other.id), name(std::move(other.name)) {
+        other.id = InvalidResourceId;
+        other.name = {};
     }
     TrackedResource& operator=(TrackedResource&& other) noexcept {
         if (this == &other) return *this;
 
-        resourceId = other.resourceId;
-        other.resourceId = InvalidResourceId;
+        id = other.id;
+        name = std::move(other.name);
+        other.id = InvalidResourceId;
+        other.name = {};
         return *this;
     }
 
-    ResourceId getResourceId() const { return resourceId; }
-    bool hasResourceId() const { return resourceId != InvalidResourceId; }
+    ResourceId getResourceId() const { return id; }
+    bool hasResourceId() const { return id != InvalidResourceId; }
+    const std::string& getResourceName() const { return name; }
 
 protected:
-    void setResourceId(ResourceId id) { resourceId = id; }
-    void resetResourceId() { resourceId = InvalidResourceId; }
+    void setResourceId(ResourceId resourceId) { id = resourceId; }
+    void resetResourceId() { id = InvalidResourceId; }
+    void setResourceName(std::string resourceName) { name = std::move(resourceName); }
 
     friend class ResourceManager;
 
 private:
-    ResourceId resourceId = InvalidResourceId;
+    ResourceId id = InvalidResourceId;
+    std::string name;
 };

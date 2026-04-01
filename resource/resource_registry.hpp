@@ -2,11 +2,12 @@
 
 #include "resource_types.hpp"
 
+#include <string>
 #include <vector>
 
 class ResourceRegistry {
 public:
-    ResourceId create(ResourceType type);
+    ResourceId create(ResourceType type, std::string name = {});
     void destroy(ResourceId id);
 
     void addDependency(ResourceId child, ResourceId parent);

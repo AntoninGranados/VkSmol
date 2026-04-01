@@ -191,7 +191,7 @@ void VkSmol::waitIdle() {
 
 void VkSmol::terminate() {
     device.waitIdle();
-    
+
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -279,8 +279,8 @@ void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout
     resourceManager.destroyDescriptorSetLayout(descriptorSetLayout);
 }
 
-DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout) {
-    return resourceManager.createDescriptorSetGroup(layout);
+DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
+    return resourceManager.createDescriptorSetGroup(layout, name);
 }
 
 void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
@@ -291,12 +291,12 @@ void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
     resourceManager.destroyDescriptorSetGroup(group);
 }
 
-Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
-    return resourceManager.createBuffer(usage, size, data);
+Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data, std::string name) {
+    return resourceManager.createBuffer(usage, size, data, name);
 }
 
-Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping) {
-    return resourceManager.createReadbackBuffer(size, persistentMapping);
+Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
+    return resourceManager.createReadbackBuffer(size, persistentMapping, name);
 }
 
 void VkSmol::fillBuffer(Buffer& buffer, void* data) {
@@ -311,19 +311,19 @@ void VkSmol::destroyBuffer(Buffer& buffer) {
     resourceManager.destroyBuffer(buffer);
 }
 
-Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
-    return resourceManager.createImage(width, height, format, usage, properties);
+Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
+    return resourceManager.createImage(width, height, format, usage, properties, name);
 }
 
-Image VkSmol::createImageFromPath(std::string path) {
-    return resourceManager.createImageFromPath(path);
+Image VkSmol::createImageFromPath(std::string path, std::string name) {
+    return resourceManager.createImageFromPath(path, name);
 }
 
 void VkSmol::destroyImage(Image& image) {
     resourceManager.destroyImage(image);
 }
 
-ImageView VkSmol::createImageView(Image& image) {
+ImageView VkSmol::createImageView(Image& image, std::string name) {
     return resourceManager.createImageView(image);
 }
 
@@ -331,7 +331,7 @@ void VkSmol::destroyImageView(ImageView& imageView) {
     resourceManager.destroyImageView(imageView);
 }
 
-Sampler VkSmol::createSampler() {
+Sampler VkSmol::createSampler(std::string name) {
     return resourceManager.createSampler();
 }
 

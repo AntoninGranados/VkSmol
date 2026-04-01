@@ -31,9 +31,10 @@ void ResourceManager::destroyDescriptorSetLayout(DescriptorSetLayout& descriptor
     descriptorSetLayout.destroy(*requireInitialized("ResourceManager::destroyDescriptorSetLayout").device);
 }
 
-DescriptorSetGroup ResourceManager::createDescriptorSetGroup(DescriptorSetLayout& layout) {
+DescriptorSetGroup ResourceManager::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createDescriptorSetGroup");
     std::vector<VkDescriptorSetLayoutBinding> bindings = layout.getBindings();
+    const std::string baseName = resolveResourceName(std::move(name), "DescriptorSet");
 
     DescriptorPool descriptorPool;
     for (VkDescriptorSetLayoutBinding& binding : bindings)
@@ -49,7 +50,8 @@ DescriptorSetGroup ResourceManager::createDescriptorSetGroup(DescriptorSetLayout
     DescriptorSetGroup group(std::move(descriptorPool), std::move(descriptorSetList));
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        group.at(i).setResourceId(registry.create(ResourceType::DescriptorSet));
+        group.at(i).setResourceName(makeIndexedResourceName(baseName, i));
+        group.at(i).setResourceId(registry.create(ResourceType::DescriptorSet, group.at(i).getResourceName()));
     }
     return group;
 }
@@ -215,20 +217,22 @@ void ResourceManager::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
 }
 
 
-Image ResourceManager::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
+Image ResourceManager::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createImage");
     Image image;
+    image.setResourceName(resolveResourceName(std::move(name), "Image"));
     image.init(*context.device, width, height, format, usage);
     image.alloc(*context.device, *context.physicalDevice, properties);
-    image.setResourceId(registry.create(ResourceType::Image));
+    image.setResourceId(registry.create(ResourceType::Image, image.getResourceName()));
     return image;
 }
 
-Image ResourceManager::createImageFromPath(std::string path) {
+Image ResourceManager::createImageFromPath(std::string path, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageFromPath", true);
     Image image;
+    image.setResourceName(resolveResourceName(std::move(name), "Image"));
     image.initFromPath(*context.device, *context.physicalDevice, *context.transferCommandPool, *context.transferQueue, path);
-    image.setResourceId(registry.create(ResourceType::Image));
+    image.setResourceId(registry.create(ResourceType::Image, image.getResourceName()));
     return image;
 }
 
@@ -248,14 +252,18 @@ void ResourceManager::destroyImage(Image& image) {
     image = Image{};
 }
 
-ImageView ResourceManager::createImageView(Image& image) {
+ImageView ResourceManager::createImageView(Image& image, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createImageView");
     if (!image.hasResourceId()) {
         throw std::runtime_error("ResourceManager::createImageView: can't create an image view from an untracked image");
     }
     ImageView imageView;
+    if (name.empty() && !image.getResourceName().empty()) {
+        name = image.getResourceName() + "View";
+    }
+    imageView.setResourceName(resolveResourceName(std::move(name), "ImageView"));
     imageView.init(*context.device, image);
-    imageView.setResourceId(registry.create(ResourceType::ImageView));
+    imageView.setResourceId(registry.create(ResourceType::ImageView, imageView.getResourceName()));
     registry.addDependency(imageView.getResourceId(), image.getResourceId());
     return imageView;
 }
@@ -275,11 +283,12 @@ void ResourceManager::destroyImageView(ImageView& imageView) {
     imageView = ImageView{};
 }
 
-Sampler ResourceManager::createSampler() {
+Sampler ResourceManager::createSampler(std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createSampler");
     Sampler sampler;
+    sampler.setResourceName(resolveResourceName(std::move(name), "Sampler"));
     sampler.init(*context.device, *context.physicalDevice);
-    sampler.setResourceId(registry.create(ResourceType::Sampler));
+    sampler.setResourceId(registry.create(ResourceType::Sampler, sampler.getResourceName()));
     return sampler;
 }
 
@@ -298,9 +307,10 @@ void ResourceManager::destroySampler(Sampler& sampler) {
     sampler = Sampler{};
 }
 
-Buffer ResourceManager::createBuffer(VkBufferUsageFlags usage, size_t size, void* data) {
+Buffer ResourceManager::createBuffer(VkBufferUsageFlags usage, size_t size, void* data, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createBuffer", data != nullptr);
     Buffer buffer;
+    buffer.setResourceName(resolveResourceName(std::move(name), "Buffer"));
 
     if (data == nullptr) {
         buffer.init(*context.device, usage, size);
@@ -313,25 +323,28 @@ Buffer ResourceManager::createBuffer(VkBufferUsageFlags usage, size_t size, void
         );
     }
 
-    buffer.setResourceId(registry.create(ResourceType::Buffer));
+    buffer.setResourceId(registry.create(ResourceType::Buffer, buffer.getResourceName()));
     return buffer;
 }
 
-Buffer ResourceManager::createReadbackBuffer(size_t size, bool persistentMapping) {
+Buffer ResourceManager::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createReadbackBuffer");
     Buffer buffer;
+    buffer.setResourceName(resolveResourceName(std::move(name), "ReadbackBuffer"));
     buffer.init(*context.device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
     buffer.alloc(*context.device, *context.physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    buffer.setResourceId(registry.create(ResourceType::Buffer));
+    buffer.setResourceId(registry.create(ResourceType::Buffer, buffer.getResourceName()));
     return buffer;
 }
 
 void ResourceManager::fillBuffer(Buffer& buffer, void* data) {
-    buffer.fill(*requireInitialized("ResourceManager::fillBuffer").device, data);
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::fillBuffer");
+    buffer.fill(*context.device, data);
 }
 
 void ResourceManager::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {
-    buffer.read(*requireInitialized("ResourceManager::readBuffer").device, out, bytes, offset);
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::readBuffer");
+    buffer.read(*context.device, out, bytes, offset);
 }
 
 void ResourceManager::destroyBuffer(Buffer& buffer) {

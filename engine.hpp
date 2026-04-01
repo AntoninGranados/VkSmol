@@ -137,27 +137,27 @@ public:
     void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
 
-    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout);
+    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr);
-    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true);
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
+    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true, std::string name = {});
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
 
-    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
-    Image createImageFromPath(std::string path);
+    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
+    Image createImageFromPath(std::string path, std::string name = {});
     void destroyImage(Image& image);
-    ImageView createImageView(Image& image);
+    ImageView createImageView(Image& image, std::string name = {});
     void destroyImageView(ImageView& imageView);
-    Sampler createSampler();
+    Sampler createSampler(std::string name = {});
     void destroySampler(Sampler& sampler);
     
     template<typename T>
-    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1) {
-        return resourceManager.createPerFrameBuffer<T>(usage, count);
+    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1, std::string name = {}) {
+        return resourceManager.createPerFrameBuffer<T>(usage, count, name);
     }
     template<typename T>
     void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) {
@@ -165,8 +165,8 @@ public:
     }
     
     template<typename T>
-    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1) {
-        return resourceManager.createSharedBuffer<T>(usage, count);
+    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1, std::string name = {}) {
+        return resourceManager.createSharedBuffer<T>(usage, count, name);
     }
     template<typename T>
     void destroySharedBuffer(SharedBuffer<T>& buffer) {
@@ -174,8 +174,8 @@ public:
     }
     
     template <typename T, typename Header = std::monostate>
-    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0) {
-        return resourceManager.createDynamicPerFrameBuffer<T, Header>(usage, count);
+    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0, std::string name = {}) {
+        return resourceManager.createDynamicPerFrameBuffer<T, Header>(usage, count, name);
     }
     template <typename T, typename Header = std::monostate>
     bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) {

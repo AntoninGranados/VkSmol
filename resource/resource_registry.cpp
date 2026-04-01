@@ -11,16 +11,18 @@ bool contains(const std::vector<ResourceId>& ids, ResourceId id) {
 }
 }
 
-ResourceId ResourceRegistry::create(ResourceType type) {
+ResourceId ResourceRegistry::create(ResourceType type, std::string name) {
     uint32_t index;
 
     if (!freeSpaces.empty()) {
         index = freeSpaces.back();
         freeSpaces.pop_back();
+        const uint32_t generation = record[index - 1].id.generation + 1;
 
         record[index-1] = {
-            .id = { index, record[index-1].id.generation + 1 },
+            .id = { index, generation },
             .type = type,
+            .name = std::move(name),
             .alive = true,
             .parents = {},
             .children = {},
@@ -32,6 +34,7 @@ ResourceId ResourceRegistry::create(ResourceType type) {
         record.push_back({
             .id = { index, 1 },
             .type = type,
+            .name = std::move(name),
             .alive = true,
             .parents = {},
             .children = {},

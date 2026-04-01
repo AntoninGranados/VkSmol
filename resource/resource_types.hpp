@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 struct ResourceId {
@@ -24,6 +25,7 @@ enum class ResourceType {
 struct ResourceRecord {
     ResourceId id = InvalidResourceId;
     ResourceType type = ResourceType::Dead;
+    std::string name;
     bool alive = false;
 
     std::vector<ResourceId> parents;
