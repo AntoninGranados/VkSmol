@@ -50,7 +50,7 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     appInfo.pApplicationName = appName.c_str();
     appInfo.applicationVersion = appVersion;
     appInfo.pEngineName = "VkSmol";
-    appInfo.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
+    appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_4;
 
     instance.init(appInfo, getRequiredExtensions(), validationLayers);
