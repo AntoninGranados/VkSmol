@@ -3,7 +3,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "../logical_device.hpp"
+#include "../../device/logical_device.hpp"
 
 void DescriptorSetGroup::destroy(const LogicalDevice& device) {
     DescriptorSet::free(device, *this);

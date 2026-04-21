@@ -1,7 +1,7 @@
 #include "descriptor_set_layout.hpp"
 
-#include "../logical_device.hpp"
-#include "../utils.hpp"
+#include "../../device/logical_device.hpp"
+#include "../../utils.hpp"
 
 void DescriptorSetLayout::init(const LogicalDevice& device) {
     VkDescriptorSetLayoutCreateInfo createInfo{};

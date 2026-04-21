@@ -1,13 +1,13 @@
 #include "queue.hpp"
 
-#include "./surface.hpp"
+#include "../present/surface.hpp"
 #include "./physical_device.hpp"
 #include "./logical_device.hpp"
-#include "./swapchain.hpp"
-#include "./command/command_buffer.hpp"
-#include "./sync/semaphore.hpp"
-#include "./sync/fence.hpp"
-#include "./utils.hpp"
+#include "../present/swapchain.hpp"
+#include "../command/command_buffer.hpp"
+#include "../sync/semaphore.hpp"
+#include "../sync/fence.hpp"
+#include "../utils.hpp"
 
 // Search for the graphics queue and the present queue
 QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {

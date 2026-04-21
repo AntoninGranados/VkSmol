@@ -3,7 +3,7 @@
 #include <algorithm>
 
 #include "./debug_messenger.hpp"
-#include "./utils.hpp"
+#include "../utils.hpp"
 
 void Instance::init(
     VkApplicationInfo appInfo,

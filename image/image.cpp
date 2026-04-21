@@ -4,9 +4,9 @@
 #include <stb_image/stb_image.h>
 
 #include "image_barrier.hpp"
-#include "../logical_device.hpp"
-#include "../physical_device.hpp"
-#include "../queue.hpp"
+#include "../device/logical_device.hpp"
+#include "../device/physical_device.hpp"
+#include "../device/queue.hpp"
 #include "../command/command_buffer.hpp"
 #include "../command/command_pool.hpp"
 #include "../memory/buffer.hpp"

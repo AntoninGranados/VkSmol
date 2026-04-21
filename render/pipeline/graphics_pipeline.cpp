@@ -1,10 +1,10 @@
 #include "graphics_pipeline.hpp"
 
-#include "../command/command_buffer.hpp"
+#include "../../command/command_buffer.hpp"
 #include "../descriptor/descriptor_set_layout.hpp"
-#include "../logical_device.hpp"
+#include "../../device/logical_device.hpp"
 #include "../shader.hpp"
-#include "../utils.hpp"
+#include "../../utils.hpp"
 
 void GraphicsPipeline::init(
     const LogicalDevice& device,

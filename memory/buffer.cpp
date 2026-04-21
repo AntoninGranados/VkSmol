@@ -1,10 +1,10 @@
 #include "buffer.hpp"
 
-#include "../physical_device.hpp"
-#include "../logical_device.hpp"
+#include "../device/physical_device.hpp"
+#include "../device/logical_device.hpp"
 #include "../command/command_pool.hpp"
 #include "../command/command_buffer.hpp"
-#include "../queue.hpp"
+#include "../device/queue.hpp"
 #include "../utils.hpp"
 
 Buffer::Buffer(Buffer&& other)

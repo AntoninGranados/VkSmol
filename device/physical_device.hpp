@@ -4,7 +4,7 @@
 
 #include <functional>
 
-#include "base/borrowed_handle.hpp"
+#include "../base/borrowed_handle.hpp"
 
 class Instance;
 

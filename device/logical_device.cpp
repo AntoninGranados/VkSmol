@@ -4,7 +4,7 @@
 
 #include "./queue.hpp"
 #include "./physical_device.hpp"
-#include "./utils.hpp"
+#include "../utils.hpp"
 
 void LogicalDevice::init(
     PhysicalDevice physicalDevice,

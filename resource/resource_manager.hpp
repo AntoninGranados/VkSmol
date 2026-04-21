@@ -11,13 +11,13 @@
 #include "../memory/shared_buffer.hpp"
 #include "../memory/per_frame_buffer.hpp"
 
-#include "../descriptor/descriptor_set_group.hpp"
-#include "../descriptor/descriptor_set_layout.hpp"
-#include "../descriptor/descriptor_writer.hpp"
+#include "../render/descriptor/descriptor_set_group.hpp"
+#include "../render/descriptor/descriptor_set_layout.hpp"
+#include "../render/descriptor/descriptor_writer.hpp"
 
 #include "../resource/resource_registry.hpp"
 
-#include "../physical_device.hpp"
+#include "../device/physical_device.hpp"
 #include "../utils.hpp"
 
 

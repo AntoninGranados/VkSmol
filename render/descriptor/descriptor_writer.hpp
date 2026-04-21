@@ -6,9 +6,9 @@
 #include <unordered_set>
 #include <variant>
 
-#include "../memory/buffer.hpp"
-#include "../image/image_view.hpp"
-#include "../image/sampler.hpp"
+#include "../../memory/buffer.hpp"
+#include "../../image/image_view.hpp"
+#include "../../image/sampler.hpp"
 
 #include "./descriptor_set.hpp"
 #include "./descriptor_set_layout.hpp"

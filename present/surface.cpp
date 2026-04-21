@@ -1,8 +1,8 @@
 #include "surface.hpp"
 
-#include "./window.hpp"
-#include "./instance.hpp"
-#include "./utils.hpp"
+#include "../platform/window.hpp"
+#include "../instance/instance.hpp"
+#include "../utils.hpp"
 
 void Surface::init(const Instance& instance, const Window& window) {
     vkCheck(glfwCreateWindowSurface(instance.get(), window.get(), nullptr, &rawHandle()), "Failed to create window surface");

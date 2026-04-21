@@ -6,7 +6,7 @@
 #include <string>
 #include <functional>
 
-#include "base/unique_handle.hpp"
+#include "../base/unique_handle.hpp"
 
 class Window: public UniqueHandle<GLFWwindow*, nullptr> {
 public:

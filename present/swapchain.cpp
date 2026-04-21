@@ -1,12 +1,12 @@
 #include "swapchain.hpp"
 
-#include "./window.hpp"
-#include "./physical_device.hpp"
-#include "./logical_device.hpp"
-#include "./queue.hpp"
+#include "../platform/window.hpp"
+#include "../device/physical_device.hpp"
+#include "../device/logical_device.hpp"
+#include "../device/queue.hpp"
 #include "./surface.hpp"
-#include "./sync/semaphore.hpp"
-#include "./utils.hpp"
+#include "../sync/semaphore.hpp"
+#include "../utils.hpp"
 
 SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, const Surface& surface) {
     SwapChainSupportDetails details;

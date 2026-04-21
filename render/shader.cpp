@@ -3,8 +3,8 @@
 #include <filesystem>
 #include <fstream>
 
-#include "./logical_device.hpp"
-#include "./utils.hpp"
+#include "../device/logical_device.hpp"
+#include "../utils.hpp"
 
 // Public
 void Shader::init(const LogicalDevice& device, VkShaderStageFlagBits stage_, std::string filepath) {

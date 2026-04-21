@@ -1,11 +1,11 @@
 #include "resource_manager.hpp"
 
-#include "engine/utils.hpp"
+#include "../utils.hpp"
 #include "resource_reporting.hpp"
 
-#include "engine/physical_device.hpp"
-#include "engine/queue.hpp"
-#include "engine/image/image.hpp"
+#include "../device/physical_device.hpp"
+#include "../device/queue.hpp"
+#include "../image/image.hpp"
 
 #include <sstream>
 #include <stdexcept>

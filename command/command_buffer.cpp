@@ -1,8 +1,8 @@
 #include "command_buffer.hpp"
 
 #include "./command_pool.hpp"
-#include "../logical_device.hpp"
-#include "../queue.hpp"
+#include "../device/logical_device.hpp"
+#include "../device/queue.hpp"
 #include "../utils.hpp"
 
 void CommandBuffer::alloc(const LogicalDevice& device, const CommandPool& pool) {

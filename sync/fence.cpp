@@ -1,6 +1,6 @@
 #include "fence.hpp"
 
-#include "../logical_device.hpp"
+#include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
 void Fence::init(const LogicalDevice& device, bool signaled) {

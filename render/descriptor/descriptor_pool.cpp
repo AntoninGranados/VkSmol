@@ -1,7 +1,7 @@
 #include "descriptor_pool.hpp"
 
-#include "../logical_device.hpp"
-#include "../utils.hpp"
+#include "../../device/logical_device.hpp"
+#include "../../utils.hpp"
 
 
 DescriptorPool::DescriptorPool(DescriptorPool&& other) noexcept

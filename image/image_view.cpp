@@ -1,7 +1,7 @@
 #include "image_view.hpp"
 
 #include "image.hpp"
-#include "../logical_device.hpp"
+#include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
 void ImageView::init(const LogicalDevice& device, const Image& image) {

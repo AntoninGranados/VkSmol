@@ -1,8 +1,8 @@
 #include "dynamic_renderer.hpp"
 
-#include "./command/command_buffer.hpp"
-#include "./swapchain.hpp"
-#include "./logical_device.hpp"
+#include "../command/command_buffer.hpp"
+#include "../present/swapchain.hpp"
+#include "../device/logical_device.hpp"
 
 void DynamicRenderer::init(const LogicalDevice& device) {
     vkCmdBeginRenderingKHR = (PFN_vkCmdBeginRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdBeginRenderingKHR");

@@ -10,28 +10,28 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "./window.hpp"
+#include "./platform/window.hpp"
 
-#include "./instance.hpp"
-#include "./debug_messenger.hpp"
-#include "./surface.hpp"
+#include "./instance/instance.hpp"
+#include "./instance/debug_messenger.hpp"
+#include "./present/surface.hpp"
 
-#include "./physical_device.hpp"
-#include "./logical_device.hpp"
-#include "./queue.hpp"
+#include "./device/physical_device.hpp"
+#include "./device/logical_device.hpp"
+#include "./device/queue.hpp"
 
-#include "./swapchain.hpp"
-#include "./dynamic_renderer.hpp"
+#include "./present/swapchain.hpp"
+#include "./render/dynamic_renderer.hpp"
 
-#include "./descriptor/descriptor_set_layout.hpp"
-#include "./descriptor/descriptor_pool.hpp"
-#include "./descriptor/descriptor_set.hpp"
-#include "./descriptor/descriptor_set_group.hpp"
-#include "./descriptor/descriptor_writer.hpp"
+#include "./render/descriptor/descriptor_set_layout.hpp"
+#include "./render/descriptor/descriptor_pool.hpp"
+#include "./render/descriptor/descriptor_set.hpp"
+#include "./render/descriptor/descriptor_set_group.hpp"
+#include "./render/descriptor/descriptor_writer.hpp"
 
-#include "./shader.hpp"
-#include "./pipeline/graphics_pipeline.hpp"
-#include "./pipeline/vertex_input.hpp"
+#include "./render/shader.hpp"
+#include "./render/pipeline/graphics_pipeline.hpp"
+#include "./render/pipeline/vertex_input.hpp"
 
 #include "./command/command_pool.hpp"
 #include "./command/command_buffer.hpp"

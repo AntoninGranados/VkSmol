@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/resource/resource_types.hpp"
+#include "../resource/resource_types.hpp"
 
 #include <string>
 #include <utility>

@@ -4,12 +4,12 @@
 #include "./descriptor_pool.hpp"
 #include "./descriptor_set_group.hpp"
 
-#include "../logical_device.hpp"
-#include "../memory/buffer.hpp"
-#include "../command/command_buffer.hpp"
-#include "../image/image_view.hpp"
-#include "../image/sampler.hpp"
-#include "../utils.hpp"
+#include "../../device/logical_device.hpp"
+#include "../../memory/buffer.hpp"
+#include "../../command/command_buffer.hpp"
+#include "../../image/image_view.hpp"
+#include "../../image/sampler.hpp"
+#include "../../utils.hpp"
 
 void DescriptorSet::alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
