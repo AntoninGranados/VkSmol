@@ -2,6 +2,7 @@
 
 #include <format>
 
+#include "engine/graph/compiled_resource.hpp"
 #include "render_graph_builder.hpp"
 #include "builder_resource.hpp"
 
@@ -68,13 +69,25 @@ std::string dumpGraph(RenderGraphBuilder builder) {
 
 std::string dumpCompiledGraph(RenderGraphBuilder builder, CompiledRenderGraph compiled) {
     std::string out = "";
+
+    out.append("Image Chains:\n");
     for (const ImageChain& chain : compiled.imageChains) {
-        out.append(std::format("image [{}]\n", builder.getImages()[chain.image.id].name));
-        out.append(std::format("  "));
-        for (const ImageUsageRecord& usageRecord : chain.usages) {
-            out.append(std::format("{} ({}|{}) -> ", builder.getPasses()[usageRecord.pass.id].name, imageUsageToStr(usageRecord.usage), accessTypeToStr(usageRecord.access)));
+        out.append(std::format("  image [{}]\n", builder.getImages()[chain.image.id].name));
+        out.append(std::format("    "));
+        for (uint32_t i = 0; i < chain.usages.size(); i++) {
+            const ImageUsageRecord& usageRecord = chain.usages[i];
+            out.append(std::format("{} ({}|{})", builder.getPasses()[usageRecord.pass.id].name, imageUsageToStr(usageRecord.usage), accessTypeToStr(usageRecord.access)));
+            
+            if (i < chain.usages.size() - 1) {
+                out.append(" -> ");
+            }
         }
         out.append(std::format("\n"));
+    }
+
+    out.append("Dependencies:\n");
+    for (const PassDependency& dependency : compiled.passDependencies) {
+        out.append(std::format("  {} <- {}\n", builder.getPasses()[dependency.src.id].name, builder.getPasses()[dependency.dst.id].name));
     }
 
     return out;

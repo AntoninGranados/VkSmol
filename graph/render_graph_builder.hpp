@@ -20,8 +20,8 @@ public:
     TransferPassBuilder addTransferPass(std::string name);
     PresentPassBuilder  addPresentPass(std::string name);
 
-    const std::vector<PassInfo> getPasses() const { return passes; }
-    const std::vector<ImageInfo> getImages() const { return images; }
+    const std::vector<PassInfo>& getPasses() const { return passes; }
+    const std::vector<ImageInfo>&getImages() const { return images; }
 
     CompiledRenderGraph compile();  // TODO remove the returned compiled graph (only here for debugging)
 
@@ -39,6 +39,7 @@ private:
     }
 
     CompiledRenderGraph buildImageChains();
+    CompiledRenderGraph& buildDependencies(CompiledRenderGraph& compiled);
 
     std::vector<PassInfo> passes;
     std::vector<ImageInfo> images;

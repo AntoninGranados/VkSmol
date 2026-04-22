@@ -15,7 +15,7 @@ struct ImageUsageRecord {
 struct ImageChain {
     ImageHandle image;
     std::vector<ImageUsageRecord> usages;
-    bool hasWriter = false;
+
     PassHandle lastWriter = { .id = InvalidHandle };
 };
 
@@ -27,5 +27,5 @@ struct PassDependency {
 
 struct CompiledRenderGraph {
     std::vector<ImageChain> imageChains;
-    // std::vector<PassDependency> passDependencies;
+    std::vector<PassDependency> passDependencies;
 };
