@@ -5,17 +5,16 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <optional>
 
 struct PassInfo;
 struct ImageInfo;
-struct ImageUsageInfo;
-struct BufferInfo;
-struct BufferUsageInfo;
+struct ImageAccess;
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
 struct PassHandle { uint32_t id = InvalidHandle; };
 struct ImageHandle { uint32_t id = InvalidHandle; };
-struct BufferHandle { uint32_t id = InvalidHandle; };
+// struct BufferHandle { uint32_t id = InvalidHandle; };
 
 enum class PassType : uint16_t {
     Graphics,
@@ -27,7 +26,7 @@ enum class PassType : uint16_t {
 struct PassInfo {
     std::string name;
     PassType type;
-    std::vector<ImageUsageInfo> imageUsages = {};
+    std::vector<ImageAccess> imageAccesses = {};
     // std::vector<BufferUsageInfo> bufferUsages = {};
 };
 
@@ -35,20 +34,45 @@ enum class AccessType : uint16_t {
     None,
     Read,
     Write,
-    // ReadWrite,   // TODO implement support
+    // ReadWrite,   // @todo implement support
 };
 
 // ================
 // Image
 // ================
 
-enum class ImageUsage : uint16_t {
+enum class ImageUsageType : uint16_t {
+    Undefined,
     Sampled,
     ColorAttachment,
     DepthAttachment,
     Present,
     TransferSrc,
     TransferDst,
+};
+
+enum class ImageOwnership : uint16_t {
+    Transient,
+    Imported,
+};
+
+// @note not used for now
+struct ImageSubresourceRangeInfo {
+    uint32_t baseMipLevel = 0;
+    uint32_t levelCount = 1;
+    uint32_t baseArrayLayer = 0;
+    uint32_t layerCount = 1;
+};
+
+struct ImageAccessInfo {
+    ImageUsageType usage = ImageUsageType::Undefined;
+    AccessType access = AccessType::None;
+    ImageSubresourceRangeInfo subresourceRangeInfo{};
+};
+
+struct ImageAccess {
+    ImageHandle image;
+    ImageAccessInfo info;
 };
 
 struct ImageInfo {
@@ -58,32 +82,30 @@ struct ImageInfo {
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t depth = 1;
-    uint32_t arrayLayers = 1;
-    uint32_t mipLevels = 1;
-};
 
-struct ImageUsageInfo {
-    ImageHandle handle;
-    ImageUsage usage;
-    AccessType access = AccessType::None;
+    ImageOwnership ownership = ImageOwnership::Transient;
+    std::optional<ImageAccessInfo> initialAccess = {};
+    std::optional<ImageAccessInfo> finalAccess = {};
 };
 
 // ================
 // Buffer
 // ================
 
-// TODO implement `BufferUsage`
+/*
+// @todo implement `BufferUsage`
 enum class BufferUsage : uint16_t {
 };
 
-// TODO implement `BufferInfo`
+// @todo implement `BufferInfo`
 struct BufferInfo {
     std::string name;
 };
 
-// TODO implement `BufferUsageInfo`
+// @todo implement `BufferUsageInfo`
 struct BufferUsageInfo {
     BufferHandle handle;
     BufferUsage usage;
     AccessType access;
 };
+*/

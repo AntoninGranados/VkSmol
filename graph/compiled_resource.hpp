@@ -6,26 +6,18 @@
 
 #include "builder_resource.hpp"
 
-struct ImageUsageRecord {
-    PassHandle pass;
-    ImageUsage usage;
-    AccessType access;
-};
-
-struct ImageChain {
+struct PassImageBarrier {
     ImageHandle image;
-    std::vector<ImageUsageRecord> usages;
-
-    PassHandle lastWriter = { .id = InvalidHandle };
+    ImageAccessInfo srcAccess;
+    ImageAccessInfo dstAccess;
 };
 
 struct PassDependency {
     PassHandle src;
     PassHandle dst;
-    ImageHandle image;
+    PassImageBarrier imageBarrier;
 };
 
 struct CompiledRenderGraph {
-    std::vector<ImageChain> imageChains;
     std::vector<PassDependency> passDependencies;
 };

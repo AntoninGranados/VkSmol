@@ -1,19 +1,25 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 #include <vector>
 #include <string>
 
 #include "builder_resource.hpp"
-#include "compiled_resource.hpp"
 
 class GraphicsPassBuilder;
 // class ComputePassBuilder;
 class TransferPassBuilder;
 class PresentPassBuilder;
 
+struct CompiledRenderGraph;
+
+
 class RenderGraphBuilder {
 public:
-    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, uint32_t arrayLayers = 1, uint32_t mipLevels = 1);
+    // @todo add support for 'ImageSubresourceRangeInfo'
+    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1);
+    ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, std::optional<ImageAccessInfo> finalAccess = {});
 
     GraphicsPassBuilder addGraphicsPass(std::string name);
     // ComputePassBuilder  addComputePass(std::string name);
@@ -23,7 +29,8 @@ public:
     const std::vector<PassInfo>& getPasses() const { return passes; }
     const std::vector<ImageInfo>&getImages() const { return images; }
 
-    CompiledRenderGraph compile();  // TODO remove the returned compiled graph (only here for debugging)
+    // @todo remove the returned compiled graph (only here for debugging)
+    CompiledRenderGraph compile();
 
 private:
     template <class TPassBuilder, PassType T>
@@ -37,9 +44,6 @@ private:
 
         return TPassBuilder(handle, this);
     }
-
-    CompiledRenderGraph buildImageChains();
-    CompiledRenderGraph& buildDependencies(CompiledRenderGraph& compiled);
 
     std::vector<PassInfo> passes;
     std::vector<ImageInfo> images;

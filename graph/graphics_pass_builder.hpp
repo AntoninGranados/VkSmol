@@ -7,8 +7,8 @@ class RenderGraphBuilder;
 
 class GraphicsPassBuilder: public PassBuilder {
 public:
-    void readImage(ImageHandle imageHandle, ImageUsage usage);
-    void writeImage(ImageHandle imageHandle, ImageUsage usage);
+    void readImage(ImageHandle imageHandle, ImageUsageType usage);
+    void writeImage(ImageHandle imageHandle, ImageUsageType usage);
 
 private:
       GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)

@@ -4,9 +4,11 @@
 #include "render_graph_builder.hpp"
 
 void PresentPassBuilder::setPresentationImage(ImageHandle imageHandle) {
-    graph->passes[handle.id].imageUsages.push_back({
-        .handle = imageHandle,
-        .usage = ImageUsage::Present,
-        .access = AccessType::Read,
+    graph->passes[handle.id].imageAccesses.push_back({
+        .image = imageHandle,
+        .info = {
+            .usage = ImageUsageType::Present,
+            .access = AccessType::Read,
+        },
     });
 }

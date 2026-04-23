@@ -14,14 +14,15 @@ std::string accessTypeToStr(AccessType access) {
     }
 }
 
-std::string imageUsageToStr(ImageUsage usage) {
+std::string imageUsageToStr(ImageUsageType usage) {
     switch (usage) {
-        case ImageUsage::Sampled         : return "Sampled";
-        case ImageUsage::ColorAttachment : return "ColorAttachment";
-        case ImageUsage::DepthAttachment : return "DepthAttachment";
-        case ImageUsage::Present         : return "Present";
-        case ImageUsage::TransferSrc     : return "TransferSrc";
-        case ImageUsage::TransferDst     : return "TransferDst";
+        case ImageUsageType::Undefined       : return "Undefined";
+        case ImageUsageType::Sampled         : return "Sampled";
+        case ImageUsageType::ColorAttachment : return "ColorAttachment";
+        case ImageUsageType::DepthAttachment : return "DepthAttachment";
+        case ImageUsageType::Present         : return "Present";
+        case ImageUsageType::TransferSrc     : return "TransferSrc";
+        case ImageUsageType::TransferDst     : return "TransferDst";
     }
 }
 
@@ -36,9 +37,9 @@ std::string imageFormatToStr(VkFormat format) {
 }
 
 
-std::string dumpGraph(RenderGraphBuilder builder) {
+std::string dumpGraph(const RenderGraphBuilder& builder) {
     std::string out = "";
-    const std::vector<ImageInfo> images = builder.getImages();
+    const std::vector<ImageInfo>& images = builder.getImages();
 
     out.append("Resources:\n");
     for (const ImageInfo &imageInfo : images) {
@@ -50,64 +51,55 @@ std::string dumpGraph(RenderGraphBuilder builder) {
     for (const PassInfo &passInfo : builder.getPasses()) {
         out.append(std::format("  pass [{}]:\n", passInfo.name));
 
-        for (const ImageUsageInfo &imageUsageInfo : passInfo.imageUsages) {
-            if (imageUsageInfo.access != AccessType::Read) continue;
-            const ImageInfo &imageInfo = images.at(imageUsageInfo.handle.id);
+        for (const ImageAccess& imageAccess : passInfo.imageAccesses) {
+            if (imageAccess.info.access != AccessType::Read) continue;
 
-            out.append(std::format("    -> image [{}], usage: {}\n", imageInfo.name, imageUsageToStr(imageUsageInfo.usage)));
+            const ImageInfo &imageInfo = images[imageAccess.image.id];
+            out.append(std::format("    -> image [{}], usage: {}\n", imageInfo.name, imageUsageToStr(imageAccess.info.usage)));
         }
-        for (const ImageUsageInfo &imageUsageInfo : passInfo.imageUsages) {
-            if (imageUsageInfo.access != AccessType::Write) continue;
-            const ImageInfo &imageInfo = images.at(imageUsageInfo.handle.id);
 
-            out.append(std::format("    <- image [{}], usage: {}\n", imageInfo.name, imageUsageToStr(imageUsageInfo.usage)));
+        for (const ImageAccess& imageAccess : passInfo.imageAccesses) {
+            if (imageAccess.info.access != AccessType::Write) continue;
+
+            const ImageInfo &imageInfo = images[imageAccess.image.id];
+            out.append(std::format("    <- image [{}], usage: {}\n", imageInfo.name, imageUsageToStr(imageAccess.info.usage)));
         }
     }
 
     return out;
 }
 
-std::string dumpCompiledGraph(RenderGraphBuilder builder, CompiledRenderGraph compiled) {
+std::string dumpCompiledGraph(const RenderGraphBuilder& builder, const CompiledRenderGraph& compiled) {
     std::string out = "";
-
-    out.append("Image Chains:\n");
-    for (const ImageChain& chain : compiled.imageChains) {
-        out.append(std::format("  image [{}]\n", builder.getImages()[chain.image.id].name));
-        out.append(std::format("    "));
-        for (uint32_t i = 0; i < chain.usages.size(); i++) {
-            const ImageUsageRecord& usageRecord = chain.usages[i];
-            out.append(std::format("{} ({}|{})", builder.getPasses()[usageRecord.pass.id].name, imageUsageToStr(usageRecord.usage), accessTypeToStr(usageRecord.access)));
-            
-            if (i < chain.usages.size() - 1) {
-                out.append(" -> ");
-            }
-        }
-        out.append(std::format("\n"));
-    }
 
     out.append("Dependencies:\n");
     for (const PassDependency& dependency : compiled.passDependencies) {
-        out.append(std::format("  {} <- {}\n", builder.getPasses()[dependency.src.id].name, builder.getPasses()[dependency.dst.id].name));
+        out.append(std::format("  {} -> {}, barrier:\n", builder.getPasses()[dependency.src.id].name, builder.getPasses()[dependency.dst.id].name));
+
+        const PassImageBarrier& barrier = dependency.imageBarrier;
+        const ImageInfo image = builder.getImages()[barrier.image.id];
+        out.append(std::format("    image [{}]: {} -> {}\n", image.name, imageUsageToStr(barrier.srcAccess.usage), imageUsageToStr(barrier.dstAccess.usage)));
     }
 
     return out;
 }
 
-void checkUsageValidForAccess(ImageUsage usage, AccessType access) {
+void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
     bool isValid = false;
 
     switch (usage) {
-        case ImageUsage::Sampled:
+        case ImageUsageType::Undefined: break;
+        case ImageUsageType::Sampled:
               isValid = access == AccessType::Read; break;
-          case ImageUsage::ColorAttachment:
+          case ImageUsageType::ColorAttachment:
               isValid = access == AccessType::Write; break;
-          case ImageUsage::DepthAttachment:
+          case ImageUsageType::DepthAttachment:
               isValid = access == AccessType::Write; break;
-          case ImageUsage::TransferSrc:
+          case ImageUsageType::TransferSrc:
               isValid = access == AccessType::Read; break;
-          case ImageUsage::TransferDst:
+          case ImageUsageType::TransferDst:
               isValid = access == AccessType::Write; break;
-          case ImageUsage::Present:
+          case ImageUsageType::Present:
               isValid = access == AccessType::Read; break;
     }
 
