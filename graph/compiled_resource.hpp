@@ -12,12 +12,12 @@ struct PassImageBarrier {
     ImageAccessInfo dstAccess;
 };
 
-struct PassDependency {
-    PassHandle src;
-    PassHandle dst;
-    PassImageBarrier imageBarrier;
+struct CompiledPass {
+    PassHandle pass;
+    std::vector<PassImageBarrier> barriersBefore;
 };
 
 struct CompiledRenderGraph {
-    std::vector<PassDependency> passDependencies;
+    std::vector<CompiledPass> compiledPasses;
+    std::vector<PassImageBarrier> outputBarriers;
 };

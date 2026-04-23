@@ -54,7 +54,10 @@ std::vector<ImageTimeline> collectImageTimelines(const std::vector<ImageInfo>& i
 void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vector<ImageTimeline>& timelines) {
     for (const ImageTimeline& timeline : timelines) {
         const ImageInfo& imageInfo = images[timeline.image.id];
-        bool hasReadableState = imageInfo.initialAccess.has_value();
+        bool hasReadableState =
+            imageInfo.initialAccess.has_value() &&
+            imageInfo.initialAccess->access == AccessType::Read &&
+            imageInfo.initialAccess->usage != ImageUsageType::Undefined;
 
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
             if (timelineAccess.info.access == AccessType::Write) {
@@ -66,35 +69,66 @@ void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vec
     }
 }
 
-std::vector<PassDependency> compilePassDependencies(const std::vector<ImageInfo>& images, const std::vector<ImageTimeline>& timelines) {
-    std::vector<PassDependency> dependencies;
+bool needsBarrier(ImageAccessInfo src, ImageAccessInfo dst) {
+    // @todo check src.subresourceRangeInfo == dst.subresourceRangeInfo
+    return src.access != dst.access || src.usage != dst.usage;
+}
+
+std::vector<CompiledPass> computeCompiledPasses(
+    const std::vector<ImageInfo>& images,
+    const std::vector<PassInfo>& passes,
+    const std::vector<ImageTimeline>& timelines
+) {
+    std::vector<CompiledPass> compiledPasses(passes.size());
+
+    for (uint32_t passId = 0; passId < passes.size(); passId++) {
+        compiledPasses[passId].pass = { .id = passId };
+    }
 
     for (const ImageTimeline& timeline : timelines) {
-        PassHandle lastWriter = { .id = InvalidHandle };
         ImageAccessInfo lastAccess = images[timeline.image.id].initialAccess.value_or(ImageAccessInfo{});
+        bool hasValue = images[timeline.image.id].initialAccess.has_value();
 
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
-            if (timelineAccess.info.access == AccessType::Write) {
-                lastWriter = timelineAccess.pass;
-                lastAccess = timelineAccess.info;
-            } else if (timelineAccess.info.access == AccessType::Read && lastWriter.id != InvalidHandle) {
-                dependencies.push_back({
-                    .src = lastWriter,
-                    .dst = timelineAccess.pass,
-                    .imageBarrier = {
-                        .image = timeline.image,
-                        .srcAccess = lastAccess,
-                        .dstAccess = timelineAccess.info,
-                    }
+            if (hasValue && needsBarrier(lastAccess, timelineAccess.info)) {
+                compiledPasses[timelineAccess.pass.id].barriersBefore.push_back({
+                    .image = timeline.image,
+                    .srcAccess = lastAccess,
+                    .dstAccess = timelineAccess.info,
+                });
+            }
+            lastAccess = timelineAccess.info;
+            hasValue = true;
+        }
+    }
+
+    return compiledPasses;
+}
+
+std::vector<PassImageBarrier> computeOutputBarriers(
+    const std::vector<ImageInfo>& images,
+    const std::vector<ImageTimeline>& timelines
+) {
+    std::vector<PassImageBarrier> outputBarriers;
+
+    for (uint32_t imageId = 0; imageId < images.size(); imageId++) {
+        const ImageInfo& image = images[imageId];
+
+        if (image.finalAccess.has_value() && !timelines[imageId].accesses.empty()) {
+            if(needsBarrier(timelines[imageId].accesses.back().info, image.finalAccess.value())) {
+                outputBarriers.push_back({
+                    .image = { .id = imageId },
+                    .srcAccess = timelines[imageId].accesses.back().info,
+                    .dstAccess = image.finalAccess.value(),
                 });
             }
         }
     }
 
-    return dependencies;
+    return outputBarriers;
 }
 
-}
+} // namespace
 
 ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth) {
     ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
@@ -105,13 +139,17 @@ ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, u
         .width = width,
         .height = height,
         .depth = depth,
+
+        .ownership = ImageOwnership::Transient,
     });
 
     return handle;
 }
 
-ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, std::optional<ImageAccessInfo> finalAccess) {
+ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess) {
     ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
+    checkUsageValidForAccess(initialAccess.usage, initialAccess.access);
+    checkUsageValidForAccess(finalAccess.usage, finalAccess.access);
 
     images.push_back({
         .name = name,
@@ -145,6 +183,7 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
     validateImageTimelines(images, timelines);
 
     CompiledRenderGraph compiled;
-    compiled.passDependencies = compilePassDependencies(images, timelines);
+    compiled.compiledPasses = computeCompiledPasses(images, passes, timelines);
+    compiled.outputBarriers = computeOutputBarriers(images, timelines);
     return compiled;
 }

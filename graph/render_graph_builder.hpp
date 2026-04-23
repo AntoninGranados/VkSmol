@@ -19,7 +19,7 @@ class RenderGraphBuilder {
 public:
     // @todo add support for 'ImageSubresourceRangeInfo'
     ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1);
-    ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, std::optional<ImageAccessInfo> finalAccess = {});
+    ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, ImageAccessInfo finalAccess = {});
 
     GraphicsPassBuilder addGraphicsPass(std::string name);
     // ComputePassBuilder  addComputePass(std::string name);

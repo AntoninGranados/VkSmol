@@ -72,13 +72,20 @@ std::string dumpGraph(const RenderGraphBuilder& builder) {
 std::string dumpCompiledGraph(const RenderGraphBuilder& builder, const CompiledRenderGraph& compiled) {
     std::string out = "";
 
-    out.append("Dependencies:\n");
-    for (const PassDependency& dependency : compiled.passDependencies) {
-        out.append(std::format("  {} -> {}, barrier:\n", builder.getPasses()[dependency.src.id].name, builder.getPasses()[dependency.dst.id].name));
+    out.append("Compiled Passes:\n");
+    for (const CompiledPass& compiledPass : compiled.compiledPasses) {
+        out.append(std::format("  pass [{}]:\n", builder.getPasses()[compiledPass.pass.id].name));
 
-        const PassImageBarrier& barrier = dependency.imageBarrier;
-        const ImageInfo image = builder.getImages()[barrier.image.id];
-        out.append(std::format("    image [{}]: {} -> {}\n", image.name, imageUsageToStr(barrier.srcAccess.usage), imageUsageToStr(barrier.dstAccess.usage)));
+        for (const PassImageBarrier& barrier : compiledPass.barriersBefore) {
+            const ImageInfo& image = builder.getImages()[barrier.image.id];
+            out.append(std::format("    before [{}]: {} -> {}\n", image.name, imageUsageToStr(barrier.srcAccess.usage), imageUsageToStr(barrier.dstAccess.usage)));
+        }
+    }
+
+    out.append("Output Barriers:\n");
+    for (const PassImageBarrier& barrier : compiled.outputBarriers) {
+        const ImageInfo& image = builder.getImages()[barrier.image.id];
+        out.append(std::format("  image [{}]: {} -> {}\n", image.name, imageUsageToStr(barrier.srcAccess.usage), imageUsageToStr(barrier.dstAccess.usage)));
     }
 
     return out;
@@ -88,7 +95,8 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
     bool isValid = false;
 
     switch (usage) {
-        case ImageUsageType::Undefined: break;
+        case ImageUsageType::Undefined: 
+            isValid = access == AccessType::None; break;
         case ImageUsageType::Sampled:
               isValid = access == AccessType::Read; break;
           case ImageUsageType::ColorAttachment:
