@@ -56,6 +56,17 @@ enum class ImageOwnership : uint16_t {
     Imported,
 };
 
+enum class WriteMode : uint16_t {
+    Overwrite,
+    Preserve,
+};
+
+enum class AttachmentLoad : uint16_t {
+    DontCare,
+    Clear,
+    Load,
+};
+
 // @note not used for now
 struct ImageSubresourceRangeInfo {
     uint32_t baseMipLevel = 0;
@@ -67,6 +78,8 @@ struct ImageSubresourceRangeInfo {
 struct ImageAccessInfo {
     ImageUsageType usage = ImageUsageType::Undefined;
     AccessType access = AccessType::None;
+    WriteMode writeMode = WriteMode::Overwrite;
+    AttachmentLoad attachmentLoad = AttachmentLoad::DontCare;
     ImageSubresourceRangeInfo subresourceRangeInfo{};
 };
 

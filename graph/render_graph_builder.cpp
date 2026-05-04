@@ -22,6 +22,16 @@ struct ImageTimeline {
     std::vector<TimelineImageAccess> accesses;
 };
 
+bool hasDefinedContents(const std::optional<ImageAccessInfo>& access) {
+    return access.has_value() &&
+        access->usage != ImageUsageType::Undefined &&
+        access->access != AccessType::None;
+}
+
+bool requiresDefinedContents(const ImageAccessInfo& access) {
+    return access.access == AccessType::Read || access.writeMode == WriteMode::Preserve;
+}
+
 std::vector<ImageTimeline> collectImageTimelines(const std::vector<ImageInfo>& images, const std::vector<PassInfo>& passes) {
     std::vector<ImageTimeline> timelines(images.size());
 
@@ -54,16 +64,19 @@ std::vector<ImageTimeline> collectImageTimelines(const std::vector<ImageInfo>& i
 void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vector<ImageTimeline>& timelines) {
     for (const ImageTimeline& timeline : timelines) {
         const ImageInfo& imageInfo = images[timeline.image.id];
-        bool hasReadableState =
-            imageInfo.initialAccess.has_value() &&
-            imageInfo.initialAccess->access == AccessType::Read &&
-            imageInfo.initialAccess->usage != ImageUsageType::Undefined;
+        bool hasPreviousContents = hasDefinedContents(imageInfo.initialAccess);
 
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
+            if (requiresDefinedContents(timelineAccess.info) && !hasPreviousContents) {
+                throw std::runtime_error(std::format(
+                    "Image [{}] requires previous contents before [{}] access",
+                    imageInfo.name,
+                    imageUsageToStr(timelineAccess.info.usage)
+                ));
+            }
+
             if (timelineAccess.info.access == AccessType::Write) {
-                hasReadableState = true;
-            } else if (timelineAccess.info.access == AccessType::Read && !hasReadableState) {
-                throw std::runtime_error(std::format("Image [{}] was read but not written", imageInfo.name));
+                hasPreviousContents = true;
             }
         }
     }
@@ -148,8 +161,8 @@ ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, u
 
 ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess) {
     ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
-    checkUsageValidForAccess(initialAccess.usage, initialAccess.access);
-    checkUsageValidForAccess(finalAccess.usage, finalAccess.access);
+    checkImageAccessInfoValid(initialAccess);
+    checkImageAccessInfoValid(finalAccess);
 
     images.push_back({
         .name = name,

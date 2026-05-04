@@ -8,7 +8,12 @@ class RenderGraphBuilder;
 class GraphicsPassBuilder: public PassBuilder {
 public:
     void readImage(ImageHandle imageHandle, ImageUsageType usage);
-    void writeImage(ImageHandle imageHandle, ImageUsageType usage);
+    void writeImage(
+        ImageHandle imageHandle,
+        ImageUsageType usage,
+        WriteMode writeMode = WriteMode::Overwrite,
+        AttachmentLoad attachmentLoad = AttachmentLoad::DontCare
+    );
 
 private:
       GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)
