@@ -28,6 +28,7 @@ public:
         uint32_t width, uint32_t height,
         VkFormat format, VkImageUsageFlags usage
     );
+    void initExternal(VkImage handle, VkFormat fmt, uint32_t w, uint32_t h);
     void initFromPath(
         const LogicalDevice& device, PhysicalDevice physicalDevice,
         const CommandPool& transferCommandPool, Queue transferQueue,
@@ -54,4 +55,5 @@ private:
     VkDeviceMemory imageMemory = VK_NULL_HANDLE;
     VkFormat format = VK_FORMAT_UNDEFINED;
     uint32_t width = 0, height = 0;
+    bool owned = true;
 };

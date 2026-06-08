@@ -18,12 +18,14 @@ Image::Image(Image&& other)
       imageMemory(other.imageMemory),
       format(other.format),
       width(other.width),
-      height(other.height) {
+      height(other.height),
+      owned(other.owned) {
     other.image = VK_NULL_HANDLE;
     other.imageMemory = VK_NULL_HANDLE;
     other.format = VK_FORMAT_UNDEFINED;
     other.width = 0;
     other.height = 0;
+    other.owned = true;
 }
 
 Image& Image::operator=(Image&& other) {
@@ -40,17 +42,27 @@ Image& Image::operator=(Image&& other) {
     format = other.format;
     width = other.width;
     height = other.height;
+    owned = other.owned;
 
     other.image = VK_NULL_HANDLE;
     other.imageMemory = VK_NULL_HANDLE;
     other.format = VK_FORMAT_UNDEFINED;
     other.width = 0;
     other.height = 0;
+    other.owned = true;
 
     return *this;
 }
 
 // Public
+void Image::initExternal(VkImage handle, VkFormat fmt, uint32_t w, uint32_t h) {
+    image  = handle;
+    format = fmt;
+    width  = w;
+    height = h;
+    owned  = false;
+}
+
 void Image::init(
     const LogicalDevice& device,
     uint32_t width_, uint32_t height_,
@@ -210,11 +222,12 @@ void Image::free(const LogicalDevice& device) {
 }
 
 void Image::destroy(const LogicalDevice& device) {
-    if (image != VK_NULL_HANDLE) {
+    if (owned && image != VK_NULL_HANDLE) {
         vkDestroyImage(device.get(), image, nullptr);
     }
     image = VK_NULL_HANDLE;
     format = VK_FORMAT_UNDEFINED;
     width = 0;
     height = 0;
+    owned = true;
 }

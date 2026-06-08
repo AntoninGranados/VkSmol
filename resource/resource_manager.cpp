@@ -58,8 +58,6 @@ DescriptorSetGroup ResourceManager::createDescriptorSetGroup(DescriptorSetLayout
 
 void ResourceManager::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::updateDescriptorSetGroup");
-    // @todo allow partial updates
-    // writer.validate();   // @warning temporary removed
 
     DescriptorSet& set = group.at(frameIndex);
     if (!set.hasResourceId()) {

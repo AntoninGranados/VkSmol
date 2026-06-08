@@ -108,38 +108,26 @@ uint32_t Swapchain::getNextImageIndex(const LogicalDevice& device, const Semapho
 
 void Swapchain::initImages(const LogicalDevice& device) {
     vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, nullptr);
+    std::vector<VkImage> rawImages(imageCount);
+    vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, rawImages.data());
+
     images.resize(imageCount);
-    vkGetSwapchainImagesKHR(device.get(), swapchain, &imageCount, images.data());
+    for (size_t i = 0; i < imageCount; i++) {
+        images[i].initExternal(rawImages[i], imageFormat, extent.width, extent.height);
+    }
 }
 
 void Swapchain::initImageViews(const LogicalDevice& device) {
     imageViews.resize(imageCount);
 
     for (size_t i = 0; i < imageCount; i++) {
-        VkImageViewCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = images[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = imageFormat;
-        
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        vkCheck(vkCreateImageView(device.get(), &createInfo, nullptr, &imageViews[i]), "Failed to create image views");
+        imageViews[i].init(device, images[i]);
     }
 }
 
 void Swapchain::destroyImageViews(const LogicalDevice& device) {
-    for (size_t i = 0; i < imageCount; i++) {
-        vkDestroyImageView(device.get(), imageViews[i], nullptr);
+    for (ImageView& view : imageViews) {
+        view.destroy(device);
     }
 }
 

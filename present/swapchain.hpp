@@ -7,6 +7,9 @@
 #include <vector>
 #include <cstdint>
 
+#include "../image/image.hpp"
+#include "../image/image_view.hpp"
+
 class Window;
 class PhysicalDevice;
 class LogicalDevice;
@@ -32,11 +35,8 @@ public:
     VkSwapchainKHR& get() { return swapchain; };
     const VkSwapchainKHR& get() const { return swapchain; };
 
-    std::vector<VkImage> getImages() { return images; };
-    VkImage& getImage(size_t i) { return images[i]; };
-
-    std::vector<VkImageView> getImageViews() { return imageViews; };
-    VkImageView& getImageView(size_t i) { return imageViews[i]; };
+    Image& getImage(size_t i) { return images[i]; };
+    ImageView& getImageView(size_t i) { return imageViews[i]; };
     
     uint32_t getImageCount() { return imageCount; };
     VkFormat* getImageFormat() { return &imageFormat; };
@@ -49,14 +49,13 @@ public:
 
 private:
     VkSwapchainKHR swapchain;
-    
-    std::vector<VkImage> images;
-    std::vector<VkImageView> imageViews;
+
+    std::vector<Image> images;
+    std::vector<ImageView> imageViews;
     uint32_t imageCount;
     VkFormat imageFormat;
     VkExtent2D extent;
 
-    // TODO: switch to the wrappers Image and ImageView
     void initImages(const LogicalDevice& device);
     void initImageViews(const LogicalDevice& device);
     void destroyImageViews(const LogicalDevice& device);

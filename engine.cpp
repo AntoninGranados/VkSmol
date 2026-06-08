@@ -358,7 +358,6 @@ void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 }
 
-// Will use the barrier on the swapchain image if `image` is `nullptr`
 void VkSmol::barrier(
     const CommandBuffer& commandBuffer,
     VkImage image,
@@ -380,11 +379,11 @@ bool VkSmol::shouldTerminate() {
     return window.shouldClose();
 }
 
-VkImage& VkSmol::getSwapchainImage(size_t imageIndex) {
+Image& VkSmol::getSwapchainImage(size_t imageIndex) {
     return swapchain.getImage(imageIndex);
 }
 
-VkImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
+ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
     return swapchain.getImageView(imageIndex);
 }
 

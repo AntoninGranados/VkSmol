@@ -29,7 +29,6 @@ public:
     const std::vector<PassInfo>& getPasses() const { return passes; }
     const std::vector<ImageInfo>&getImages() const { return images; }
 
-    // @todo remove the returned compiled graph (only here for debugging)
     CompiledRenderGraph compile();
 
 private:
