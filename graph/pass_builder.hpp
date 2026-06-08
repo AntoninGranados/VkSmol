@@ -5,6 +5,9 @@
 class RenderGraphBuilder;
 
 class PassBuilder {
+public:
+    const PassHandle getHandle() { return handle; }
+
 protected:
     PassHandle handle;
     RenderGraphBuilder* graph = nullptr;

@@ -346,9 +346,6 @@ void VkSmol::beginDynamicRenderer(
     VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
     VkClearColorValue clearColor
 ) {
-    if (imageView == VK_NULL_HANDLE)
-        imageView = swapchain.getImageView(imageIndex);
-
     dynamicRenderer.begin(
         commandBuffer,
         imageView, imageLayout,
@@ -372,7 +369,7 @@ void VkSmol::barrier(
     ImageBarrier barrier;
     barrier.call(
         commandBuffer,
-        image == nullptr ? swapchain.getImage(imageIndex) : image,
+        image,
         srcLayout, dstLayout,
         srcAccessMask, dstAccessMask,
         srcStageMask, dstStageMask
@@ -381,6 +378,14 @@ void VkSmol::barrier(
 
 bool VkSmol::shouldTerminate() {
     return window.shouldClose();
+}
+
+VkImage& VkSmol::getSwapchainImage(size_t imageIndex) {
+    return swapchain.getImage(imageIndex);
+}
+
+VkImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
+    return swapchain.getImageView(imageIndex);
 }
 
 // Private helpers

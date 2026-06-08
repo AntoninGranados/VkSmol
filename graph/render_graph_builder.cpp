@@ -96,14 +96,17 @@ std::vector<CompiledPass> computeCompiledPasses(
 
     for (uint32_t passId = 0; passId < passes.size(); passId++) {
         compiledPasses[passId].pass = { .id = passId };
+        compiledPasses[passId].imageAccesses = passes[passId].imageAccesses;
     }
 
     for (const ImageTimeline& timeline : timelines) {
-        ImageAccessInfo lastAccess = images[timeline.image.id].initialAccess.value_or(ImageAccessInfo{});
-        bool hasValue = images[timeline.image.id].initialAccess.has_value();
+        ImageAccessInfo lastAccess = images[timeline.image.id].initialAccess.value_or( ImageAccessInfo{
+            .usage = ImageUsageType::Undefined,
+            .access = AccessType::None,
+        });
 
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
-            if (hasValue && needsBarrier(lastAccess, timelineAccess.info)) {
+            if (needsBarrier(lastAccess, timelineAccess.info)) {
                 compiledPasses[timelineAccess.pass.id].barriersBefore.push_back({
                     .image = timeline.image,
                     .srcAccess = lastAccess,
@@ -111,7 +114,6 @@ std::vector<CompiledPass> computeCompiledPasses(
                 });
             }
             lastAccess = timelineAccess.info;
-            hasValue = true;
         }
     }
 

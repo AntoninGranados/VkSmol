@@ -11,7 +11,8 @@ public:
         VkImage image,
         VkImageLayout srcLayout, VkImageLayout dstLayout,
         VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
-        VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
+        VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
+        VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT
     );
 
     VkImageMemoryBarrier get() { return barrier; }

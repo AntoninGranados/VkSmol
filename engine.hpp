@@ -134,6 +134,9 @@ public:
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 
+    VkImage& getSwapchainImage(size_t imageIndex);
+    VkImageView& getSwapchainImageView(size_t imageIndex);
+
     void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
 

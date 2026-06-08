@@ -33,10 +33,10 @@ public:
     const VkSwapchainKHR& get() const { return swapchain; };
 
     std::vector<VkImage> getImages() { return images; };
-    VkImage getImage(size_t i) { return images[i]; };
+    VkImage& getImage(size_t i) { return images[i]; };
 
     std::vector<VkImageView> getImageViews() { return imageViews; };
-    VkImageView getImageView(size_t i) { return imageViews[i]; };
+    VkImageView& getImageView(size_t i) { return imageViews[i]; };
     
     uint32_t getImageCount() { return imageCount; };
     VkFormat* getImageFormat() { return &imageFormat; };

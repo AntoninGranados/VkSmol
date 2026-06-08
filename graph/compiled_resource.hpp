@@ -12,12 +12,20 @@ struct PassImageBarrier {
     ImageAccessInfo dstAccess;
 };
 
+struct VulkanImageState {
+    VkImageLayout layout;
+    VkAccessFlags access;
+    VkPipelineStageFlags stage;
+    VkImageAspectFlags aspect;
+};
+
 struct CompiledPass {
     PassHandle pass;
-    std::vector<PassImageBarrier> barriersBefore;
+    std::vector<PassImageBarrier> barriersBefore = {};
+    std::vector<ImageAccess> imageAccesses = {};
 };
 
 struct CompiledRenderGraph {
-    std::vector<CompiledPass> compiledPasses;
-    std::vector<PassImageBarrier> outputBarriers;
+    std::vector<CompiledPass> compiledPasses = {};
+    std::vector<PassImageBarrier> outputBarriers = {};
 };

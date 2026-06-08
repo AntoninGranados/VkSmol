@@ -7,7 +7,8 @@ void ImageBarrier::call(
     VkImage image,
     VkImageLayout srcLayout, VkImageLayout dstLayout,
     VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
-    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
+    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
+    VkImageAspectFlags aspect
 ) {
     barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -16,7 +17,7 @@ void ImageBarrier::call(
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.aspectMask = aspect;
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
