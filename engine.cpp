@@ -79,7 +79,7 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     dynamicRenderer.init(device);
 
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
-    transferCommandPool.init(device, queueFamilyIndices.transferFamily.value());
+    transferCommandPool.init(device, queueFamilyIndices.transferFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
     commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
     for (CommandBuffer& commandBuffer : commandBuffers)
         commandBuffer.alloc(device, graphicsCommandPool);

@@ -54,7 +54,6 @@
 
 #include "./frame_context.hpp"
 
-// TODO: create a specific command pool for one time use command buffer (like in the buffer copy function) and use VK_COMMAND_POOL_CREATE_TRANSIENT_BIT during creation
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 // TODO: use more assert
 
