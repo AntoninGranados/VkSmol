@@ -37,6 +37,9 @@ public:
 
     std::vector<AttachmentInfo> getColorAttachment(const PassHandle& passHandle) const;
 
+    ImageBinding getTransferSrc(const PassHandle& passHandle) const;
+    ImageBinding getTransferDst(const PassHandle& passHandle) const;
+
 
 private:
     CompiledRenderGraph graph;

@@ -1,5 +1,7 @@
 #include "render_graph_executor.hpp"
 
+#include <stdexcept>
+
 #include "../image/image_barrier.hpp"
 
 #include "graph_utils.hpp"
@@ -47,6 +49,24 @@ std::vector<AttachmentInfo> RenderGraphExecutor::getColorAttachment(const PassHa
     if (attachments.size() == 0) throw std::runtime_error("No color attachment found in pass");
 
     return attachments;
+}
+
+ImageBinding RenderGraphExecutor::getTransferSrc(const PassHandle& passHandle) const {
+    for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses) {
+        if (access.info.usage == ImageUsageType::TransferSrc) {
+            return bindings.at(access.image.id);
+        }
+    }
+    throw std::runtime_error("No transfer src image found in pass");
+}
+
+ImageBinding RenderGraphExecutor::getTransferDst(const PassHandle& passHandle) const {
+    for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses) {
+        if (access.info.usage == ImageUsageType::TransferDst) {
+            return bindings.at(access.image.id);
+        }
+    }
+    throw std::runtime_error("No transfer dst image found in pass");
 }
 
 void RenderGraphExecutor::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarrier& barrier) const {
