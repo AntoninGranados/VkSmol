@@ -427,7 +427,7 @@ void VkSmol::initImgui() {
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000);
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100);
-    uiDescriptorPool.init(device);
+    uiDescriptorPool.init(device, 1000);
 
     // initInfo.RenderPass = uiRenderPass.get();
     VkPipelineRenderingCreateInfoKHR pipelineCreate{};

@@ -17,7 +17,7 @@ public:
 
     DescriptorPool() = default;
 
-    void init(const LogicalDevice& device);
+    void init(const LogicalDevice& device, uint32_t maxSets);
     void destroy(const LogicalDevice& device);
     VkDescriptorPool get() const { return descriptorPool; };
 
@@ -26,5 +26,4 @@ public:
 private:
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorPoolSize> poolSizes;
-    uint32_t maxSize = 0; // we will only be hable to allocate the number specified in pool sizes
 };

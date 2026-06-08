@@ -39,7 +39,7 @@ DescriptorSetGroup ResourceManager::createDescriptorSetGroup(DescriptorSetLayout
     DescriptorPool descriptorPool;
     for (VkDescriptorSetLayoutBinding& binding : bindings)
         descriptorPool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
-    descriptorPool.init(*context.device);
+    descriptorPool.init(*context.device, MAX_FRAME_IN_FLIGHT);
 
     std::vector<DescriptorSet> descriptorSetList;
     descriptorSetList.resize(MAX_FRAME_IN_FLIGHT);
