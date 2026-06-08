@@ -17,9 +17,20 @@ void ResourceManager::init(ResourceManagerContext context) {
 void ResourceManager::terminate() {
     for (size_t frameIndex = 0; frameIndex < MAX_FRAME_IN_FLIGHT; frameIndex++) {
         if (!retirementQueue.at(frameIndex).empty()) {
-            throw std::runtime_error("[ERROR] ResourceManager::terminate: Not all the resources where destroyed before the end of the application");
+            throw std::runtime_error("ResourceManager::terminate: retirement queue not empty — call flushAll() before terminate()");
         }
     }
+
+    std::vector<ResourceRecord> leaked = registry.getAlive();
+    if (!leaked.empty()) {
+        std::ostringstream message;
+        message << "ResourceManager::terminate: " << leaked.size() << " resource(s) were not destroyed:\n";
+        for (const ResourceRecord& r : leaked) {
+            message << "  " << formatResourceRecord(r) << "\n";
+        }
+        throw std::runtime_error(message.str());
+    }
+
     ctx = {};
 }
 

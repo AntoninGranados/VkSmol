@@ -17,6 +17,7 @@ public:
     const std::vector<ResourceId>& getDependents(ResourceId id) const;
 
     bool isAlive(ResourceId id) const;
+    std::vector<ResourceRecord> getAlive() const;
 
     ResourceRecord& get(ResourceId id);
     const ResourceRecord& get(ResourceId id) const;

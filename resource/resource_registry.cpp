@@ -136,6 +136,14 @@ const std::vector<ResourceId>& ResourceRegistry::getDependents(ResourceId id) co
 }
 
 
+std::vector<ResourceRecord> ResourceRegistry::getAlive() const {
+    std::vector<ResourceRecord> alive;
+    for (const ResourceRecord& r : record) {
+        if (r.alive) alive.push_back(r);
+    }
+    return alive;
+}
+
 bool ResourceRegistry::isAlive(ResourceId id) const {
     return 0 < id.index && id.index <= record.size() && record[id.index-1].alive && record[id.index-1].id.generation == id.generation;
 }

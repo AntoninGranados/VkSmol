@@ -33,7 +33,7 @@ using RetirementPayload = std::function<void(const LogicalDevice&)>;
 class ResourceManager {
 public:
     void init(ResourceManagerContext context);
-    void terminate();   // TODO
+    void terminate();
 
     // Resource management
     void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
