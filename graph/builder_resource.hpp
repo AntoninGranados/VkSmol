@@ -18,7 +18,7 @@ struct ImageHandle { uint32_t id = InvalidHandle; };
 
 enum class PassType : uint16_t {
     Graphics,
-    // Compute,
+    Compute,
     Transfer,
     Present,
 };
@@ -44,6 +44,7 @@ enum class AccessType : uint16_t {
 enum class ImageUsageType : uint16_t {
     Undefined,
     Sampled,
+    StorageImage,
     ColorAttachment,
     DepthAttachment,
     Present,

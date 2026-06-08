@@ -8,7 +8,7 @@
 #include "builder_resource.hpp"
 
 class GraphicsPassBuilder;
-// class ComputePassBuilder;
+class ComputePassBuilder;
 class TransferPassBuilder;
 class PresentPassBuilder;
 
@@ -22,7 +22,7 @@ public:
     ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, ImageAccessInfo finalAccess = {});
 
     GraphicsPassBuilder addGraphicsPass(std::string name);
-    // ComputePassBuilder  addComputePass(std::string name);
+    ComputePassBuilder  addComputePass(std::string name);
     TransferPassBuilder addTransferPass(std::string name);
     PresentPassBuilder  addPresentPass(std::string name);
 
@@ -48,7 +48,7 @@ private:
     std::vector<ImageInfo> images;
 
     friend GraphicsPassBuilder;
-    // friend ComputePassBuilder;
+    friend ComputePassBuilder;
     friend TransferPassBuilder;
     friend PresentPassBuilder;
 };

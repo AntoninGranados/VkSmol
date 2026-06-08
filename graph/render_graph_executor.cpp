@@ -51,6 +51,10 @@ std::vector<AttachmentInfo> RenderGraphExecutor::getColorAttachment(const PassHa
     return attachments;
 }
 
+const ImageBinding& RenderGraphExecutor::getBinding(const ImageHandle& handle) const {
+    return bindings.at(handle.id);
+}
+
 ImageBinding RenderGraphExecutor::getTransferSrc(const PassHandle& passHandle) const {
     for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses) {
         if (access.info.usage == ImageUsageType::TransferSrc) {

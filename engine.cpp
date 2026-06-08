@@ -261,6 +261,20 @@ void VkSmol::destroyGraphicsPipeline(GraphicsPipeline& pipeline) {
     pipeline.destroy(device);
 }
 
+ComputePipeline VkSmol::initComputePipeline(
+    const Shader& shader,
+    const std::vector<const DescriptorSetLayout*>& setLayouts,
+    ComputePipeline other
+) {
+    ComputePipeline pipeline;
+    pipeline.init(device, shader, setLayouts, std::move(other));
+    return pipeline;
+}
+
+void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
+    pipeline.destroy(device);
+}
+
 Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath) {
     Shader shader;
     shader.init(device, stage, filepath);

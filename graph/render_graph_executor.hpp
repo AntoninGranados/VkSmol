@@ -29,8 +29,8 @@ class RenderGraphExecutor {
 public:
     void setCompiledGraph(CompiledRenderGraph graph);
     
-    // Update a binding (call per-frame for the swapchain image, or after resize for all images)
     void bindImage(const ImageHandle& handle, VkImage image, VkImageView view);
+    const ImageBinding& getBinding(const ImageHandle& handle) const;
 
     void emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const;
     void emitOutputBarriers(const CommandBuffer& commandBuffer) const;
@@ -39,6 +39,7 @@ public:
 
     ImageBinding getTransferSrc(const PassHandle& passHandle) const;
     ImageBinding getTransferDst(const PassHandle& passHandle) const;
+
 
 
 private:

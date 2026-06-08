@@ -31,6 +31,7 @@
 
 #include "./render/shader.hpp"
 #include "./render/pipeline/graphics_pipeline.hpp"
+#include "./render/pipeline/compute_pipeline.hpp"
 #include "./render/pipeline/vertex_input.hpp"
 
 #include "./command/command_pool.hpp"
@@ -106,6 +107,13 @@ public:
         VkFormat colorFormat = VK_FORMAT_UNDEFINED
     );
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
+
+    ComputePipeline initComputePipeline(
+        const Shader& shader,
+        const std::vector<const DescriptorSetLayout*>& setLayouts,
+        ComputePipeline other = {}
+    );
+    void destroyComputePipeline(ComputePipeline& computePipeline);
 
     Shader createShader(VkShaderStageFlagBits stage_, std::string filepath);
     void destroyShader(Shader& shader);

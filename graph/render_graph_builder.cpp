@@ -7,6 +7,7 @@
 #include "compiled_resource.hpp"
 #include "graph_utils.hpp"
 #include "graphics_pass_builder.hpp"
+#include "compute_pass_builder.hpp"
 #include "transfer_pass_builder.hpp"
 #include "present_pass_builder.hpp"
 
@@ -183,6 +184,10 @@ ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, u
 
 GraphicsPassBuilder RenderGraphBuilder::addGraphicsPass(std::string name) {
     return addPass<GraphicsPassBuilder, PassType::Graphics>(name);
+}
+
+ComputePassBuilder RenderGraphBuilder::addComputePass(std::string name) {
+    return addPass<ComputePassBuilder, PassType::Compute>(name);
 }
 
 TransferPassBuilder RenderGraphBuilder::addTransferPass(std::string name) {

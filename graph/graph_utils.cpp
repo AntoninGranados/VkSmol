@@ -42,6 +42,7 @@ std::string imageUsageToStr(ImageUsageType usage) {
     switch (usage) {
         case ImageUsageType::Undefined       : return "Undefined";
         case ImageUsageType::Sampled         : return "Sampled";
+        case ImageUsageType::StorageImage    : return "StorageImage";
         case ImageUsageType::ColorAttachment : return "ColorAttachment";
         case ImageUsageType::DepthAttachment : return "DepthAttachment";
         case ImageUsageType::Present         : return "Present";
@@ -89,7 +90,17 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
             return {
                 .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .access = VK_ACCESS_SHADER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                .stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+            };
+
+        case ImageUsageType::StorageImage:
+            return {
+                .layout = VK_IMAGE_LAYOUT_GENERAL,
+                .access = (info.access == AccessType::Read)
+                    ? VK_ACCESS_SHADER_READ_BIT
+                    : VK_ACCESS_SHADER_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
@@ -214,8 +225,10 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
         case ImageUsageType::Undefined: 
             isValid = access == AccessType::None; break;
         case ImageUsageType::Sampled:
-              isValid = access == AccessType::Read; break;
-          case ImageUsageType::ColorAttachment:
+            isValid = access == AccessType::Read; break;
+        case ImageUsageType::StorageImage:
+            isValid = access == AccessType::Read || access == AccessType::Write; break;
+        case ImageUsageType::ColorAttachment:
               isValid = access == AccessType::Write; break;
           case ImageUsageType::DepthAttachment:
               isValid = access == AccessType::Write; break;
