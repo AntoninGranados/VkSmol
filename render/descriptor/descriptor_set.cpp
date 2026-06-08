@@ -81,6 +81,14 @@ void DescriptorSet::linkStorageBuffer(const Buffer& buffer, uint32_t binding) {
     storageInfos.push_back({ storageInfo, binding });
 }
 
+void DescriptorSet::linkStorageImage(const ImageView& view, uint32_t binding) {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.sampler = VK_NULL_HANDLE;
+    imageInfo.imageView = view.get();
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    storageImageInfos.push_back({ imageInfo, binding });
+}
+
 void DescriptorSet::linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler.get();
@@ -128,6 +136,18 @@ void DescriptorSet::update(const LogicalDevice& device) {
 
             descriptorWrites.push_back(descriptorWrite);
     }
+    for (const std::pair<VkDescriptorImageInfo, uint32_t>& pair : storageImageInfos) {
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSet;
+            descriptorWrite.dstBinding = pair.second;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pImageInfo = &pair.first;
+
+            descriptorWrites.push_back(descriptorWrite);
+    }
 
     vkUpdateDescriptorSets(device.get(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
@@ -140,5 +160,6 @@ void DescriptorSet::clear() {
     bufferInfos.clear();
     storageInfos.clear();
     imageInfos.clear();
+    storageImageInfos.clear();
     descriptorWrites.clear();
 }

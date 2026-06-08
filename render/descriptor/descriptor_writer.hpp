@@ -31,10 +31,15 @@ struct CombinedImageSamplerPayload {
     VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;  //! Ignored for now
 };
 
+struct StorageImagePayload {
+    const ImageView* view = nullptr;
+};
+
 using DescriptorPayload = std::variant<
     UniformBufferPayload,
     StorageBufferPayload,
-    CombinedImageSamplerPayload
+    CombinedImageSamplerPayload,
+    StorageImagePayload
 >;
 
 struct DescriptorWrite {
@@ -50,6 +55,7 @@ public:
     DescriptorWriter& uniform(uint32_t binding, const Buffer& buffer);
     DescriptorWriter& storage(uint32_t binding, const Buffer& buffer);
     DescriptorWriter& combinedImageSampler(uint32_t binding, const ImageView& view, const Sampler& sampler);
+    DescriptorWriter& storageImage(uint32_t binding, const ImageView& view);
 
     void validate() const;
     const std::vector<DescriptorWrite>& getWrites() const { return writes; }

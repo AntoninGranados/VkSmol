@@ -195,6 +195,34 @@ void ResourceManager::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32
                 set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
                 registry.addDependency(set.getResourceId(), payload.view->getResourceId());
                 registry.addDependency(set.getResourceId(), payload.sampler->getResourceId());
+            } else if constexpr (std::is_same_v<T, StorageImagePayload>) {
+                if (!payload.view) {
+                    std::ostringstream message;
+                    message << "ResourceManager::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex
+                            << " in " << describeTrackedResource(registry, set.getResourceId(), "DescriptorSet")
+                            << " received a null storage image payload";
+                    throw std::runtime_error(message.str());
+                }
+                if (!payload.view->hasResourceId()) {
+                    std::ostringstream message;
+                    message << "ResourceManager::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex
+                            << " in " << describeTrackedResource(registry, set.getResourceId(), "DescriptorSet")
+                            << " received an untracked image view";
+                    throw std::runtime_error(message.str());
+                }
+                if (!registry.isAlive(payload.view->getResourceId())) {
+                    std::ostringstream message;
+                    message << "ResourceManager::updateDescriptorSetGroup: binding " << write.binding
+                            << " on frame " << frameIndex
+                            << " in " << describeTrackedResource(registry, set.getResourceId(), "DescriptorSet")
+                            << " references a dead image view "
+                            << formatResourceId(payload.view->getResourceId());
+                    throw std::runtime_error(message.str());
+                }
+                set.linkStorageImage(*payload.view, write.binding);
+                registry.addDependency(set.getResourceId(), payload.view->getResourceId());
             }
         }, write.payload);
     }

@@ -112,6 +112,26 @@ DescriptorWriter& DescriptorWriter::combinedImageSampler(uint32_t binding, const
     return *this;
 }
 
+DescriptorWriter& DescriptorWriter::storageImage(uint32_t binding, const ImageView& view) {
+    if (filledBinding.contains(binding)) {
+        throw duplicateBindingError(binding);
+    }
+    const VkDescriptorSetLayoutBinding* layoutBinding = findBinding(binding);
+    if (layoutBinding->descriptorType != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+        throw descriptorTypeMismatchError(binding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, layoutBinding->descriptorType);
+    }
+
+    filledBinding.emplace(binding);
+    writes.push_back({
+        .binding = binding,
+        .payload = StorageImagePayload{
+            .view = &view,
+        }
+    });
+
+    return *this;
+}
+
 void DescriptorWriter::validate() const {
     for (const auto& b : layout->getBindings()) {
         if (!filledBinding.contains(b.binding)) {
