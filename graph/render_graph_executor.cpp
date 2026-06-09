@@ -16,7 +16,7 @@
 void RenderGraphExecutor::setCompiledGraph(CompiledRenderGraph _graph) {
     graph = _graph;
 }
-    
+
 // ——— Images ——————————————————————————————————————————————————————————————————
 
 void RenderGraphExecutor::initImages(VkSmol& engine) {
@@ -55,6 +55,59 @@ void RenderGraphExecutor::destroyImages(VkSmol& engine) {
     ownedSamplers.clear();
     ownedViews.clear();
     ownedImages.clear();
+}
+
+// ——— Buffers —————————————————————————————————————————————————————————————————
+
+void RenderGraphExecutor::initBuffers(VkSmol& engine) {
+    for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
+        const BufferInfo& info = graph.buffers[id];
+        if (info.ownership == BufferOwnership::Imported || info.perFrame) continue;
+
+        VkBufferUsageFlags usageFlags = info.extraUsageFlags;
+        for (const CompiledPass& pass : graph.compiledPasses)
+            for (const BufferAccess& access : pass.bufferAccesses)
+                if (access.buffer.id == id)
+                    usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
+
+        Buffer buf = info.initialData.empty()
+            ? engine.createMappedBuffer(usageFlags, info.size, info.name)
+            : engine.createBuffer(usageFlags, info.size, (void*)info.initialData.data(), info.name);
+        bufferBindings[id] = buf.get();
+        ownedBuffers.emplace(id, std::move(buf));
+    }
+}
+
+void RenderGraphExecutor::destroyBuffers(VkSmol& engine) {
+    for (auto& [id, buf] : ownedBuffers) {
+        engine.destroyBuffer(buf);
+        bufferBindings.erase(id);
+    }
+    ownedBuffers.clear();
+}
+
+void RenderGraphExecutor::initPerFrameBuffers(VkSmol& engine) {
+    for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
+        const BufferInfo& info = graph.buffers[id];
+        if (!info.perFrame || info.ownership == BufferOwnership::Imported) continue;
+
+        VkBufferUsageFlags usageFlags = info.extraUsageFlags;
+        for (const CompiledPass& pass : graph.compiledPasses)
+            for (const BufferAccess& access : pass.bufferAccesses)
+                if (access.buffer.id == id)
+                    usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
+
+        auto& arr = ownedPerFrameBuffers[id];
+        for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+            arr[f] = engine.createMappedBuffer(usageFlags, info.size, info.name + "[" + std::to_string(f) + "]");
+    }
+}
+
+void RenderGraphExecutor::destroyPerFrameBuffers(VkSmol& engine) {
+    for (auto& [id, arr] : ownedPerFrameBuffers)
+        for (Buffer& buf : arr)
+            engine.destroyBuffer(buf);
+    ownedPerFrameBuffers.clear();
 }
 
 // ——— Sync ————————————————————————————————————————————————————————————————————
@@ -101,10 +154,14 @@ void RenderGraphExecutor::destroySync(VkSmol& engine) {
 
 void RenderGraphExecutor::init(VkSmol& engine) {
     initImages(engine);
+    initBuffers(engine);
+    initPerFrameBuffers(engine);
     initSync(engine);
 }
 
 void RenderGraphExecutor::destroy(VkSmol& engine) {
+    destroyPerFrameBuffers(engine);
+    destroyBuffers(engine);
     destroyImages(engine);
     destroySync(engine);
 }
@@ -176,10 +233,10 @@ void RenderGraphExecutor::endRecording(const SubmissionGroupHandle& group, VkSmo
 }
 
 void RenderGraphExecutor::swapBindings(const ImageHandle& a, const ImageHandle& b) {
-    std::swap(bindings[a.id],     bindings[b.id]);
-    std::swap(ownedImages[a.id],  ownedImages[b.id]);
-    std::swap(ownedViews[a.id],   ownedViews[b.id]);
-    std::swap(ownedSamplers[a.id],ownedSamplers[b.id]);
+    std::swap(bindings[a.id],      bindings[b.id]);
+    std::swap(ownedImages[a.id],   ownedImages[b.id]);
+    std::swap(ownedViews[a.id],    ownedViews[b.id]);
+    std::swap(ownedSamplers[a.id], ownedSamplers[b.id]);
 }
 
 Image& RenderGraphExecutor::getImage(const ImageHandle& handle) {
@@ -201,9 +258,70 @@ void RenderGraphExecutor::bindImage(const ImageHandle& handle, VkImage image, Vk
     };
 }
 
+void RenderGraphExecutor::bindBuffer(const BufferHandle& handle, VkBuffer buffer) {
+    bufferBindings[handle.id] = buffer;
+}
+
+Buffer& RenderGraphExecutor::getBuffer(const BufferHandle& handle, uint32_t frameIndex) {
+    if (graph.buffers[handle.id].perFrame) {
+        uint32_t f = (frameIndex == UINT32_MAX) ? currentFrame : frameIndex;
+        return ownedPerFrameBuffers.at(handle.id)[f];
+    }
+    return ownedBuffers.at(handle.id);
+}
+
+void RenderGraphExecutor::resizeBuffer(VkSmol& engine, const BufferHandle& handle, size_t newSize) {
+    auto it = ownedBuffers.find(handle.id);
+    if (it == ownedBuffers.end()) return;
+    if (!graph.buffers[handle.id].initialData.empty()) return; // static buffers can't be resized
+
+    engine.destroyBuffer(it->second);
+    ownedBuffers.erase(it);
+
+    graph.buffers[handle.id].size = newSize;
+
+    VkBufferUsageFlags usageFlags = graph.buffers[handle.id].extraUsageFlags;
+    for (const CompiledPass& pass : graph.compiledPasses)
+        for (const BufferAccess& access : pass.bufferAccesses)
+            if (access.buffer.id == handle.id)
+                usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
+
+    Buffer buf = engine.createMappedBuffer(usageFlags, newSize, graph.buffers[handle.id].name);
+    bufferBindings[handle.id] = buf.get();
+    ownedBuffers.emplace(handle.id, std::move(buf));
+}
+
 void RenderGraphExecutor::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const {
     for (const PassImageBarrier& barrier : graph.compiledPasses[passHandle.id].barriersBefore) {
         emitBarrier(commandBuffer, barrier);
+    }
+
+    const std::vector<PassBufferBarrier>& bufBarriers = graph.compiledPasses[passHandle.id].bufferBarriersBefore;
+
+    for (const PassBufferBarrier& b : bufBarriers) {
+        auto srcVk = bufferAccessToVk(b.srcAccess);
+        auto dstVk = bufferAccessToVk(b.dstAccess);
+        VkBuffer buf = graph.buffers[b.buffer.id].perFrame
+            ? ownedPerFrameBuffers.at(b.buffer.id)[currentFrame].get()
+            : bufferBindings.at(b.buffer.id);
+        VkBufferMemoryBarrier barrier{
+            .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask       = srcVk.access,
+            .dstAccessMask       = dstVk.access,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer              = buf,
+            .offset              = 0,
+            .size                = VK_WHOLE_SIZE,
+        };
+        vkCmdPipelineBarrier(
+            commandBuffer.get(),
+            srcVk.stage, dstVk.stage,
+            0,
+            0, nullptr,
+            1, &barrier,
+            0, nullptr
+        );
     }
 }
 

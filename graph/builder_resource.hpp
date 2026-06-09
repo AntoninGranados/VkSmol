@@ -7,15 +7,15 @@
 #include <vector>
 #include <optional>
 
-struct PassInfo;
-struct ImageInfo;
-struct ImageAccess;
+// ================
+// Handles
+// ================
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
 struct PassHandle            { uint32_t id = InvalidHandle; };
 struct ImageHandle           { uint32_t id = InvalidHandle; };
+struct BufferHandle          { uint32_t id = InvalidHandle; };
 struct SubmissionGroupHandle { uint32_t id = InvalidHandle; };
-// struct BufferHandle { uint32_t id = InvalidHandle; };
 
 enum class PassType : uint16_t {
     Graphics,
@@ -24,22 +24,10 @@ enum class PassType : uint16_t {
     Present,
 };
 
-struct SubmissionGroupInfo {
-    std::string name;
-};
-
-struct PassInfo {
-    std::string name;
-    PassType type;
-    SubmissionGroupHandle group = {};
-    std::vector<ImageAccess> imageAccesses = {};
-};
-
 enum class AccessType : uint16_t {
     None,
     Read,
     Write,
-    // ReadWrite,   // @todo implement support
 };
 
 // ================
@@ -117,20 +105,56 @@ struct ImageInfo {
 // Buffer
 // ================
 
-/*
-// @todo implement `BufferUsage`
-enum class BufferUsage : uint16_t {
+enum class BufferUsageType : uint16_t {
+    Storage,
+    Uniform,
+    TransferSrc,
+    TransferDst,
+    Vertex,
+    Index,
+    Indirect,
 };
 
-// @todo implement `BufferInfo`
+enum class BufferOwnership : uint8_t {
+    Managed,   // Executor creates and destroys the buffer
+    Imported,  // Caller provides via bindBuffer; executor never creates GPU resources
+};
+
+struct BufferAccessInfo {
+    BufferUsageType usage = BufferUsageType::Storage;
+    AccessType access = AccessType::Read;
+};
+
+struct BufferAccess {
+    BufferHandle buffer;
+    BufferAccessInfo info;
+};
+
 struct BufferInfo {
+    std::string name;
+    size_t size = 0;
+    BufferOwnership ownership = BufferOwnership::Managed;
+    // Additional VkBufferUsageFlags ORed on top of the flags inferred from declared pass accesses
+    VkBufferUsageFlags extraUsageFlags = 0;
+    // When true, executor creates MAX_FRAME_IN_FLIGHT copies (one per in-flight frame).
+    // Use for CPU-written buffers (UBOs) that must not alias across frames.
+    bool perFrame = false;
+    // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.
+    std::vector<uint8_t> initialData;
+};
+
+// ================
+// Pass
+// ================
+
+struct SubmissionGroupInfo {
     std::string name;
 };
 
-// @todo implement `BufferUsageInfo`
-struct BufferUsageInfo {
-    BufferHandle handle;
-    BufferUsage usage;
-    AccessType access;
+struct PassInfo {
+    std::string name;
+    PassType type;
+    SubmissionGroupHandle group = {};
+    std::vector<ImageAccess>  imageAccesses  = {};
+    std::vector<BufferAccess> bufferAccesses = {};
 };
-*/

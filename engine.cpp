@@ -295,6 +295,10 @@ Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data, s
     return resourceManager.createBuffer(usage, size, data, name);
 }
 
+Buffer VkSmol::createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name) {
+    return resourceManager.createMappedBuffer(usage, size, name);
+}
+
 Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
     return resourceManager.createReadbackBuffer(size, persistentMapping, name);
 }

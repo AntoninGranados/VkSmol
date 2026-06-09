@@ -33,3 +33,17 @@ void ComputePassBuilder::writeImage(ImageHandle imageHandle, ImageUsageType usag
         },
     });
 }
+
+void ComputePassBuilder::readBuffer(BufferHandle buffer, BufferUsageType usage) {
+    graph->passes[handle.id].bufferAccesses.push_back({
+        .buffer = buffer,
+        .info = { .usage = usage, .access = AccessType::Read },
+    });
+}
+
+void ComputePassBuilder::writeBuffer(BufferHandle buffer, BufferUsageType usage) {
+    graph->passes[handle.id].bufferAccesses.push_back({
+        .buffer = buffer,
+        .info = { .usage = usage, .access = AccessType::Write },
+    });
+}

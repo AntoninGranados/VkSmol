@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "../command/command_buffer.hpp"
+#include "../memory/buffer.hpp"
+#include "../utils.hpp"
 #include "../image/image.hpp"
 #include "../image/image_view.hpp"
 #include "../image/sampler.hpp"
@@ -17,6 +19,7 @@
 
 struct PassHandle;
 struct ImageHandle;
+struct BufferHandle;
 struct SubmissionGroupHandle;
 
 class RenderGraphBuilder;
@@ -62,6 +65,13 @@ public:
     const ImageView&    getView(const ImageHandle& handle) const;
     const Sampler&      getSampler(const ImageHandle& handle) const;
 
+    // Manually bind an external (Imported) buffer
+    void bindBuffer(const BufferHandle& handle, VkBuffer buffer);
+    // For single buffers use frameIndex = UINT32_MAX (resolves to currentFrame for per-frame buffers)
+    Buffer& getBuffer(const BufferHandle& handle, uint32_t frameIndex = UINT32_MAX);
+    // Resize a managed single buffer (destroys and recreates with new byte size)
+    void resizeBuffer(VkSmol& engine, const BufferHandle& handle, size_t newSize);
+
     void emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const;
     void emitOutputBarriers(const CommandBuffer& commandBuffer) const;
 
@@ -73,22 +83,29 @@ public:
 private:
     CompiledRenderGraph graph;
 
-    // Image resources
     std::unordered_map<uint32_t, ImageBinding> bindings;
     std::unordered_map<uint32_t, Image>        ownedImages;
     std::unordered_map<uint32_t, ImageView>    ownedViews;
     std::unordered_map<uint32_t, Sampler>      ownedSamplers;
 
+    std::unordered_map<uint32_t, VkBuffer> bufferBindings;
+    std::unordered_map<uint32_t, Buffer>   ownedBuffers;
+    std::unordered_map<uint32_t, std::array<Buffer, MAX_FRAME_IN_FLIGHT>> ownedPerFrameBuffers;
+
     // Sync and command buffers — [groupId][frame]
     std::vector<Semaphore>                   imageAvailableSemaphores;
-    std::vector<std::vector<Semaphore> >     groupSemaphores;
-    std::vector<std::vector<Fence> >         groupFences;
-    std::vector<std::vector<CommandBuffer> > groupCommandBuffers;
+    std::vector<std::vector<Semaphore>>      groupSemaphores;
+    std::vector<std::vector<Fence>>          groupFences;
+    std::vector<std::vector<CommandBuffer>>  groupCommandBuffers;
 
     uint32_t currentFrame = 0;
 
     void initImages(VkSmol& engine);
     void destroyImages(VkSmol& engine);
+    void initBuffers(VkSmol& engine);
+    void destroyBuffers(VkSmol& engine);
+    void initPerFrameBuffers(VkSmol& engine);
+    void destroyPerFrameBuffers(VkSmol& engine);
     void initSync(VkSmol& engine);
     void destroySync(VkSmol& engine);
 

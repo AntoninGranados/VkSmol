@@ -164,6 +164,7 @@ public:
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
     Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
+    Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
     Buffer createReadbackBuffer(size_t size, bool persistentMapping = true, std::string name = {});
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);

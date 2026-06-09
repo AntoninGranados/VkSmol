@@ -365,6 +365,16 @@ Buffer ResourceManager::createBuffer(VkBufferUsageFlags usage, size_t size, void
     return buffer;
 }
 
+Buffer ResourceManager::createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name) {
+    const ResourceManagerContext& context = requireInitialized("ResourceManager::createMappedBuffer");
+    Buffer buffer;
+    buffer.setResourceName(resolveResourceName(std::move(name), "MappedBuffer"));
+    buffer.init(*context.device, usage, size, true);
+    buffer.alloc(*context.device, *context.physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    buffer.setResourceId(registry.create(ResourceType::Buffer, buffer.getResourceName()));
+    return buffer;
+}
+
 Buffer ResourceManager::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
     const ResourceManagerContext& context = requireInitialized("ResourceManager::createReadbackBuffer");
     Buffer buffer;

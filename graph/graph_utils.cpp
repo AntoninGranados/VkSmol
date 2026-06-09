@@ -30,6 +30,75 @@ std::string imageAccessInfoToStr(const ImageAccessInfo& info) {
 
 } // namespace
 
+std::string bufferUsageToStr(BufferUsageType usage) {
+    switch (usage) {
+        case BufferUsageType::Storage:    return "Storage";
+        case BufferUsageType::Uniform:    return "Uniform";
+        case BufferUsageType::TransferSrc: return "TransferSrc";
+        case BufferUsageType::TransferDst: return "TransferDst";
+        case BufferUsageType::Vertex:     return "Vertex";
+        case BufferUsageType::Index:      return "Index";
+        case BufferUsageType::Indirect:   return "Indirect";
+    }
+}
+
+VulkanBufferState bufferAccessToVk(const BufferAccessInfo& info) {
+    switch (info.usage) {
+        case BufferUsageType::Storage:
+            return {
+                // Storage shaders often both read and write — be conservative with the write flag
+                .access = (info.access == AccessType::Read)
+                    ? VK_ACCESS_SHADER_READ_BIT
+                    : VkAccessFlags(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT  |
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            };
+        case BufferUsageType::Uniform:
+            return {
+                .access = VK_ACCESS_UNIFORM_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            };
+        case BufferUsageType::TransferSrc:
+            return {
+                .access = VK_ACCESS_TRANSFER_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+            };
+        case BufferUsageType::TransferDst:
+            return {
+                .access = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+            };
+        case BufferUsageType::Vertex:
+            return {
+                .access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            };
+        case BufferUsageType::Index:
+            return {
+                .access = VK_ACCESS_INDEX_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            };
+        case BufferUsageType::Indirect:
+            return {
+                .access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+            };
+    }
+}
+
+VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage) {
+    switch (usage) {
+        case BufferUsageType::Storage:     return VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        case BufferUsageType::Uniform:     return VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        case BufferUsageType::TransferSrc: return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        case BufferUsageType::TransferDst: return VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        case BufferUsageType::Vertex:      return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        case BufferUsageType::Index:       return VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        case BufferUsageType::Indirect:    return VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
+}
+
 std::string accessTypeToStr(AccessType access) {
     switch (access) {
         case AccessType::None  : return "None";
@@ -187,22 +256,27 @@ std::string dumpGraph(const RenderGraphBuilder& builder) {
         }
     }
     
+    const std::vector<BufferInfo>& buffers = builder.getBuffers();
+    for (const BufferInfo& buf : buffers) {
+        out.append(std::format("  buffer [{}]: {} bytes\n", buf.name, buf.size));
+    }
+
     out.append("Passes:\n");
     for (const PassInfo &passInfo : builder.getPasses()) {
         out.append(std::format("  pass [{}]:\n", passInfo.name));
 
-        for (const ImageAccess& imageAccess : passInfo.imageAccesses) {
-            if (imageAccess.info.access != AccessType::Read) continue;
-
-            const ImageInfo &imageInfo = images[imageAccess.image.id];
-            out.append(std::format("    -> image [{}], {}\n", imageInfo.name, imageAccessInfoToStr(imageAccess.info)));
+        for (const ImageAccess& a : passInfo.imageAccesses) {
+            if (a.info.access != AccessType::Read) continue;
+            out.append(std::format("    -> image [{}], {}\n", images[a.image.id].name, imageAccessInfoToStr(a.info)));
         }
-
-        for (const ImageAccess& imageAccess : passInfo.imageAccesses) {
-            if (imageAccess.info.access != AccessType::Write) continue;
-
-            const ImageInfo &imageInfo = images[imageAccess.image.id];
-            out.append(std::format("    <- image [{}], {}\n", imageInfo.name, imageAccessInfoToStr(imageAccess.info)));
+        for (const ImageAccess& a : passInfo.imageAccesses) {
+            if (a.info.access != AccessType::Write) continue;
+            out.append(std::format("    <- image [{}], {}\n", images[a.image.id].name, imageAccessInfoToStr(a.info)));
+        }
+        for (const BufferAccess& a : passInfo.bufferAccesses) {
+            char arrow = (a.info.access == AccessType::Read) ? '>' : '<';
+            out.append(std::format("    -{} buffer [{}], {}/{}\n", arrow,
+                buffers[a.buffer.id].name, bufferUsageToStr(a.info.usage), accessTypeToStr(a.info.access)));
         }
     }
 
@@ -242,15 +316,15 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
         case ImageUsageType::StorageImage:
             isValid = access == AccessType::Read || access == AccessType::Write; break;
         case ImageUsageType::ColorAttachment:
-              isValid = access == AccessType::Write; break;
-          case ImageUsageType::DepthAttachment:
-              isValid = access == AccessType::Write; break;
-          case ImageUsageType::TransferSrc:
-              isValid = access == AccessType::Read; break;
-          case ImageUsageType::TransferDst:
-              isValid = access == AccessType::Write; break;
-          case ImageUsageType::Present:
-              isValid = access == AccessType::Read; break;
+            isValid = access == AccessType::Write; break;
+        case ImageUsageType::DepthAttachment:
+            isValid = access == AccessType::Write; break;
+        case ImageUsageType::TransferSrc:
+            isValid = access == AccessType::Read; break;
+        case ImageUsageType::TransferDst:
+            isValid = access == AccessType::Write; break;
+        case ImageUsageType::Present:
+            isValid = access == AccessType::Read; break;
     }
 
     if (!isValid) {

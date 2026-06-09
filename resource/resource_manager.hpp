@@ -52,6 +52,8 @@ public:
     void destroySampler(Sampler& sampler);
 
     Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
+    // Creates a HOST_VISIBLE | HOST_COHERENT buffer with persistent mapping (for CPU-written buffers).
+    Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
     Buffer createReadbackBuffer(size_t size, bool persistentMapping = true, std::string name = {});
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
@@ -164,7 +166,6 @@ private:
         }
     }
     void destroyPerFrameBufferBase(PerFrameBufferBase& buffer) {
-        // const ResourceManagerContext& context = requireInitialized("ResourceManager::initPerFrameBuffer");
         for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
             registry.destroy(buffer.at(i).getResourceId());
             auto retired = std::make_shared<Buffer>(std::move(buffer.at(i)));
