@@ -17,6 +17,8 @@ struct CompiledRenderGraph;
 
 class RenderGraphBuilder {
 public:
+    SubmissionGroupHandle addSubmissionGroup(std::string name);
+
     // @todo add support for 'ImageSubresourceRangeInfo'
 
     // Transient: executor creates it, starts UNDEFINED, first access must be a write
@@ -51,9 +53,11 @@ private:
         return TPassBuilder(handle, this);
     }
 
+    std::vector<SubmissionGroupInfo> groups;
     std::vector<PassInfo> passes;
     std::vector<ImageInfo> images;
 
+    friend class PassBuilder;
     friend GraphicsPassBuilder;
     friend ComputePassBuilder;
     friend TransferPassBuilder;

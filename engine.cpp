@@ -80,34 +80,9 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
 
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
-    commandBuffers.resize(MAX_FRAME_IN_FLIGHT);
-    for (CommandBuffer& commandBuffer : commandBuffers)
-        commandBuffer.alloc(device, graphicsCommandPool);
 
     initImgui();
 
-    // Synchronization Objects
-    {
-        imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-        renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-        uiFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-        renderInFlightFences.resize(MAX_FRAME_IN_FLIGHT);
-        uiInFlightFences.resize(MAX_FRAME_IN_FLIGHT);
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            imageAvailableSemaphores[i].init(device);
-
-            renderFinishedSemaphores[i].resize(swapchain.getImageCount());
-            for (Semaphore& semaphore : renderFinishedSemaphores[i])
-                semaphore.init(device);
-
-            uiFinishedSemaphores[i].resize(swapchain.getImageCount());
-            for (Semaphore& semaphore : uiFinishedSemaphores[i])
-                semaphore.init(device);
-
-            renderInFlightFences[i].init(device, true);
-            uiInFlightFences[i].init(device, true);
-        }
-    }
 
     resourceManager.init({
         .device = &device,
@@ -117,19 +92,19 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     });
 }
 
-std::optional<FrameContext> VkSmol::beginFrame() {
-    Fence::wait({ &renderInFlightFences[currentFrame], &uiInFlightFences[currentFrame] }, device);
+std::optional<FrameContext> VkSmol::beginFrame(const std::vector<const Fence*>& fences, Semaphore& imageAvailableSemaphore) {
+    Fence::wait(fences, device);
 
     resourceManager.collectFrame(currentFrame);
     resourceManager.setRetirementFrame(currentFrame);
 
-    const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
+    const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphore);
     if (result == RECREATE_SWAPCHAIN) {
         recreateSwapchain();
         return {};
     }
 
-    Fence::reset({ &renderInFlightFences[currentFrame], &uiInFlightFences[currentFrame] }, device);
+    Fence::reset(fences, device);
     imageIndex = result;
 
     return FrameContext{
@@ -140,8 +115,8 @@ std::optional<FrameContext> VkSmol::beginFrame() {
     };
 }
 
-void VkSmol::endFrame() {
-    const uint32_t result = presentQueue.present({ &swapchain }, { imageIndex }, { &uiFinishedSemaphores[currentFrame][imageIndex] });
+void VkSmol::endFrame(const Semaphore& presentReadySemaphore) {
+    const uint32_t result = presentQueue.present({ &swapchain }, { imageIndex }, { &presentReadySemaphore });
     if (result == RECREATE_SWAPCHAIN || framebufferResized) {
         recreateSwapchain();
     }
@@ -149,36 +124,25 @@ void VkSmol::endFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
-CommandBuffer& VkSmol::beginRecordingRender() {
-    commandBuffers[currentFrame].reset();
-    commandBuffers[currentFrame].beginRecording();
-    return commandBuffers[currentFrame];
+CommandBuffer VkSmol::allocCommandBuffer() {
+    CommandBuffer cb;
+    cb.alloc(device, graphicsCommandPool);
+    return cb;
 }
 
-void VkSmol::endRecoringRender(CommandBuffer& commandBuffer) {
-    commandBuffer.endRecording();
-    graphicsQueue.submit(
-        { &commandBuffers[currentFrame] },
-        renderInFlightFences[currentFrame],
-        { &imageAvailableSemaphores[currentFrame] }, { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT },
-        { &renderFinishedSemaphores[currentFrame][imageIndex] }
-    );
+void VkSmol::freeCommandBuffer(CommandBuffer& cb) {
+    cb.free(device, graphicsCommandPool);
 }
 
-CommandBuffer& VkSmol::beginRecordingUiRender() {
-    uiCommandBuffers[currentFrame].reset();
-    uiCommandBuffers[currentFrame].beginRecording();
-    return uiCommandBuffers[currentFrame];
-}
-
-void VkSmol::endRecoringUiRender(CommandBuffer& commandBuffer) {
-    commandBuffer.endRecording();
-    graphicsQueue.submit(
-        { &uiCommandBuffers[currentFrame] },
-        uiInFlightFences[currentFrame],
-        { &renderFinishedSemaphores[currentFrame][imageIndex] }, { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT },
-        { &uiFinishedSemaphores[currentFrame][imageIndex] }
-    );
+void VkSmol::submit(
+    CommandBuffer& cmd,
+    Fence& fence,
+    const std::vector<const Semaphore*>& waitSemaphores,
+    const std::vector<VkPipelineStageFlags>& waitStages,
+    const std::vector<const Semaphore*>& signalSemaphores
+) {
+    cmd.endRecording();
+    graphicsQueue.submit({ &cmd }, fence, waitSemaphores, waitStages, signalSemaphores);
 }
 
 void VkSmol::waitIdle() {
@@ -199,23 +163,8 @@ void VkSmol::terminate() {
 
     uiDescriptorPool.destroy(device);
 
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        imageAvailableSemaphores[i].destroy(device);
-        for (Semaphore& semaphore : renderFinishedSemaphores[i])
-            semaphore.destroy(device);
-        for (Semaphore& semaphore : uiFinishedSemaphores[i])
-            semaphore.destroy(device);
-        renderInFlightFences[i].destroy(device);
-        uiInFlightFences[i].destroy(device);
-    }
-
-    for (CommandBuffer& commandBuffer : commandBuffers)
-        commandBuffer.free(device, graphicsCommandPool);
-    for (CommandBuffer& commandBuffer : uiCommandBuffers)
-        commandBuffer.free(device, uiCommandPool);
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
-    uiCommandPool.destroy(device);
 
     swapchain.destroy(device);
 
@@ -426,11 +375,6 @@ ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
 void VkSmol::initImgui() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
 
-    uiCommandPool.init(device, indices.graphicsFamily.value());
-    uiCommandBuffers.resize(MAX_FRAME_IN_FLIGHT);
-    for (CommandBuffer& commandBuffer : uiCommandBuffers)
-        commandBuffer.alloc(device, uiCommandPool);
-
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     auto& io = ImGui::GetIO();
@@ -482,42 +426,12 @@ void VkSmol::initImgui() {
     ImGui_ImplVulkan_Init(&initInfo);
 }
 
-void VkSmol::recreatePerFrameSynchObjects() {
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        for (Semaphore& semaphore : renderFinishedSemaphores[i])
-            semaphore.destroy(device);
-        renderFinishedSemaphores[i].clear();
-
-        for (Semaphore& semaphore : uiFinishedSemaphores[i])
-            semaphore.destroy(device);
-        uiFinishedSemaphores[i].clear();
-    }
-
-    renderFinishedSemaphores.clear();
-    uiFinishedSemaphores.clear();
-
-    renderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-    uiFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-        renderFinishedSemaphores[i].resize(swapchain.getImageCount());
-        for (Semaphore& semaphore : renderFinishedSemaphores[i])
-            semaphore.init(device);
-
-        uiFinishedSemaphores[i].resize(swapchain.getImageCount());
-        for (Semaphore& semaphore : uiFinishedSemaphores[i])
-            semaphore.init(device);
-    }
-}
-
 void VkSmol::recreateSwapchain() {
     window.pauseWhileMinimized();
 
     swapchain.recreate(device, physicalDevice, surface, window);
     swapchainGeneration++;
     framebufferResized = false;
-    
-    recreatePerFrameSynchObjects();
 }
 
 std::vector<const char*> VkSmol::getRequiredExtensions() {

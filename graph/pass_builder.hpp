@@ -7,6 +7,7 @@ class RenderGraphBuilder;
 class PassBuilder {
 public:
     const PassHandle getHandle() { return handle; }
+    void setGroup(SubmissionGroupHandle group);
 
 protected:
     PassHandle handle;

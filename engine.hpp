@@ -86,14 +86,22 @@ class VkSmol {
 public:
     void init(std::string appName, uint32_t appVersion);
 
-    std::optional<FrameContext> beginFrame();
-    void endFrame();
+    std::optional<FrameContext> beginFrame(const std::vector<const Fence*>& fences, Semaphore& imageAvailableSemaphore);
+    void endFrame(const Semaphore& presentReadySemaphore);
 
-    CommandBuffer& beginRecordingRender();
-    void endRecoringRender(CommandBuffer& commandBuffer);
-    
-    CommandBuffer& beginRecordingUiRender();
-    void endRecoringUiRender(CommandBuffer& commandBuffer);
+    CommandBuffer allocCommandBuffer();
+    void freeCommandBuffer(CommandBuffer& cmd);
+
+    void submit(
+        CommandBuffer& cmd,
+        Fence& fence,
+        const std::vector<const Semaphore*>& waitSemaphores,
+        const std::vector<VkPipelineStageFlags>& waitStages,
+        const std::vector<const Semaphore*>& signalSemaphores
+    );
+
+    // Expose device for sync object init/destroy inside the executor
+    const LogicalDevice& getDevice() const { return device; }
 
     void waitIdle();
     void terminate();
@@ -222,12 +230,8 @@ private:
     
     DescriptorPool uiDescriptorPool;
 
-    CommandPool graphicsCommandPool, transferCommandPool, uiCommandPool;
-    std::vector<CommandBuffer> commandBuffers, uiCommandBuffers;
+    CommandPool graphicsCommandPool, transferCommandPool;
 
-    std::vector<Semaphore> imageAvailableSemaphores;
-    std::vector<std::vector<Semaphore> > renderFinishedSemaphores, uiFinishedSemaphores;    // One semaphore per image in the swapchain
-    std::vector<Fence> renderInFlightFences, uiInFlightFences;
     uint32_t currentFrame = 0, imageIndex;
 
     bool framebufferResized = false;
@@ -235,8 +239,6 @@ private:
     ResourceManager resourceManager;
 
     void initImgui();
-
-    void recreatePerFrameSynchObjects();
     void recreateSwapchain();
     
     std::vector<const char*> getRequiredExtensions();

@@ -2,9 +2,11 @@
 
 #include <stdexcept>
 #include <utility>
+#include <algorithm>
 
 #include "../image/image_barrier.hpp"
 #include "../engine.hpp"
+#include "../utils.hpp"
 
 #include "graph_utils.hpp"
 #include "builder_resource.hpp"
@@ -15,7 +17,9 @@ void RenderGraphExecutor::setCompiledGraph(CompiledRenderGraph _graph) {
     graph = _graph;
 }
     
-void RenderGraphExecutor::init(VkSmol& engine) {
+// ——— Images ——————————————————————————————————————————————————————————————————
+
+void RenderGraphExecutor::initImages(VkSmol& engine) {
     for (uint32_t id = 0; id < graph.images.size(); ++id) {
         const ImageInfo& info = graph.images[id];
         if (info.ownership == ImageOwnership::Imported) continue;
@@ -41,7 +45,7 @@ void RenderGraphExecutor::init(VkSmol& engine) {
     }
 }
 
-void RenderGraphExecutor::destroy(VkSmol& engine) {
+void RenderGraphExecutor::destroyImages(VkSmol& engine) {
     for (auto& [id, img] : ownedImages) {
         engine.destroySampler(ownedSamplers.at(id));
         engine.destroyImageView(ownedViews.at(id));
@@ -53,15 +57,122 @@ void RenderGraphExecutor::destroy(VkSmol& engine) {
     ownedImages.clear();
 }
 
+// ——— Sync ————————————————————————————————————————————————————————————————————
+
+void RenderGraphExecutor::initSync(VkSmol& engine) {
+    const uint32_t numGroups = static_cast<uint32_t>(graph.submissionGroups.size());
+
+    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    groupSemaphores.resize(numGroups);
+    groupFences.resize(numGroups);
+    groupCommandBuffers.resize(numGroups);
+    for (uint32_t g = 0; g < numGroups; ++g) {
+        groupSemaphores[g].resize(MAX_FRAME_IN_FLIGHT);
+        groupFences[g].resize(MAX_FRAME_IN_FLIGHT);
+        groupCommandBuffers[g].resize(MAX_FRAME_IN_FLIGHT);
+    }
+
+    for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
+        imageAvailableSemaphores[f].init(engine.getDevice());
+        for (uint32_t g = 0; g < numGroups; ++g) {
+            groupSemaphores[g][f].init(engine.getDevice());
+            groupFences[g][f].init(engine.getDevice(), true);
+            groupCommandBuffers[g][f] = engine.allocCommandBuffer();
+        }
+    }
+}
+
+void RenderGraphExecutor::destroySync(VkSmol& engine) {
+    for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
+        imageAvailableSemaphores[f].destroy(engine.getDevice());
+        for (uint32_t g = 0; g < groupSemaphores.size(); ++g) {
+            groupSemaphores[g][f].destroy(engine.getDevice());
+            groupFences[g][f].destroy(engine.getDevice());
+            engine.freeCommandBuffer(groupCommandBuffers[g][f]);
+        }
+    }
+    imageAvailableSemaphores.clear();
+    groupSemaphores.clear();
+    groupFences.clear();
+    groupCommandBuffers.clear();
+}
+
+// ——— Public lifecycle —————————————————————————————————————————————————————————
+
+void RenderGraphExecutor::init(VkSmol& engine) {
+    initImages(engine);
+    initSync(engine);
+}
+
+void RenderGraphExecutor::destroy(VkSmol& engine) {
+    destroyImages(engine);
+    destroySync(engine);
+}
+
 void RenderGraphExecutor::resize(VkSmol& engine, uint32_t width, uint32_t height) {
-    destroy(engine);
+    // Only images are resolution-dependent; sync objects stay intact
+    destroyImages(engine);
     for (ImageInfo& info : graph.images) {
         if (info.ownership != ImageOwnership::Imported) {
             info.width  = width;
             info.height = height;
         }
     }
-    init(engine);
+    initImages(engine);
+}
+
+// ——— Frame ————————————————————————————————————————————————————————————————————
+
+std::optional<FrameContext> RenderGraphExecutor::beginFrame(VkSmol& engine) {
+    std::vector<const Fence*> fences;
+    for (auto& groupFenceRow : groupFences)
+        fences.push_back(&groupFenceRow[currentFrame]);
+
+    // currentFrame is NOT updated here — it advances in present() in lockstep with engine.endFrame
+    return engine.beginFrame(fences, imageAvailableSemaphores[currentFrame]);
+}
+
+void RenderGraphExecutor::present(VkSmol& engine) {
+    uint32_t presentGroupId = 0;
+    for (const CompiledSubmissionGroup& group : graph.submissionGroups)
+        if (group.signalsPresentSemaphore) { presentGroupId = group.handle.id; break; }
+
+    engine.endFrame(groupSemaphores[presentGroupId][currentFrame]);
+    currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
+}
+
+// ——— Recording ———————————————————————————————————————————————————————————————
+
+CommandBuffer& RenderGraphExecutor::beginRecording(const SubmissionGroupHandle& group, VkSmol& engine) {
+    (void)engine;
+    CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
+    cmd.reset();
+    cmd.beginRecording();
+    return cmd;
+}
+
+void RenderGraphExecutor::endRecording(const SubmissionGroupHandle& group, VkSmol& engine) {
+    const CompiledSubmissionGroup& compiled = graph.submissionGroups[group.id];
+    CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
+
+    std::vector<const Semaphore*> waitSemaphores;
+    std::vector<VkPipelineStageFlags> waitStages;
+
+    if (compiled.waitsOnImageAvailable) {
+        waitSemaphores.push_back(&imageAvailableSemaphores[currentFrame]);
+        waitStages.push_back(compiled.imageAvailableWaitStage);
+    }
+    for (const SubmissionGroupHandle& dep : compiled.dependencies) {
+        waitSemaphores.push_back(&groupSemaphores[dep.id][currentFrame]);
+        waitStages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+    }
+
+    engine.submit(
+        cmd,
+        groupFences[group.id][currentFrame],
+        waitSemaphores, waitStages,
+        { &groupSemaphores[group.id][currentFrame] }
+    );
 }
 
 void RenderGraphExecutor::swapBindings(const ImageHandle& a, const ImageHandle& b) {
