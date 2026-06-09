@@ -49,9 +49,11 @@ struct CompiledSubmissionGroup {
 };
 
 struct CompiledRenderGraph {
-    std::vector<CompiledPass> compiledPasses = {};
-    std::vector<PassImageBarrier> outputBarriers = {};
-    std::vector<ImageInfo>  images  = {};
-    std::vector<BufferInfo> buffers = {};
+    std::vector<CompiledPass>            compiledPasses   = {};
+    std::vector<PassImageBarrier>        outputBarriers   = {};
+    std::vector<ImageInfo>               images           = {};
+    std::vector<BufferInfo>              buffers          = {};
+    std::vector<ComputePipelineInfo>     computePipelines = {};
+    std::vector<GraphicsPipelineInfo>    graphicsPipelines = {};
     std::vector<CompiledSubmissionGroup> submissionGroups = {};
 };

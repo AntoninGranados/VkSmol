@@ -1,8 +1,8 @@
 #include "transfer_pass_builder.hpp"
 
-#include "graph_utils.hpp"
-#include "builder_resource.hpp"
-#include "render_graph_builder.hpp"
+#include "../graph_utils.hpp"
+#include "../builder_resource.hpp"
+#include "../render_graph_builder.hpp"
 
 void TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
     checkImageAccessInfoValid({

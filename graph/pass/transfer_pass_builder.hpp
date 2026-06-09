@@ -1,7 +1,7 @@
 #pragma once
 
 #include "pass_builder.hpp"
-#include "builder_resource.hpp"
+#include "../builder_resource.hpp"
 
 class TransferPassBuilder: public PassBuilder {
 public:

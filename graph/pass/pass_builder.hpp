@@ -1,6 +1,6 @@
 #pragma once
 
-#include "builder_resource.hpp"
+#include "../builder_resource.hpp"
 
 class RenderGraphBuilder;
 

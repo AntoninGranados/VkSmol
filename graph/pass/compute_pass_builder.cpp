@@ -1,8 +1,8 @@
 #include "compute_pass_builder.hpp"
 
-#include "graph_utils.hpp"
-#include "builder_resource.hpp"
-#include "render_graph_builder.hpp"
+#include "../graph_utils.hpp"
+#include "../builder_resource.hpp"
+#include "../render_graph_builder.hpp"
 
 void ComputePassBuilder::readImage(ImageHandle imageHandle, ImageUsageType usage) {
     checkImageAccessInfoValid({

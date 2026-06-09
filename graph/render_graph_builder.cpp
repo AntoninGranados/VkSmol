@@ -6,11 +6,11 @@
 #include "builder_resource.hpp"
 #include "compiled_resource.hpp"
 #include "graph_utils.hpp"
-#include "graphics_pass_builder.hpp"
-#include "compute_pass_builder.hpp"
-#include "transfer_pass_builder.hpp"
-#include "present_pass_builder.hpp"
-#include "pass_builder.hpp"
+#include "pass/graphics_pass_builder.hpp"
+#include "pass/compute_pass_builder.hpp"
+#include "pass/transfer_pass_builder.hpp"
+#include "pass/present_pass_builder.hpp"
+#include "pass/pass_builder.hpp"
 
 void PassBuilder::setGroup(SubmissionGroupHandle group) {
     graph->passes[handle.id].group = group;
@@ -390,6 +390,30 @@ BufferHandle RenderGraphBuilder::createPerFrameBuffer(std::string name, size_t s
     return handle;
 }
 
+ComputePipelineHandle RenderGraphBuilder::addComputePipeline(std::string name, std::string shaderPath, std::vector<const DescriptorSetLayout*> layouts) {
+    ComputePipelineHandle handle = { .id = static_cast<uint32_t>(computePipelines.size()) };
+    computePipelines.push_back({
+        .name       = std::move(name),
+        .shaderPath = std::move(shaderPath),
+        .layouts    = std::move(layouts),
+    });
+    return handle;
+}
+
+GraphicsPipelineHandle RenderGraphBuilder::addGraphicsPipeline(std::string name, const VkPipelineVertexInputStateCreateInfo& vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, std::vector<const DescriptorSetLayout*> layouts) {
+    GraphicsPipelineHandle handle = { .id = static_cast<uint32_t>(graphicsPipelines.size()) };
+    GraphicsPipelineInfo info;
+    info.name        = std::move(name);
+    info.shaderPaths = std::move(shaderPaths);
+    info.layouts     = std::move(layouts);
+    if (vi.pVertexBindingDescriptions)
+        info.bindingDescription = *vi.pVertexBindingDescriptions;
+    for (uint32_t i = 0; i < vi.vertexAttributeDescriptionCount; ++i)
+        info.attributeDescriptions.push_back(vi.pVertexAttributeDescriptions[i]);
+    graphicsPipelines.push_back(std::move(info));
+    return handle;
+}
+
 BufferHandle RenderGraphBuilder::importBuffer(std::string name) {
     BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
     buffers.push_back({
@@ -421,10 +445,12 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
     validateImageTimelines(images, imageTimelines);
 
     CompiledRenderGraph compiled;
-    compiled.compiledPasses   = computeCompiledPasses(images, passes, imageTimelines, bufferTimelines);
-    compiled.outputBarriers   = computeOutputBarriers(images, imageTimelines);
-    compiled.images           = images;
-    compiled.buffers          = buffers;
-    compiled.submissionGroups = computeCompiledSubmissionGroups(groups, passes, images, imageTimelines, bufferTimelines);
+    compiled.compiledPasses    = computeCompiledPasses(images, passes, imageTimelines, bufferTimelines);
+    compiled.outputBarriers    = computeOutputBarriers(images, imageTimelines);
+    compiled.images            = images;
+    compiled.buffers           = buffers;
+    compiled.computePipelines  = computePipelines;
+    compiled.graphicsPipelines = graphicsPipelines;
+    compiled.submissionGroups  = computeCompiledSubmissionGroups(groups, passes, images, imageTimelines, bufferTimelines);
     return compiled;
 }

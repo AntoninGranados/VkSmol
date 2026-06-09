@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <utility>
 
 // ================
 // Handles
@@ -141,6 +142,29 @@ struct BufferInfo {
     bool perFrame = false;
     // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.
     std::vector<uint8_t> initialData;
+};
+
+// ================
+// Pipeline
+// ================
+
+class DescriptorSetLayout;
+
+struct ComputePipelineHandle  { uint32_t id = InvalidHandle; };
+struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
+
+struct ComputePipelineInfo {
+    std::string name;
+    std::string shaderPath;
+    std::vector<const DescriptorSetLayout*> layouts;
+};
+
+struct GraphicsPipelineInfo {
+    std::string name;
+    VkVertexInputBindingDescription                            bindingDescription;
+    std::vector<VkVertexInputAttributeDescription>             attributeDescriptions;
+    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths;
+    std::vector<const DescriptorSetLayout*>                    layouts;
 };
 
 // ================

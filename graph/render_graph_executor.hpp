@@ -12,6 +12,8 @@
 #include "../image/image.hpp"
 #include "../image/image_view.hpp"
 #include "../image/sampler.hpp"
+#include "../render/pipeline/compute_pipeline.hpp"
+#include "../render/pipeline/graphics_pipeline.hpp"
 #include "../sync/fence.hpp"
 #include "../sync/semaphore.hpp"
 #include "../frame_context.hpp"
@@ -72,6 +74,11 @@ public:
     // Resize a managed single buffer (destroys and recreates with new byte size)
     void resizeBuffer(VkSmol& engine, const BufferHandle& handle, size_t newSize);
 
+    ComputePipeline&  getComputePipeline(ComputePipelineHandle handle);
+    GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
+    // Rebuild all pipelines from their registered shader paths — safe to call on a live executor
+    void reloadPipelines(VkSmol& engine);
+
     void emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const;
     void emitOutputBarriers(const CommandBuffer& commandBuffer) const;
 
@@ -92,6 +99,9 @@ private:
     std::unordered_map<uint32_t, Buffer>   ownedBuffers;
     std::unordered_map<uint32_t, std::array<Buffer, MAX_FRAME_IN_FLIGHT>> ownedPerFrameBuffers;
 
+    std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
+    std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
+
     // Sync and command buffers — [groupId][frame]
     std::vector<Semaphore>                   imageAvailableSemaphores;
     std::vector<std::vector<Semaphore>>      groupSemaphores;
@@ -106,6 +116,8 @@ private:
     void destroyBuffers(VkSmol& engine);
     void initPerFrameBuffers(VkSmol& engine);
     void destroyPerFrameBuffers(VkSmol& engine);
+    void initPipelines(VkSmol& engine);
+    void destroyPipelines(VkSmol& engine);
     void initSync(VkSmol& engine);
     void destroySync(VkSmol& engine);
 

@@ -110,6 +110,47 @@ void RenderGraphExecutor::destroyPerFrameBuffers(VkSmol& engine) {
     ownedPerFrameBuffers.clear();
 }
 
+// ——— Pipelines ———————————————————————————————————————————————————————————————
+
+void RenderGraphExecutor::reloadPipelines(VkSmol& engine) {
+    for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
+        const ComputePipelineInfo& info = graph.computePipelines[id];
+        engine.reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, info.layouts);
+    }
+    for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
+        const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
+        VkPipelineVertexInputStateCreateInfo vi{
+            .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount   = 1,
+            .pVertexBindingDescriptions      = &info.bindingDescription,
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
+            .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
+        };
+        engine.reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, info.layouts);
+    }
+}
+
+void RenderGraphExecutor::initPipelines(VkSmol& engine) {
+    reloadPipelines(engine);
+}
+
+void RenderGraphExecutor::destroyPipelines(VkSmol& engine) {
+    for (auto& [id, pipeline] : ownedComputePipelines)
+        engine.destroyComputePipeline(pipeline);
+    ownedComputePipelines.clear();
+    for (auto& [id, pipeline] : ownedGraphicsPipelines)
+        engine.destroyGraphicsPipeline(pipeline);
+    ownedGraphicsPipelines.clear();
+}
+
+ComputePipeline& RenderGraphExecutor::getComputePipeline(ComputePipelineHandle handle) {
+    return ownedComputePipelines.at(handle.id);
+}
+
+GraphicsPipeline& RenderGraphExecutor::getGraphicsPipeline(GraphicsPipelineHandle handle) {
+    return ownedGraphicsPipelines.at(handle.id);
+}
+
 // ——— Sync ————————————————————————————————————————————————————————————————————
 
 void RenderGraphExecutor::initSync(VkSmol& engine) {
@@ -156,14 +197,16 @@ void RenderGraphExecutor::init(VkSmol& engine) {
     initImages(engine);
     initBuffers(engine);
     initPerFrameBuffers(engine);
+    initPipelines(engine);
     initSync(engine);
 }
 
 void RenderGraphExecutor::destroy(VkSmol& engine) {
+    destroySync(engine);
+    destroyPipelines(engine);
     destroyPerFrameBuffers(engine);
     destroyBuffers(engine);
     destroyImages(engine);
-    destroySync(engine);
 }
 
 void RenderGraphExecutor::resize(VkSmol& engine, uint32_t width, uint32_t height) {
