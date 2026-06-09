@@ -6,8 +6,8 @@
 void Fence::init(const LogicalDevice& device, bool signaled) {
     VkFenceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    // if (signaled)
-    createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    if (signaled)
+        createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     vkCheck(vkCreateFence(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create fence");
 }
 

@@ -22,6 +22,14 @@ void DescriptorSetLayout::addBinding(VkShaderStageFlags shaderStage, VkDescripto
     layoutBinding.stageFlags = shaderStage;
     layoutBinding.descriptorType = descriptorType;
     layoutBinding.descriptorCount = descriptorCount;
+    bindings.push_back(layoutBinding);
+}
 
+void DescriptorSetLayout::addBinding(uint32_t bindingIndex, VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount) {
+    VkDescriptorSetLayoutBinding layoutBinding{};
+    layoutBinding.binding = bindingIndex;
+    layoutBinding.stageFlags = shaderStage;
+    layoutBinding.descriptorType = descriptorType;
+    layoutBinding.descriptorCount = descriptorCount;
     bindings.push_back(layoutBinding);
 }

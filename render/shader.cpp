@@ -88,8 +88,6 @@ std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, b
         throw std::runtime_error(buf);
     }
 
-    // std::cout << "output : " << compiledfilepath << std::endl;
-
     return compiledfilepath;
 }
 

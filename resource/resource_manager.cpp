@@ -232,7 +232,7 @@ void ResourceManager::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32
 
 // TODO: needs to store the available spots to refill them
 void ResourceManager::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
-    if (!group.isValide()) return;
+    if (!group.isValid()) return;
 
     for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
         if (!group.at(i).hasResourceId()) {

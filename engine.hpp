@@ -35,8 +35,6 @@
 #include "./render/shader.hpp"
 #include "./render/pipeline/graphics_pipeline.hpp"
 #include "./render/pipeline/compute_pipeline.hpp"
-#include "./render/pipeline/vertex_input.hpp"
-
 #include "./command/command_pool.hpp"
 #include "./command/command_buffer.hpp"
 
@@ -49,7 +47,6 @@
 #include "./image/image_view.hpp"
 #include "./image/sampler.hpp"
 
-#include "./resource/resource_registry.hpp"
 #include "./resource/resource_manager.hpp"
 
 #include "./frame_context.hpp"
@@ -78,7 +75,7 @@ public:
     void setGraph(RenderGraphBuilder& builder);
     void initGraph();
     void destroyGraph();
-    void resizeGraph(uint32_t width, uint32_t height);
+    void resizeImage(ImageHandle handle, uint32_t width, uint32_t height);
 
     std::optional<FrameContext> beginFrame();
     void present();
@@ -106,6 +103,8 @@ public:
     ImageBinding getTransferSrc(const PassHandle& passHandle) const;
     ImageBinding getTransferDst(const PassHandle& passHandle) const;
 
+    void bindDescriptors(const CommandBuffer& cmd, const PassHandle& pass);
+
     CommandBuffer allocCommandBuffer();
     void freeCommandBuffer(CommandBuffer& cmd);
 
@@ -124,19 +123,6 @@ public:
 
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
     void destroyComputePipeline(ComputePipeline& computePipeline);
-
-    // Compile shader(s), swap the pipeline, destroy the old one. Throws on compile failure.
-    void reloadComputePipeline(
-        ComputePipeline& pipeline,
-        const std::string& shaderPath,
-        const std::vector<const DescriptorSetLayout*>& setLayouts
-    );
-    void reloadGraphicsPipeline(
-        GraphicsPipeline& pipeline,
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
-        const std::vector<const DescriptorSetLayout*>& setLayouts
-    );
 
     Shader createShader(VkShaderStageFlagBits stage_, std::string filepath);
     void destroyShader(Shader& shader);
@@ -220,6 +206,17 @@ private:
         const std::vector<const DescriptorSetLayout*>& setLayouts,
         ComputePipeline other = {}
     );
+    void reloadComputePipeline(
+        ComputePipeline& pipeline,
+        const std::string& shaderPath,
+        const std::vector<const DescriptorSetLayout*>& setLayouts
+    );
+    void reloadGraphicsPipeline(
+        GraphicsPipeline& pipeline,
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
+        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
+        const std::vector<const DescriptorSetLayout*>& setLayouts
+    );
 
     // Graph state
     CompiledRenderGraph graph;
@@ -236,6 +233,9 @@ private:
     std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
 
+    std::unordered_map<uint32_t, DescriptorSetLayout> passDescriptorLayouts;
+    std::unordered_map<uint32_t, DescriptorSetGroup>  passDescriptorGroups;
+
     std::vector<Semaphore>                  imageAvailableSemaphores;
     std::vector<std::vector<Semaphore>>     groupSemaphores;
     std::vector<std::vector<Fence>>         groupFences;
@@ -243,12 +243,22 @@ private:
 
     void initImages();
     void destroyImages();
+
     void initBuffers();
     void destroyBuffers();
+    
     void initPerFrameBuffers();
     void destroyPerFrameBuffers();
+    
+    void initDescriptorSets();
+    void destroyDescriptorSets();
+    void updateDescriptors(const PassHandle& pass, uint32_t frameIndex);
+    void refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex);
+    void refreshDescriptorsForBuffer(uint32_t bufferId);
+    
     void initPipelines();
     void destroyPipelines();
+    
     void initSync();
     void destroySync();
 

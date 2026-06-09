@@ -17,6 +17,12 @@ public:
     void readBuffer(BufferHandle buffer, BufferUsageType usage);
     void writeBuffer(BufferHandle buffer, BufferUsageType usage);
 
+    // Overloads with descriptor binding slot
+    void readImage (ImageHandle  imageHandle, ImageUsageType  usage, uint32_t binding);
+    void readBuffer(BufferHandle buffer,      BufferUsageType usage, uint32_t binding);
+
+    GraphicsPipelineHandle setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaders);
+
 private:
     GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)
         : PassBuilder(handle, graph) {}

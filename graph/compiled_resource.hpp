@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
+#include <optional>
 
 #include "builder_resource.hpp"
 
@@ -32,10 +33,14 @@ struct VulkanBufferState {
 
 struct CompiledPass {
     PassHandle pass;
-    std::vector<PassImageBarrier>  barriersBefore       = {};
-    std::vector<PassBufferBarrier> bufferBarriersBefore = {};
-    std::vector<ImageAccess>  imageAccesses  = {};
-    std::vector<BufferAccess> bufferAccesses = {};
+    std::string name;
+    PassType    type = PassType::Compute;
+    std::vector<PassImageBarrier>      barriersBefore       = {};
+    std::vector<PassBufferBarrier>     bufferBarriersBefore = {};
+    std::vector<ImageAccess>           imageAccesses        = {};
+    std::vector<BufferAccess>          bufferAccesses       = {};
+    std::vector<DescriptorBindingDecl> descriptorBindings   = {};
+    std::optional<uint32_t>            pipelineId;
 };
 
 struct CompiledSubmissionGroup {

@@ -143,9 +143,12 @@ std::vector<CompiledPass> computeCompiledPasses(
     std::vector<CompiledPass> compiledPasses(passes.size());
 
     for (uint32_t passId = 0; passId < passes.size(); passId++) {
-        compiledPasses[passId].pass = { .id = passId };
-        compiledPasses[passId].imageAccesses  = passes[passId].imageAccesses;
-        compiledPasses[passId].bufferAccesses = passes[passId].bufferAccesses;
+        compiledPasses[passId].pass               = { .id = passId };
+        compiledPasses[passId].name               = passes[passId].name;
+        compiledPasses[passId].type               = passes[passId].type;
+        compiledPasses[passId].imageAccesses       = passes[passId].imageAccesses;
+        compiledPasses[passId].bufferAccesses      = passes[passId].bufferAccesses;
+        compiledPasses[passId].descriptorBindings  = passes[passId].descriptorBindings;
     }
 
     for (const ImageTimeline& timeline : imageTimelines) {
@@ -390,30 +393,6 @@ BufferHandle RenderGraphBuilder::createPerFrameBuffer(std::string name, size_t s
     return handle;
 }
 
-ComputePipelineHandle RenderGraphBuilder::addComputePipeline(std::string name, std::string shaderPath, std::vector<const DescriptorSetLayout*> layouts) {
-    ComputePipelineHandle handle = { .id = static_cast<uint32_t>(computePipelines.size()) };
-    computePipelines.push_back({
-        .name       = std::move(name),
-        .shaderPath = std::move(shaderPath),
-        .layouts    = std::move(layouts),
-    });
-    return handle;
-}
-
-GraphicsPipelineHandle RenderGraphBuilder::addGraphicsPipeline(std::string name, const VkPipelineVertexInputStateCreateInfo& vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, std::vector<const DescriptorSetLayout*> layouts) {
-    GraphicsPipelineHandle handle = { .id = static_cast<uint32_t>(graphicsPipelines.size()) };
-    GraphicsPipelineInfo info;
-    info.name        = std::move(name);
-    info.shaderPaths = std::move(shaderPaths);
-    info.layouts     = std::move(layouts);
-    if (vi.pVertexBindingDescriptions)
-        info.bindingDescription = *vi.pVertexBindingDescriptions;
-    for (uint32_t i = 0; i < vi.vertexAttributeDescriptionCount; ++i)
-        info.attributeDescriptions.push_back(vi.pVertexAttributeDescriptions[i]);
-    graphicsPipelines.push_back(std::move(info));
-    return handle;
-}
-
 BufferHandle RenderGraphBuilder::importBuffer(std::string name) {
     BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
     buffers.push_back({
@@ -452,5 +431,13 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
     compiled.computePipelines  = computePipelines;
     compiled.graphicsPipelines = graphicsPipelines;
     compiled.submissionGroups  = computeCompiledSubmissionGroups(groups, passes, images, imageTimelines, bufferTimelines);
+
+    for (uint32_t i = 0; i < computePipelines.size(); ++i)
+        if (computePipelines[i].passId != InvalidHandle)
+            compiled.compiledPasses[computePipelines[i].passId].pipelineId = i;
+    for (uint32_t i = 0; i < graphicsPipelines.size(); ++i)
+        if (graphicsPipelines[i].passId != InvalidHandle)
+            compiled.compiledPasses[graphicsPipelines[i].passId].pipelineId = i;
+
     return compiled;
 }

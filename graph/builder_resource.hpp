@@ -145,10 +145,20 @@ struct BufferInfo {
 };
 
 // ================
-// Pipeline
+// Descriptor bindings
 // ================
 
-class DescriptorSetLayout;
+struct DescriptorBindingDecl {
+    uint32_t           binding;
+    bool               isImage;
+    uint32_t           handleId;
+    VkDescriptorType   descriptorType;
+    VkShaderStageFlags stageFlags;
+};
+
+// ================
+// Pipeline
+// ================
 
 struct ComputePipelineHandle  { uint32_t id = InvalidHandle; };
 struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
@@ -156,7 +166,7 @@ struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
 struct ComputePipelineInfo {
     std::string name;
     std::string shaderPath;
-    std::vector<const DescriptorSetLayout*> layouts;
+    uint32_t    passId = InvalidHandle;
 };
 
 struct GraphicsPipelineInfo {
@@ -164,7 +174,7 @@ struct GraphicsPipelineInfo {
     VkVertexInputBindingDescription                            bindingDescription;
     std::vector<VkVertexInputAttributeDescription>             attributeDescriptions;
     std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths;
-    std::vector<const DescriptorSetLayout*>                    layouts;
+    uint32_t    passId = InvalidHandle;
 };
 
 // ================
@@ -179,6 +189,7 @@ struct PassInfo {
     std::string name;
     PassType type;
     SubmissionGroupHandle group = {};
-    std::vector<ImageAccess>  imageAccesses  = {};
-    std::vector<BufferAccess> bufferAccesses = {};
+    std::vector<ImageAccess>         imageAccesses       = {};
+    std::vector<BufferAccess>        bufferAccesses      = {};
+    std::vector<DescriptorBindingDecl> descriptorBindings = {};
 };

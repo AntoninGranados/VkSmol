@@ -25,5 +25,5 @@ public:
     void destroy(const LogicalDevice& device);
     DescriptorSet& at(uint32_t frameIndex);
 
-    bool isValide() const { return pool.get() != VK_NULL_HANDLE; }
+    bool isValid() const { return pool.get() != VK_NULL_HANDLE; }
 };

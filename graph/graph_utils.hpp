@@ -29,6 +29,8 @@ VulkanBufferState bufferAccessToVk(const BufferAccessInfo& info);
 VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad);
 VkImageUsageFlags  imageUsageTypeToVkFlags(ImageUsageType usage);
 VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage);
+VkDescriptorType   bufferUsageTypeToDescriptorType(BufferUsageType usage);
+VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
 
 std::string dumpGraph(const RenderGraphBuilder& builder);
 std::string dumpCompiledGraph(const RenderGraphBuilder& builder, const CompiledRenderGraph& compiled);

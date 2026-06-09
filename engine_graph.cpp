@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <utility>
 #include <algorithm>
+#include <cassert>
 
 #include "./image/image_barrier.hpp"
 #include "./utils.hpp"
@@ -108,6 +109,36 @@ void VkSmol::destroyPerFrameBuffers() {
     ownedPerFrameBuffers.clear();
 }
 
+// ——— Descriptor sets —————————————————————————————————————————————————————————
+
+void VkSmol::initDescriptorSets() {
+    for (const CompiledPass& pass : graph.compiledPasses) {
+        if (pass.descriptorBindings.empty()) continue;
+        uint32_t passId = pass.pass.id;
+
+        auto decls = pass.descriptorBindings;
+        std::sort(decls.begin(), decls.end(), [](const DescriptorBindingDecl& a, const DescriptorBindingDecl& b) {
+            return a.binding < b.binding;
+        });
+
+        DescriptorSetLayout& layout = passDescriptorLayouts[passId];
+        for (const DescriptorBindingDecl& decl : decls)
+            layout.addBinding(decl.binding, decl.stageFlags, decl.descriptorType);
+        initDescriptorSetLayout(layout);
+
+        passDescriptorGroups[passId] = createDescriptorSetGroup(layout, pass.name + "Descriptors");
+    }
+}
+
+void VkSmol::destroyDescriptorSets() {
+    for (auto& [id, group] : passDescriptorGroups)
+        destroyDescriptorSetGroup(group);
+    passDescriptorGroups.clear();
+    for (auto& [id, layout] : passDescriptorLayouts)
+        destroyDescriptorSetLayout(layout);
+    passDescriptorLayouts.clear();
+}
+
 // ——— Pipelines ———————————————————————————————————————————————————————————————
 
 void VkSmol::initPipelines() {
@@ -169,27 +200,57 @@ void VkSmol::initGraph() {
     initImages();
     initBuffers();
     initPerFrameBuffers();
+    initDescriptorSets();
     initPipelines();
     initSync();
+    for (const CompiledPass& pass : graph.compiledPasses)
+        if (passDescriptorGroups.count(pass.pass.id))
+            for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+                updateDescriptors(pass.pass, f);
 }
 
 void VkSmol::destroyGraph() {
     destroySync();
     destroyPipelines();
+    destroyDescriptorSets();
     destroyPerFrameBuffers();
     destroyBuffers();
     destroyImages();
 }
 
-void VkSmol::resizeGraph(uint32_t width, uint32_t height) {
-    destroyImages();
-    for (ImageInfo& info : graph.images) {
-        if (info.ownership != ImageOwnership::Imported) {
-            info.width  = width;
-            info.height = height;
-        }
-    }
-    initImages();
+void VkSmol::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
+    uint32_t id = handle.id;
+    ImageInfo& info = graph.images[id];
+    if (info.ownership == ImageOwnership::Imported) return;
+
+    destroySampler(ownedSamplers.at(id));
+    destroyImageView(ownedViews.at(id));
+    destroyImage(ownedImages.at(id));
+    ownedSamplers.erase(id);
+    ownedViews.erase(id);
+    ownedImages.erase(id);
+    bindings.erase(id);
+
+    info.width  = width;
+    info.height = height;
+
+    VkImageUsageFlags usageFlags = info.extraUsageFlags;
+    for (const CompiledPass& pass : graph.compiledPasses)
+        for (const ImageAccess& access : pass.imageAccesses)
+            if (access.image.id == id)
+                usageFlags |= imageUsageTypeToVkFlags(access.info.usage);
+
+    Image     img  = createImage(width, height, info.format, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
+    ImageView view = createImageView(img, info.name + "View");
+    Sampler   smp  = createSampler(info.name + "Sampler");
+
+    bindImage(handle, img.get(), view.get());
+    ownedImages.emplace(id, std::move(img));
+    ownedViews.emplace(id, std::move(view));
+    ownedSamplers.emplace(id, std::move(smp));
+
+    for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+        refreshDescriptorsForImage(id, f);
 }
 
 // ——— Frame ———————————————————————————————————————————————————————————————————
@@ -270,6 +331,15 @@ void VkSmol::swapBindings(const ImageHandle& a, const ImageHandle& b) {
     std::swap(ownedImages[a.id],   ownedImages[b.id]);
     std::swap(ownedViews[a.id],    ownedViews[b.id]);
     std::swap(ownedSamplers[a.id], ownedSamplers[b.id]);
+    for (const CompiledPass& pass : graph.compiledPasses) {
+        if (!passDescriptorGroups.count(pass.pass.id)) continue;
+        for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
+            if (decl.isImage && (decl.handleId == a.id || decl.handleId == b.id)) {
+                updateDescriptors(pass.pass, currentFrame);
+                break;
+            }
+        }
+    }
 }
 
 void VkSmol::bindImage(const ImageHandle& handle, VkImage image, VkImageView view) {
@@ -325,6 +395,7 @@ bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
         Buffer buf = createMappedBuffer(usageFlags, newSize, graph.buffers[handle.id].name);
         bufferBindings[handle.id] = buf.get();
         ownedBuffers.emplace(handle.id, std::move(buf));
+        refreshDescriptorsForBuffer(handle.id);
         return true;
     }
 
@@ -334,6 +405,7 @@ bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
             destroyBuffer(buf);
             buf = createMappedBuffer(usageFlags, newSize, graph.buffers[handle.id].name);
         }
+        refreshDescriptorsForBuffer(handle.id);
         return true;
     }
 
@@ -353,10 +425,22 @@ GraphicsPipeline& VkSmol::getGraphicsPipeline(GraphicsPipelineHandle handle) {
 void VkSmol::reloadPipelines() {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
-        reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, info.layouts);
+        std::vector<const DescriptorSetLayout*> layouts;
+        if (info.passId != InvalidHandle) {
+            auto it = passDescriptorLayouts.find(info.passId);
+            if (it != passDescriptorLayouts.end())
+                layouts = { &it->second };
+        }
+        reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, layouts);
     }
     for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
         const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
+        std::vector<const DescriptorSetLayout*> layouts;
+        if (info.passId != InvalidHandle) {
+            auto it = passDescriptorLayouts.find(info.passId);
+            if (it != passDescriptorLayouts.end())
+                layouts = { &it->second };
+        }
         VkPipelineVertexInputStateCreateInfo vi{
             .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             .vertexBindingDescriptionCount   = 1,
@@ -364,8 +448,81 @@ void VkSmol::reloadPipelines() {
             .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
             .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
         };
-        reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, info.layouts);
+        reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, layouts);
     }
+}
+
+// ——— Descriptor management ———————————————————————————————————————————————————
+
+void VkSmol::refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex) {
+    for (const CompiledPass& pass : graph.compiledPasses) {
+        if (!passDescriptorGroups.count(pass.pass.id)) continue;
+        for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
+            if (decl.isImage && decl.handleId == imageId) {
+                updateDescriptors(pass.pass, frameIndex);
+                break;
+            }
+        }
+    }
+}
+
+void VkSmol::refreshDescriptorsForBuffer(uint32_t bufferId) {
+    for (const CompiledPass& pass : graph.compiledPasses) {
+        if (!passDescriptorGroups.count(pass.pass.id)) continue;
+        for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
+            if (!decl.isImage && decl.handleId == bufferId) {
+                for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+                    updateDescriptors(pass.pass, f);
+                break;
+            }
+        }
+    }
+}
+
+void VkSmol::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
+    uint32_t passId = pass.id;
+    auto groupIt = passDescriptorGroups.find(passId);
+    if (groupIt == passDescriptorGroups.end()) return;
+
+    const CompiledPass& compiled = graph.compiledPasses[passId];
+    DescriptorWriter writer(passDescriptorLayouts.at(passId));
+    for (const DescriptorBindingDecl& decl : compiled.descriptorBindings) {
+        if (decl.isImage) {
+            ImageHandle h = { .id = decl.handleId };
+            if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                writer.combinedImageSampler(decl.binding, getView(h), getSampler(h));
+            else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                writer.storageImage(decl.binding, getView(h));
+        } else {
+            BufferHandle h = { .id = decl.handleId };
+            if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                writer.uniform(decl.binding, getBuffer(h, frameIndex));
+            else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                writer.storage(decl.binding, getBuffer(h, frameIndex));
+        }
+    }
+    updateDescriptorSetGroup(groupIt->second, frameIndex, writer);
+}
+
+void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHandle) {
+    uint32_t passId = passHandle.id;
+    auto groupIt = passDescriptorGroups.find(passId);
+    if (groupIt == passDescriptorGroups.end()) return;
+
+    const CompiledPass& compiled = graph.compiledPasses[passId];
+    assert(compiled.pipelineId.has_value());
+
+    VkPipelineLayout layout;
+    VkPipelineBindPoint bindPoint;
+    if (compiled.type == PassType::Compute) {
+        layout     = ownedComputePipelines.at(*compiled.pipelineId).getLayout();
+        bindPoint  = VK_PIPELINE_BIND_POINT_COMPUTE;
+    } else {
+        layout     = ownedGraphicsPipelines.at(*compiled.pipelineId).getLayout();
+        bindPoint  = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    }
+
+    groupIt->second.at(currentFrame).bind(cmd, layout, bindPoint);
 }
 
 // ——— Barriers ————————————————————————————————————————————————————————————————

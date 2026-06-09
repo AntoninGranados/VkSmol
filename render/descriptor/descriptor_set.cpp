@@ -23,29 +23,6 @@ void DescriptorSet::alloc(const LogicalDevice& device, const DescriptorPool& des
     vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, &descriptorSet), "Failed to allocate descriptor set");
 }
 
-// void DescriptorSet::alloc(
-//     std::vector<DescriptorSet>& descriptorSets,
-//     const LogicalDevice& device,
-//     DescriptorPool descriptorPool,
-//     std::vector<DescriptorSetLayout> descriptorSetLayouts
-// ) {
-//     std::vector<VkDescriptorSet> vkDescriptorSets;
-//     for (DescriptorSet& descriptorSet : descriptorSets)
-//         vkDescriptorSets.emplace_back(descriptorSet.get());
-    
-//         std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts;
-//     for (DescriptorSetLayout& descriptorSetLayout : descriptorSetLayouts)
-//         vkDescriptorSetLayouts.emplace_back(descriptorSetLayout.get());
-
-//     VkDescriptorSetAllocateInfo allocInfo{};
-//     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-//     allocInfo.descriptorPool = descriptorPool.get();
-//     allocInfo.descriptorSetCount = static_cast<uint32_t>(vkDescriptorSetLayouts.size());
-//     allocInfo.pSetLayouts = vkDescriptorSetLayouts.data();
-
-//     vkCheck(vkAllocateDescriptorSets(device.get(), &allocInfo, vkDescriptorSets.data()), "Failed to allocate descriptor sets");
-// }
-
 
 void DescriptorSet::free(const LogicalDevice& device, DescriptorSetGroup& allocation) {
     if (allocation.pool.get() == VK_NULL_HANDLE || allocation.sets.empty()) return;

@@ -41,12 +41,6 @@ public:
     // Imported: caller provides the VkBuffer each frame via bindBuffer
     BufferHandle importBuffer(std::string name);
 
-    // Compute pipeline: executor owns and builds from shaderPath with the given set layouts
-    ComputePipelineHandle addComputePipeline(std::string name, std::string shaderPath, std::vector<const DescriptorSetLayout*> layouts);
-
-    // Graphics pipeline: executor owns and builds from shaderPaths with vertex input and set layouts
-    GraphicsPipelineHandle addGraphicsPipeline(std::string name, const VkPipelineVertexInputStateCreateInfo& vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, std::vector<const DescriptorSetLayout*> layouts);
-
     GraphicsPassBuilder addGraphicsPass(std::string name);
     ComputePassBuilder  addComputePass(std::string name);
     TransferPassBuilder addTransferPass(std::string name);

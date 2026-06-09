@@ -16,6 +16,7 @@ public:
     const std::vector<VkDescriptorSetLayoutBinding>& getBindings() const { return bindings; };
 
     void addBinding(VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount = 1);
+    void addBinding(uint32_t bindingIndex, VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount = 1);
 
 private:
     std::vector<VkDescriptorSetLayoutBinding> bindings;

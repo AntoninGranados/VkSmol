@@ -87,6 +87,22 @@ VulkanBufferState bufferAccessToVk(const BufferAccessInfo& info) {
     }
 }
 
+VkDescriptorType bufferUsageTypeToDescriptorType(BufferUsageType usage) {
+    switch (usage) {
+        case BufferUsageType::Uniform: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        case BufferUsageType::Storage: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        default:                       return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    }
+}
+
+VkDescriptorType imageUsageTypeToDescriptorType(ImageUsageType usage) {
+    switch (usage) {
+        case ImageUsageType::Sampled:      return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        case ImageUsageType::StorageImage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        default:                           return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    }
+}
+
 VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage) {
     switch (usage) {
         case BufferUsageType::Storage:     return VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
