@@ -18,7 +18,14 @@ struct CompiledRenderGraph;
 class RenderGraphBuilder {
 public:
     // @todo add support for 'ImageSubresourceRangeInfo'
-    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1);
+
+    // Transient: executor creates it, starts UNDEFINED, first access must be a write
+    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, VkImageUsageFlags extraUsageFlags = 0);
+
+    // Managed: executor creates it, starts in the declared initialAccess layout, can be read first
+    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess, VkImageUsageFlags extraUsageFlags = 0);
+
+    // Imported: caller provides the VkImage/VkImageView each frame via bindImage
     ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, ImageAccessInfo finalAccess = {});
 
     GraphicsPassBuilder addGraphicsPass(std::string name);

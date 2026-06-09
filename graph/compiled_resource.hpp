@@ -28,4 +28,5 @@ struct CompiledPass {
 struct CompiledRenderGraph {
     std::vector<CompiledPass> compiledPasses = {};
     std::vector<PassImageBarrier> outputBarriers = {};
+    std::vector<ImageInfo> images = {};
 };

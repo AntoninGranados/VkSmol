@@ -48,7 +48,6 @@
 #include "./image/image.hpp"
 #include "./image/image_view.hpp"
 #include "./image/sampler.hpp"
-#include "./image/image_barrier.hpp"
 
 #include "./resource/resource_registry.hpp"
 #include "./resource/resource_manager.hpp"
@@ -115,6 +114,19 @@ public:
     );
     void destroyComputePipeline(ComputePipeline& computePipeline);
 
+    // Compile shader(s), swap the pipeline, destroy the old one. Throws on compile failure.
+    void reloadComputePipeline(
+        ComputePipeline& pipeline,
+        const std::string& shaderPath,
+        const std::vector<const DescriptorSetLayout*>& setLayouts
+    );
+    void reloadGraphicsPipeline(
+        GraphicsPipeline& pipeline,
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
+        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
+        const std::vector<const DescriptorSetLayout*>& setLayouts
+    );
+
     Shader createShader(VkShaderStageFlagBits stage_, std::string filepath);
     void destroyShader(Shader& shader);
 
@@ -126,14 +138,6 @@ public:
     );
     void endDynamicRenderer(const CommandBuffer& commandBuffer);
 
-    void barrier(
-        const CommandBuffer& commandBuffer,
-        VkImage image,
-        VkImageLayout srcLayout, VkImageLayout dstLayout,
-        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
-        VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
-    );
-    
     VkExtent2D& getExtent() { return swapchain.getExtent(); };
     const VkExtent2D& getExtent() const { return swapchain.getExtent(); };
     Window& getWindow() { return window; }

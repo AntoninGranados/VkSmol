@@ -53,8 +53,9 @@ enum class ImageUsageType : uint16_t {
 };
 
 enum class ImageOwnership : uint16_t {
-    Transient,
-    Imported,
+    Transient,  // Executor creates it; starts UNDEFINED; first access must be a write
+    Managed,    // Executor creates it; starts in declared initialAccess layout; can be read first
+    Imported,   // Caller provides via bindImage each frame; executor never creates GPU resources
 };
 
 enum class WriteMode : uint16_t {
@@ -91,7 +92,7 @@ struct ImageAccess {
 
 struct ImageInfo {
     std::string name;
-    
+
     VkFormat format = VK_FORMAT_UNDEFINED;
     uint32_t width = 1;
     uint32_t height = 1;
@@ -100,6 +101,11 @@ struct ImageInfo {
     ImageOwnership ownership = ImageOwnership::Transient;
     std::optional<ImageAccessInfo> initialAccess = {};
     std::optional<ImageAccessInfo> finalAccess = {};
+
+    // Additional VkImageUsageFlags ORed on top of the flags inferred from
+    // declared pass accesses (e.g. for ping-pong images that need usage flags
+    // their handle never directly declares).
+    VkImageUsageFlags extraUsageFlags = 0;
 };
 
 // ================

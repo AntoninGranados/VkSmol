@@ -151,14 +151,12 @@ void VkSmol::endFrame() {
 
 CommandBuffer& VkSmol::beginRecordingRender() {
     commandBuffers[currentFrame].reset();
-
     commandBuffers[currentFrame].beginRecording();
     return commandBuffers[currentFrame];
 }
 
 void VkSmol::endRecoringRender(CommandBuffer& commandBuffer) {
     commandBuffer.endRecording();
-
     graphicsQueue.submit(
         { &commandBuffers[currentFrame] },
         renderInFlightFences[currentFrame],
@@ -275,6 +273,45 @@ void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
     pipeline.destroy(device);
 }
 
+void VkSmol::reloadComputePipeline(
+    ComputePipeline& pipeline,
+    const std::string& shaderPath,
+    const std::vector<const DescriptorSetLayout*>& setLayouts
+) {
+    Shader shader = createShader(VK_SHADER_STAGE_COMPUTE_BIT, shaderPath);
+    ComputePipeline next = initComputePipeline(shader, setLayouts, pipeline);
+    destroyComputePipeline(pipeline);
+    pipeline = std::move(next);
+    destroyShader(shader);
+}
+
+void VkSmol::reloadGraphicsPipeline(
+    GraphicsPipeline& pipeline,
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo,
+    const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
+    const std::vector<const DescriptorSetLayout*>& setLayouts
+) {
+    std::vector<Shader> shaders;
+    shaders.reserve(shaderPaths.size());
+    try {
+        for (auto& [stage, path] : shaderPaths)
+            shaders.push_back(createShader(stage, path));
+    } catch (...) {
+        for (auto& s : shaders) destroyShader(s);
+        throw;
+    }
+
+    std::vector<const Shader*> ptrs;
+    ptrs.reserve(shaders.size());
+    for (auto& s : shaders) ptrs.push_back(&s);
+
+    GraphicsPipeline next = initGraphicsPipeline(vertexInputInfo, ptrs, setLayouts, pipeline);
+    destroyGraphicsPipeline(pipeline);
+    pipeline = std::move(next);
+
+    for (auto& s : shaders) destroyShader(s);
+}
+
 Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath) {
     Shader shader;
     shader.init(device, stage, filepath);
@@ -372,22 +409,6 @@ void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 }
 
-void VkSmol::barrier(
-    const CommandBuffer& commandBuffer,
-    VkImage image,
-    VkImageLayout srcLayout, VkImageLayout dstLayout,
-    VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
-    VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask
-) {
-    ImageBarrier barrier;
-    barrier.call(
-        commandBuffer,
-        image,
-        srcLayout, dstLayout,
-        srcAccessMask, dstAccessMask,
-        srcStageMask, dstStageMask
-    );
-}
 
 bool VkSmol::shouldTerminate() {
     return window.shouldClose();

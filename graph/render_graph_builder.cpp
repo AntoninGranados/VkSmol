@@ -68,6 +68,14 @@ void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vec
         bool hasPreviousContents = hasDefinedContents(imageInfo.initialAccess);
 
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
+            // Transient images are created fresh (UNDEFINED layout); the executor always
+            // emits an UNDEFINED→dst barrier, so reading uninitialized data is intentional.
+            if (imageInfo.ownership == ImageOwnership::Transient) {
+                if (timelineAccess.info.access == AccessType::Write)
+                    hasPreviousContents = true;
+                continue;
+            }
+
             if (requiresDefinedContents(timelineAccess.info) && !hasPreviousContents) {
                 throw std::runtime_error(std::format(
                     "Image [{}] requires previous contents before [{}] access",
@@ -146,7 +154,7 @@ std::vector<PassImageBarrier> computeOutputBarriers(
 
 } // namespace
 
-ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth) {
+ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, VkImageUsageFlags extraUsageFlags) {
     ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
 
     images.push_back({
@@ -155,8 +163,28 @@ ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, u
         .width = width,
         .height = height,
         .depth = depth,
-
         .ownership = ImageOwnership::Transient,
+        .extraUsageFlags = extraUsageFlags,
+    });
+
+    return handle;
+}
+
+ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess, VkImageUsageFlags extraUsageFlags) {
+    ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
+    checkImageAccessInfoValid(initialAccess);
+    checkImageAccessInfoValid(finalAccess);
+
+    images.push_back({
+        .name = name,
+        .format = format,
+        .width = width,
+        .height = height,
+        .depth = depth,
+        .ownership = ImageOwnership::Managed,
+        .initialAccess = initialAccess,
+        .finalAccess = finalAccess,
+        .extraUsageFlags = extraUsageFlags,
     });
 
     return handle;
@@ -173,7 +201,6 @@ ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, u
         .width = width,
         .height = height,
         .depth = depth,
-
         .ownership = ImageOwnership::Imported,
         .initialAccess = initialAccess,
         .finalAccess = finalAccess,
@@ -205,5 +232,6 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
     CompiledRenderGraph compiled;
     compiled.compiledPasses = computeCompiledPasses(images, passes, timelines);
     compiled.outputBarriers = computeOutputBarriers(images, timelines);
+    compiled.images = images;
     return compiled;
 }

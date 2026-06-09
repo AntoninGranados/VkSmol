@@ -22,6 +22,7 @@ std::string attachmentLoadToStr(AttachmentLoad attachmentLoad);
 
 VulkanImageState imageAccessToVk(const ImageAccessInfo& info);
 VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad);
+VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage);
 
 std::string dumpGraph(const RenderGraphBuilder& builder);
 std::string dumpCompiledGraph(const RenderGraphBuilder& builder, const CompiledRenderGraph& compiled);

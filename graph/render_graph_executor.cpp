@@ -1,8 +1,10 @@
 #include "render_graph_executor.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 #include "../image/image_barrier.hpp"
+#include "../engine.hpp"
 
 #include "graph_utils.hpp"
 #include "builder_resource.hpp"
@@ -13,6 +15,74 @@ void RenderGraphExecutor::setCompiledGraph(CompiledRenderGraph _graph) {
     graph = _graph;
 }
     
+void RenderGraphExecutor::init(VkSmol& engine) {
+    for (uint32_t id = 0; id < graph.images.size(); ++id) {
+        const ImageInfo& info = graph.images[id];
+        if (info.ownership == ImageOwnership::Imported) continue;
+
+        VkImageUsageFlags usageFlags = info.extraUsageFlags;
+        for (const CompiledPass& pass : graph.compiledPasses)
+            for (const ImageAccess& access : pass.imageAccesses)
+                if (access.image.id == id)
+                    usageFlags |= imageUsageTypeToVkFlags(access.info.usage);
+
+        Image img = engine.createImage(
+            info.width, info.height, info.format,
+            usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name
+        );
+        ImageView view = engine.createImageView(img, info.name + "View");
+        Sampler   smp  = engine.createSampler(info.name + "Sampler");
+
+        ImageHandle handle = { .id = id };
+        bindImage(handle, img.get(), view.get());
+        ownedImages.emplace(id, std::move(img));
+        ownedViews.emplace(id, std::move(view));
+        ownedSamplers.emplace(id, std::move(smp));
+    }
+}
+
+void RenderGraphExecutor::destroy(VkSmol& engine) {
+    for (auto& [id, img] : ownedImages) {
+        engine.destroySampler(ownedSamplers.at(id));
+        engine.destroyImageView(ownedViews.at(id));
+        engine.destroyImage(img);
+        bindings.erase(id);
+    }
+    ownedSamplers.clear();
+    ownedViews.clear();
+    ownedImages.clear();
+}
+
+void RenderGraphExecutor::resize(VkSmol& engine, uint32_t width, uint32_t height) {
+    destroy(engine);
+    for (ImageInfo& info : graph.images) {
+        if (info.ownership != ImageOwnership::Imported) {
+            info.width  = width;
+            info.height = height;
+        }
+    }
+    init(engine);
+}
+
+void RenderGraphExecutor::swapBindings(const ImageHandle& a, const ImageHandle& b) {
+    std::swap(bindings[a.id],     bindings[b.id]);
+    std::swap(ownedImages[a.id],  ownedImages[b.id]);
+    std::swap(ownedViews[a.id],   ownedViews[b.id]);
+    std::swap(ownedSamplers[a.id],ownedSamplers[b.id]);
+}
+
+Image& RenderGraphExecutor::getImage(const ImageHandle& handle) {
+    return ownedImages.at(handle.id);
+}
+
+const ImageView& RenderGraphExecutor::getView(const ImageHandle& handle) const {
+    return ownedViews.at(handle.id);
+}
+
+const Sampler& RenderGraphExecutor::getSampler(const ImageHandle& handle) const {
+    return ownedSamplers.at(handle.id);
+}
+
 void RenderGraphExecutor::bindImage(const ImageHandle& handle, VkImage image, VkImageView view) {
     bindings[handle.id] = {
         .image = image,

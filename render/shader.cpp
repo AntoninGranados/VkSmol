@@ -69,8 +69,9 @@ std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, b
     // Choose the shader stage based on the ShaderStageFlag
     std::string shaderStage;
     switch (stage) {
-        case VK_SHADER_STAGE_VERTEX_BIT: shaderStage = "vertex"; break;
+        case VK_SHADER_STAGE_VERTEX_BIT:   shaderStage = "vertex"; break;
         case VK_SHADER_STAGE_FRAGMENT_BIT: shaderStage = "fragment"; break;
+        case VK_SHADER_STAGE_COMPUTE_BIT:  shaderStage = "compute"; break;
         default:
             char buf[MAX_MSG_SIZE];
             snprintf(buf, sizeof(buf), "The shader file [%s%s%s] does not have a supported stage for the compilation", MSG_RED_B, filepath.c_str(), MSG_RESET);

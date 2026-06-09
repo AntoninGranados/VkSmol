@@ -147,6 +147,19 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
     }
 }
 
+VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage) {
+    switch (usage) {
+        case ImageUsageType::Sampled:         return VK_IMAGE_USAGE_SAMPLED_BIT;
+        case ImageUsageType::StorageImage:    return VK_IMAGE_USAGE_STORAGE_BIT;
+        case ImageUsageType::ColorAttachment: return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        case ImageUsageType::DepthAttachment: return VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        case ImageUsageType::TransferSrc:     return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        case ImageUsageType::TransferDst:     return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        case ImageUsageType::Present:
+        case ImageUsageType::Undefined:       return 0;
+    }
+}
+
 VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad) {
     switch (attachmentLoad) {
         case AttachmentLoad::Load: return VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_LOAD;
