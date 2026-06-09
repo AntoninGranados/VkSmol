@@ -53,12 +53,13 @@ void ResourceRegistry::destroy(ResourceId id) {
     }
 
     ResourceRecord& slot = record[id.index - 1];
+
+    // Detach dependents before destroying. GPU lifetime is guaranteed by the retirement queue;
+    // dependents (e.g. descriptor sets) will pick up fresh resources on their next update.
     if (!slot.children.empty()) {
-        std::ostringstream message;
-        message << "ResourceRegistry::destroy: can't destroy " << formatResourceRecord(slot)
-                << " because it still has dependents "
-                << formatResourceList(record, slot.children);
-        throw std::runtime_error(message.str());
+        std::vector<ResourceId> children = slot.children;
+        for (ResourceId child : children)
+            removeDependency(child, id);
     }
 
     removeAllParents(id);

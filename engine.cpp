@@ -29,12 +29,10 @@ const std::vector<const char*> deviceExtensions = {
 #endif
 };
 
-// only used if NDEBUG is ndef
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-// Public
 void VkSmol::init(std::string appName, uint32_t appVersion) {
     glfwInit();
 
@@ -92,37 +90,6 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     });
 }
 
-std::optional<FrameContext> VkSmol::beginFrame(const std::vector<const Fence*>& fences, Semaphore& imageAvailableSemaphore) {
-    Fence::wait(fences, device);
-
-    resourceManager.collectFrame(currentFrame);
-    resourceManager.setRetirementFrame(currentFrame);
-
-    const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphore);
-    if (result == RECREATE_SWAPCHAIN) {
-        recreateSwapchain();
-        return {};
-    }
-
-    Fence::reset(fences, device);
-    imageIndex = result;
-
-    return FrameContext{
-        .extent = getExtent(),
-        .currentFrame = currentFrame,
-        .imageIndex = imageIndex,
-        .swapchainGeneration = swapchainGeneration,
-    };
-}
-
-void VkSmol::endFrame(const Semaphore& presentReadySemaphore) {
-    const uint32_t result = presentQueue.present({ &swapchain }, { imageIndex }, { &presentReadySemaphore });
-    if (result == RECREATE_SWAPCHAIN || framebufferResized) {
-        recreateSwapchain();
-    }
-
-    currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
-}
 
 CommandBuffer VkSmol::allocCommandBuffer() {
     CommandBuffer cb;
@@ -328,7 +295,7 @@ void VkSmol::destroyImage(Image& image) {
 }
 
 ImageView VkSmol::createImageView(Image& image, std::string name) {
-    return resourceManager.createImageView(image);
+    return resourceManager.createImageView(image, std::move(name));
 }
 
 void VkSmol::destroyImageView(ImageView& imageView) {
@@ -336,14 +303,13 @@ void VkSmol::destroyImageView(ImageView& imageView) {
 }
 
 Sampler VkSmol::createSampler(std::string name) {
-    return resourceManager.createSampler();
+    return resourceManager.createSampler(std::move(name));
 }
 
 void VkSmol::destroySampler(Sampler& sampler) {
     resourceManager.destroySampler(sampler);
 }
 
-//! The render area is fixed to the screen size for now
 void VkSmol::beginDynamicRenderer(
     const CommandBuffer& commandBuffer,
     VkImageView imageView, VkImageLayout imageLayout,
@@ -375,7 +341,6 @@ ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
     return swapchain.getImageView(imageIndex);
 }
 
-// Private helpers
 void VkSmol::initImgui() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
 
@@ -388,7 +353,6 @@ void VkSmol::initImgui() {
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
     style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f); // keep docked windows transparent
-    // style.Colors[ImGuiCol_ChildBg]        = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
     ImGui_ImplGlfw_InitForVulkan(window.get(), true);
@@ -412,7 +376,6 @@ void VkSmol::initImgui() {
     uiDescriptorPool.addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100);
     uiDescriptorPool.init(device, 1000);
 
-    // initInfo.RenderPass = uiRenderPass.get();
     VkPipelineRenderingCreateInfoKHR pipelineCreate{};
     pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
     pipelineCreate.colorAttachmentCount    = 1;
@@ -443,7 +406,7 @@ std::vector<const char*> VkSmol::getRequiredExtensions() {
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    // Extensions requiMSG_RED by the application
+    // Extensions required by the application
     std::vector<const char*> requiredExtensions;
     for (uint32_t i = 0; i < glfwExtensionCount; i++)
         requiredExtensions.emplace_back(glfwExtensions[i]);
@@ -453,7 +416,7 @@ std::vector<const char*> VkSmol::getRequiredExtensions() {
 }
 
 int VkSmol::scoreDevice(const PhysicalDevice& device) {
-    // Check if all the  queue families are available
+    // Check if all the queue families are available
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
     if (!indices.isComplete())
         return 0;

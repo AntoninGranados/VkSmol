@@ -7,9 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "../memory/dynamic_per_frame_buffer.hpp"
-#include "../memory/shared_buffer.hpp"
-#include "../memory/per_frame_buffer.hpp"
 
 #include "../render/descriptor/descriptor_set_group.hpp"
 #include "../render/descriptor/descriptor_set_layout.hpp"
@@ -59,67 +56,6 @@ public:
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
     
-    template<typename T>
-    PerFrameBuffer<T> createPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 1, std::string name = {}) {
-        PerFrameBuffer<T> buffer = PerFrameBuffer<T>::create(usage, count);
-        initPerFrameBufferBase(buffer, resolveResourceName(std::move(name), "PerFrameBuffer"));
-        return buffer;
-    }
-    template<typename T>
-    void destroyPerFrameBuffer(PerFrameBuffer<T>& buffer) {
-        destroyPerFrameBufferBase(buffer);
-        buffer = PerFrameBuffer<T>{};
-    }
-    
-    template <typename T, typename Header = std::monostate>
-    DynamicPerFrameBuffer<T, Header> createDynamicPerFrameBuffer(VkBufferUsageFlags usage, size_t count = 0, std::string name = {}) {
-        DynamicPerFrameBuffer<T, Header> buffer = DynamicPerFrameBuffer<T, Header>::create(usage, count);
-        initPerFrameBufferBase(buffer, resolveResourceName(std::move(name), "DynamicPerFrameBuffer"));
-        return buffer;
-    }
-    template <typename T, typename Header = std::monostate>
-    bool setDynamicPerFrameBufferCount(DynamicPerFrameBuffer<T, Header>& buffer, size_t count) {
-        if (buffer.setElementCount(count)) {
-            reinitPerFrameBufferBase(buffer);
-            return true;
-        }
-        return false;
-    }
-    template <typename T, typename Header = std::monostate>
-    void clearDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
-        buffer.clear();
-        reinitPerFrameBufferBase(buffer);
-    }
-    template <typename T, typename Header = std::monostate>
-    void destroyDynamicPerFrameBuffer(DynamicPerFrameBuffer<T, Header>& buffer) {
-        destroyPerFrameBufferBase(buffer);
-        buffer = DynamicPerFrameBuffer<T, Header>{};
-    }
-
-    template<typename T>
-    SharedBuffer<T> createSharedBuffer(VkBufferUsageFlags usage, size_t count = 1, std::string name = {}) {
-        const ResourceManagerContext& context = requireInitialized("ResourceManager::createSharedBuffer");
-        SharedBuffer<T> buffer = SharedBuffer<T>::create(usage, count);
-        buffer.buffer.setResourceName(resolveResourceName(std::move(name), "SharedBuffer"));
-        buffer.buffer.init(*context.device, buffer.getUsage(), buffer.getByteSize(), true);
-        buffer.buffer.alloc(*context.device, *context.physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        buffer.buffer.setResourceId(registry.create(ResourceType::Buffer, buffer.buffer.getResourceName()));
-        return buffer;
-    }
-    template<typename T>
-    void destroySharedBuffer(SharedBuffer<T>& buffer) {
-        registry.destroy(buffer.buffer.getResourceId());
-        buffer.buffer.resetResourceId();
-        auto retired = std::make_shared<Buffer>(std::move(buffer.buffer));
-        retirementQueue.at(currentRetirementFrame).push_back(
-            [retired](const LogicalDevice& device) {
-                retired->free(device);
-                retired->destroy(device);
-            }
-        );
-        buffer = SharedBuffer<T>{};
-    }
-
     // Resource retirement
     void setRetirementFrame(uint32_t frameIndex);
     void collectFrame(uint32_t frameIndex);
@@ -134,50 +70,6 @@ private:
     }
 
     const ResourceManagerContext& requireInitialized(const char* functionName, bool requireTransferContext = false) const;
-
-    void initPerFrameBufferBase(PerFrameBufferBase& buffer, const std::string& baseName) {
-        const ResourceManagerContext& context = requireInitialized("ResourceManager::initPerFrameBuffer");
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            buffer.at(i).setResourceName(makeIndexedResourceName(baseName, i));
-            buffer.at(i).init(*context.device, buffer.getUsage(), buffer.getByteSize(), true);
-            buffer.at(i).alloc(*context.device, *context.physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            buffer.at(i).setResourceId(registry.create(ResourceType::Buffer, buffer.at(i).getResourceName()));
-        }
-    }
-    void reinitPerFrameBufferBase(PerFrameBufferBase& buffer) {
-        // Delete the old buffers and recreate new ones using the same resource ids
-        const ResourceManagerContext& context = requireInitialized("ResourceManager::initPerFrameBuffer");
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            const auto resourceId = buffer.at(i).getResourceId();
-            const std::string resourceName = buffer.at(i).getResourceName();
-            auto retired = std::make_shared<Buffer>(std::move(buffer.at(i)));
-            retired->resetResourceId();
-            retirementQueue.at(currentRetirementFrame).push_back(
-                [retired](const LogicalDevice& device) {
-                    retired->free(device);
-                    retired->destroy(device);
-                }
-            );
-
-            buffer.at(i).init(*context.device, buffer.getUsage(), buffer.getByteSize(), true);
-            buffer.at(i).alloc(*context.device, *context.physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            buffer.at(i).setResourceName(resourceName);
-            buffer.at(i).setResourceId(resourceId);
-        }
-    }
-    void destroyPerFrameBufferBase(PerFrameBufferBase& buffer) {
-        for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++) {
-            registry.destroy(buffer.at(i).getResourceId());
-            auto retired = std::make_shared<Buffer>(std::move(buffer.at(i)));
-            retired->resetResourceId();
-            retirementQueue.at(currentRetirementFrame).push_back(
-                [retired](const LogicalDevice& device) {
-                    retired->free(device);
-                    retired->destroy(device);
-                }
-            );
-        }
-    }
 
     ResourceManagerContext ctx;
     ResourceRegistry registry;
