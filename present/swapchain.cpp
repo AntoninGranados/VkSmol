@@ -77,19 +77,34 @@ void Swapchain::init(const LogicalDevice& device, const PhysicalDevice& physical
     initImageViews(device);
 }
 
-void Swapchain::destroy(const LogicalDevice& device) {
-    destroyImageViews(device);
-    vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
+Swapchain::Swapchain(Swapchain&& other) noexcept:
+    swapchain(std::exchange(other.swapchain, VK_NULL_HANDLE)),
+    images(std::move(other.images)),
+    imageViews(std::move(other.imageViews)),
+    imageCount(other.imageCount),
+    imageFormat(other.imageFormat),
+    extent(other.extent)
+{}
 
-    images.clear();
-    imageViews.clear();
+Swapchain& Swapchain::operator=(Swapchain&& other) noexcept {
+    if (this != &other) {
+        swapchain  = std::exchange(other.swapchain, VK_NULL_HANDLE);
+        images     = std::move(other.images);
+        imageViews = std::move(other.imageViews);
+        imageCount = other.imageCount;
+        imageFormat = other.imageFormat;
+        extent     = other.extent;
+    }
+    return *this;
 }
 
-// TODO: recreate the swapchain using the old one to remove the waitIdle call (would need to defer the destruction of the old one)
-void Swapchain::recreate(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window) {
-    device.waitIdle();
-    destroy(device);
-    init(device, physicalDevice, surface, window);
+void Swapchain::destroy(const LogicalDevice& device) {
+    if (swapchain == VK_NULL_HANDLE) return;
+    destroyImageViews(device);
+    vkDestroySwapchainKHR(device.get(), swapchain, nullptr);
+    swapchain = VK_NULL_HANDLE;
+    images.clear();
+    imageViews.clear();
 }
 
 uint32_t Swapchain::getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore) {

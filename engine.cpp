@@ -9,10 +9,6 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
 
-// TODO: get this values from the application (and pass them in the engine.init function)
-const uint32_t WIDTH = 1280;
-const uint32_t HEIGHT = 720;
-
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -35,14 +31,14 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-void VkSmol::init(std::string appName, uint32_t appVersion) {
+void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height) {
     glfwInit();
 
     window.setFrameBufferResizeCallback([this](int, int) {
         framebufferResized = true;
     });
 
-    window.init(WIDTH, HEIGHT, appName.c_str());
+    window.init(width, height, appName.c_str());
 
     // VkSmol informations
     VkApplicationInfo appInfo{};
@@ -495,7 +491,15 @@ void VkSmol::initImgui() {
 void VkSmol::recreateSwapchain() {
     window.pauseWhileMinimized();
 
-    swapchain.recreate(device, physicalDevice, surface, window);
+    Swapchain newSwapchain;
+    newSwapchain.init(device, physicalDevice, surface, window, &swapchain);
+
+    auto retired = std::make_shared<Swapchain>(std::move(swapchain));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->destroy(d); }
+    );
+
+    swapchain = std::move(newSwapchain);
     swapchainGeneration++;
     framebufferResized = false;
 }

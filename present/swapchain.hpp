@@ -27,11 +27,14 @@ SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, cons
 
 class Swapchain {
 public:
+    Swapchain() = default;
+    Swapchain(Swapchain&& other) noexcept;
+    Swapchain& operator=(Swapchain&& other) noexcept;
+    Swapchain(const Swapchain&) = delete;
+    Swapchain& operator=(const Swapchain&) = delete;
+
     void init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window, const Swapchain* oldSwapChain = nullptr);
     void destroy(const LogicalDevice& device);
-    // Does not currently support using the old swapchain
-    // Recreate the swapchain (and its associated framebuffer)
-    void recreate(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window);
     VkSwapchainKHR& get() { return swapchain; };
     const VkSwapchainKHR& get() const { return swapchain; };
 
@@ -48,7 +51,7 @@ public:
     uint32_t getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);
 
 private:
-    VkSwapchainKHR swapchain;
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 
     std::vector<Image> images;
     std::vector<ImageView> imageViews;

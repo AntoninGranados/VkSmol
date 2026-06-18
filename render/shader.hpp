@@ -16,11 +16,10 @@ public:
     void destroy(const LogicalDevice& device);
     VkPipelineShaderStageCreateInfo getShaderStageCreateInfo(std::string entryPoint = "main") const;
 
-    // If `alwaysCompile` is set to `false` (`true` value by default), the compilation will not be done if the SPIR-V file already exists
+    // If `alwaysCompile` is set to `false` (`true` by default), the compilation will not be done if the SPIR-V file already exists
     // Returns the name of the compiled file
     static std::string compile(std::string filename, VkShaderStageFlagBits stage, bool alwaysCompile=true);
 
-    
 private:
     VkShaderStageFlagBits stage;
 

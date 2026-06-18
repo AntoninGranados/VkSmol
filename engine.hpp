@@ -71,7 +71,7 @@ class RenderGraphBuilder;
 
 class VkSmol {
 public:
-    void init(std::string appName, uint32_t appVersion);
+    void init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height);
 
     void setGraph(RenderGraphBuilder& builder);
     void initGraph();

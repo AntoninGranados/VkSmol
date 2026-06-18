@@ -10,8 +10,6 @@ class Shader;
 class CommandBuffer;
 class DescriptorSetLayout;
 
-// TODO: make it work with component (there are default values, but we can add/change components)
-// TODO: keep track of the shader modules (in case we want to rebuild the pipeline with the same ones)
 class GraphicsPipeline {
 public:
     GraphicsPipeline() {};
