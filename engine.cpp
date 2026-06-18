@@ -1,6 +1,8 @@
 #include "engine.hpp"
 
 #include <algorithm>
+#include <cassert>
+#include <memory>
 #include <vector>
 
 #include "imgui/imgui.h"
@@ -48,7 +50,7 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     appInfo.pApplicationName = appName.c_str();
     appInfo.applicationVersion = appVersion;
     appInfo.pEngineName = "VkSmol";
-    appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 0, 0);
+    appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_4;
 
     instance.init(appInfo, getRequiredExtensions(), validationLayers);
@@ -82,12 +84,6 @@ void VkSmol::init(std::string appName, uint32_t appVersion) {
     initImgui();
 
 
-    resourceManager.init({
-        .device = &device,
-        .physicalDevice = &physicalDevice,
-        .transferCommandPool = &transferCommandPool,
-        .transferQueue = &transferQueue,
-    });
 }
 
 
@@ -102,20 +98,26 @@ void VkSmol::freeCommandBuffer(CommandBuffer& cb) {
 }
 
 void VkSmol::submit(
-    CommandBuffer& cmd,
+    CommandBuffer& commandBuffer,
     Fence& fence,
     const std::vector<const Semaphore*>& waitSemaphores,
     const std::vector<VkPipelineStageFlags>& waitStages,
     const std::vector<const Semaphore*>& signalSemaphores
 ) {
-    cmd.endRecording();
-    graphicsQueue.submit({ &cmd }, fence, waitSemaphores, waitStages, signalSemaphores);
+    commandBuffer.endRecording();
+    graphicsQueue.submit({ &commandBuffer }, fence, waitSemaphores, waitStages, signalSemaphores);
+}
+
+void VkSmol::flushAll() {
+    for (auto& queue : retirementQueue) {
+        for (auto& payload : queue) payload(device);
+        queue.clear();
+    }
 }
 
 void VkSmol::waitIdle() {
     device.waitIdle();
-
-    resourceManager.flushAll();
+    flushAll();
 }
 
 void VkSmol::terminate() {
@@ -125,8 +127,12 @@ void VkSmol::terminate() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    resourceManager.flushAll();
-    resourceManager.terminate();
+    flushAll();
+
+    assert(ownedImages.empty() && ownedViews.empty() && ownedSamplers.empty());
+    assert(ownedBuffers.empty() && ownedPerFrameBuffers.empty());
+    assert(passDescriptorLayouts.empty() && passDescriptorGroups.empty());
+    assert(ownedComputePipelines.empty() && ownedGraphicsPipelines.empty());
 
     uiDescriptorPool.destroy(device);
 
@@ -238,76 +244,169 @@ void VkSmol::destroyShader(Shader& shader) {
     shader.destroy(device);
 }
 
-void VkSmol::initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout) {
-    resourceManager.initDescriptorSetLayout(descriptorSetLayout);
+// ——— Descriptor sets ————————————————————————————————————————————————————————
+
+void VkSmol::initDescriptorSetLayout(DescriptorSetLayout& layout) {
+    layout.init(device);
 }
 
-void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout) {
-    resourceManager.destroyDescriptorSetLayout(descriptorSetLayout);
+void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout& layout) {
+    layout.destroy(device);
 }
 
 DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
-    return resourceManager.createDescriptorSetGroup(layout, name);
+    const std::string baseName = name.empty() ? "DescriptorSet" : std::move(name);
+
+    DescriptorPool pool;
+    for (const auto& b : layout.getBindings())
+        pool.addPoolSize(b.descriptorType, MAX_FRAME_IN_FLIGHT);
+    pool.init(device, MAX_FRAME_IN_FLIGHT);
+
+    std::vector<DescriptorSet> sets(MAX_FRAME_IN_FLIGHT);
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; ++i) {
+        sets[i].alloc(device, pool, layout);
+        sets[i].setResourceName(baseName + '[' + std::to_string(i) + ']');
+    }
+    return DescriptorSetGroup(std::move(pool), std::move(sets));
 }
 
 void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
-    resourceManager.updateDescriptorSetGroup(group, frameIndex, writer);
+    DescriptorSet& set = group.at(frameIndex);
+    set.clear();
+    for (const DescriptorWrite& write : writer.getWrites()) {
+        std::visit([&](const auto& payload) {
+            using T = std::decay_t<decltype(payload)>;
+            if constexpr (std::is_same_v<T, UniformBufferPayload>) {
+                assert(payload.buffer);
+                set.linkUniformBuffer(*payload.buffer, write.binding);
+            } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
+                assert(payload.buffer);
+                set.linkStorageBuffer(*payload.buffer, write.binding);
+            } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
+                assert(payload.view && payload.sampler);
+                set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
+            } else if constexpr (std::is_same_v<T, StorageImagePayload>) {
+                assert(payload.view);
+                set.linkStorageImage(*payload.view, write.binding);
+            }
+        }, write.payload);
+    }
+    set.update(device);
 }
 
 void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
-    resourceManager.destroyDescriptorSetGroup(group);
+    if (!group.isValid()) return;
+    auto retired = std::make_shared<DescriptorSetGroup>(std::move(group));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->destroy(d); }
+    );
+    group = {};
 }
 
+// ——— Buffers ————————————————————————————————————————————————————————————————
+
 Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data, std::string name) {
-    return resourceManager.createBuffer(usage, size, data, name);
+    Buffer buf;
+    buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
+    if (data == nullptr) {
+        buf.init(device, usage, size);
+    } else {
+        buf.initFilled(device, physicalDevice, usage, transferCommandPool, transferQueue, size, data);
+    }
+    return buf;
 }
 
 Buffer VkSmol::createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name) {
-    return resourceManager.createMappedBuffer(usage, size, name);
+    Buffer buf;
+    buf.setResourceName(name.empty() ? "MappedBuffer" : std::move(name));
+    buf.init(device, usage, size, true);
+    buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    return buf;
 }
 
 Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
-    return resourceManager.createReadbackBuffer(size, persistentMapping, name);
+    Buffer buf;
+    buf.setResourceName(name.empty() ? "ReadbackBuffer" : std::move(name));
+    buf.init(device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
+    buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    return buf;
 }
 
 void VkSmol::fillBuffer(Buffer& buffer, void* data) {
-    resourceManager.fillBuffer(buffer, data);
+    buffer.fill(device, data);
 }
 
 void VkSmol::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {
-    resourceManager.readBuffer(buffer, out, bytes, offset);
+    buffer.read(device, out, bytes, offset);
 }
 
 void VkSmol::destroyBuffer(Buffer& buffer) {
-    resourceManager.destroyBuffer(buffer);
+    if (!buffer.get()) return;
+    auto retired = std::make_shared<Buffer>(std::move(buffer));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->free(d); retired->destroy(d); }
+    );
+    buffer = Buffer{};
 }
 
+// ——— Images —————————————————————————————————————————————————————————————————
+
 Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
-    return resourceManager.createImage(width, height, format, usage, properties, name);
+    Image img;
+    img.setResourceName(name.empty() ? "Image" : std::move(name));
+    img.init(device, width, height, format, usage);
+    img.alloc(device, physicalDevice, properties);
+    return img;
 }
 
 Image VkSmol::createImageFromPath(std::string path, std::string name) {
-    return resourceManager.createImageFromPath(path, name);
+    Image img;
+    img.setResourceName(name.empty() ? "Image" : std::move(name));
+    img.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
+    return img;
 }
 
 void VkSmol::destroyImage(Image& image) {
-    resourceManager.destroyImage(image);
+    if (!image.get()) return;
+    auto retired = std::make_shared<Image>(std::move(image));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->free(d); retired->destroy(d); }
+    );
+    image = Image{};
 }
 
 ImageView VkSmol::createImageView(Image& image, std::string name) {
-    return resourceManager.createImageView(image, std::move(name));
+    if (name.empty() && !image.getResourceName().empty())
+        name = image.getResourceName() + "View";
+    ImageView view;
+    view.setResourceName(name.empty() ? "ImageView" : std::move(name));
+    view.init(device, image);
+    return view;
 }
 
-void VkSmol::destroyImageView(ImageView& imageView) {
-    resourceManager.destroyImageView(imageView);
+void VkSmol::destroyImageView(ImageView& view) {
+    if (!view.get()) return;
+    auto retired = std::make_shared<ImageView>(std::move(view));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->destroy(d); }
+    );
+    view = ImageView{};
 }
 
 Sampler VkSmol::createSampler(std::string name) {
-    return resourceManager.createSampler(std::move(name));
+    Sampler smp;
+    smp.setResourceName(name.empty() ? "Sampler" : std::move(name));
+    smp.init(device, physicalDevice);
+    return smp;
 }
 
 void VkSmol::destroySampler(Sampler& sampler) {
-    resourceManager.destroySampler(sampler);
+    if (!sampler.get()) return;
+    auto retired = std::make_shared<Sampler>(std::move(sampler));
+    retirementQueue[currentRetirementFrame].push_back(
+        [retired](const LogicalDevice& d) { retired->destroy(d); }
+    );
+    sampler = Sampler{};
 }
 
 void VkSmol::beginDynamicRenderer(

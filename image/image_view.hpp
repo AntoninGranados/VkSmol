@@ -8,7 +8,7 @@
 class LogicalDevice;
 class Image;
 
-class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE>, public TrackedResource<ResourceType::ImageView> {
+class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE>, public TrackedResource {
 public:
     void init(const LogicalDevice& device, const Image& image);
     void destroy(const LogicalDevice& device);

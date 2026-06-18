@@ -2,9 +2,9 @@
 
 #include <stdexcept>
 #include <format>
+#include <algorithm>
 
 #include "engine/graph/compiled_resource.hpp"
-#include "render_graph_builder.hpp"
 #include "builder_resource.hpp"
 
 namespace {
@@ -97,9 +97,9 @@ VkDescriptorType bufferUsageTypeToDescriptorType(BufferUsageType usage) {
 
 VkDescriptorType imageUsageTypeToDescriptorType(ImageUsageType usage) {
     switch (usage) {
-        case ImageUsageType::Sampled:      return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        case ImageUsageType::StorageImage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        default:                           return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        case ImageUsageType::Sampled: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        case ImageUsageType::Storage: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        default:                      return VK_DESCRIPTOR_TYPE_MAX_ENUM;
     }
 }
 
@@ -127,7 +127,7 @@ std::string imageUsageToStr(ImageUsageType usage) {
     switch (usage) {
         case ImageUsageType::Undefined       : return "Undefined";
         case ImageUsageType::Sampled         : return "Sampled";
-        case ImageUsageType::StorageImage    : return "StorageImage";
+        case ImageUsageType::Storage         : return "Storage";
         case ImageUsageType::ColorAttachment : return "ColorAttachment";
         case ImageUsageType::DepthAttachment : return "DepthAttachment";
         case ImageUsageType::Present         : return "Present";
@@ -179,7 +179,7 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
-        case ImageUsageType::StorageImage:
+        case ImageUsageType::Storage:
             return {
                 .layout = VK_IMAGE_LAYOUT_GENERAL,
                 .access = (info.access == AccessType::Read)
@@ -235,7 +235,7 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
 VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage) {
     switch (usage) {
         case ImageUsageType::Sampled:         return VK_IMAGE_USAGE_SAMPLED_BIT;
-        case ImageUsageType::StorageImage:    return VK_IMAGE_USAGE_STORAGE_BIT;
+        case ImageUsageType::Storage:         return VK_IMAGE_USAGE_STORAGE_BIT;
         case ImageUsageType::ColorAttachment: return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         case ImageUsageType::DepthAttachment: return VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         case ImageUsageType::TransferSrc:     return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -254,68 +254,186 @@ VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad) {
 }
 
 
-std::string dumpGraph(const RenderGraphBuilder& builder) {
-    std::string out = "";
-    const std::vector<ImageInfo>& images = builder.getImages();
+namespace {
 
-    out.append("Resources:\n");
-    for (const ImageInfo &imageInfo : images) {
-        out.append(std::format("  image [{}]:\n", imageInfo.name));
-        out.append(std::format("    ({}x{}), format: {}\n", imageInfo.width, imageInfo.height, imageFormatToStr(imageInfo.format)));
-
-        if (imageInfo.initialAccess.has_value()) {
-            out.append(std::format("    initial: {}\n", imageAccessInfoToStr(imageInfo.initialAccess.value())));
-        }
-
-        if (imageInfo.finalAccess.has_value()) {
-            out.append(std::format("    final: {}\n", imageAccessInfoToStr(imageInfo.finalAccess.value())));
-        }
+std::string passTypeToStr(PassType type) {
+    switch (type) {
+        case PassType::Compute:  return "Compute";
+        case PassType::Graphics: return "Graphics";
+        case PassType::Transfer: return "Transfer";
+        case PassType::Present:  return "Present";
     }
-    
-    const std::vector<BufferInfo>& buffers = builder.getBuffers();
-    for (const BufferInfo& buf : buffers) {
-        out.append(std::format("  buffer [{}]: {} bytes\n", buf.name, buf.size));
-    }
-
-    out.append("Passes:\n");
-    for (const PassInfo &passInfo : builder.getPasses()) {
-        out.append(std::format("  pass [{}]:\n", passInfo.name));
-
-        for (const ImageAccess& a : passInfo.imageAccesses) {
-            if (a.info.access != AccessType::Read) continue;
-            out.append(std::format("    -> image [{}], {}\n", images[a.image.id].name, imageAccessInfoToStr(a.info)));
-        }
-        for (const ImageAccess& a : passInfo.imageAccesses) {
-            if (a.info.access != AccessType::Write) continue;
-            out.append(std::format("    <- image [{}], {}\n", images[a.image.id].name, imageAccessInfoToStr(a.info)));
-        }
-        for (const BufferAccess& a : passInfo.bufferAccesses) {
-            char arrow = (a.info.access == AccessType::Read) ? '>' : '<';
-            out.append(std::format("    -{} buffer [{}], {}/{}\n", arrow,
-                buffers[a.buffer.id].name, bufferUsageToStr(a.info.usage), accessTypeToStr(a.info.access)));
-        }
-    }
-
-    return out;
+    return "";
 }
 
-std::string dumpCompiledGraph(const RenderGraphBuilder& builder, const CompiledRenderGraph& compiled) {
-    std::string out = "";
+std::string imageOwnershipToStr(ImageOwnership o) {
+    switch (o) {
+        case ImageOwnership::Transient: return "Transient";
+        case ImageOwnership::Managed:   return "Managed";
+        case ImageOwnership::Imported:  return "Imported";
+    }
+    return "";
+}
 
-    out.append("Compiled Passes:\n");
-    for (const CompiledPass& compiledPass : compiled.compiledPasses) {
-        out.append(std::format("  pass [{}]:\n", builder.getPasses()[compiledPass.pass.id].name));
+std::string formatSize(size_t bytes) {
+    if (bytes < 1024)         return std::format("{} B", bytes);
+    if (bytes < 1024 * 1024)  return std::format("{:.1f} KB", bytes / 1024.0);
+    return                           std::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
+}
 
-        for (const PassImageBarrier& barrier : compiledPass.barriersBefore) {
-            const ImageInfo& image = builder.getImages()[barrier.image.id];
-            out.append(std::format("    before [{}]: {} -> {}\n", image.name, imageAccessInfoToStr(barrier.srcAccess), imageAccessInfoToStr(barrier.dstAccess)));
+std::string descriptorTypeToStr(VkDescriptorType type) {
+    switch (type) {
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:         return "Uniform";
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:         return "Storage";
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: return "Sampled";
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:          return "StorageImage";
+        default:                                        return "Unknown";
+    }
+}
+
+} // namespace
+
+std::string dumpGraph(const CompiledRenderGraph& compiled) {
+    std::string out;
+    const auto& images  = compiled.images;
+    const auto& buffers = compiled.buffers;
+
+    // ——— Images ——————————————————————————————————————————————————————————————
+    out += std::format("Images ({}):\n", images.size());
+    for (size_t i = 0; i < images.size(); ++i) {
+        const ImageInfo& img = images[i];
+        out += std::format("  [{:2}] {:40}  {:9}  {}x{}  {}\n",
+            i, '"' + img.name + '"',
+            imageOwnershipToStr(img.ownership),
+            img.width, img.height,
+            imageFormatToStr(img.format));
+        if (img.initialAccess)
+            out += std::format("        initial: {}\n", imageAccessInfoToStr(*img.initialAccess));
+        if (img.finalAccess)
+            out += std::format("        final:   {}\n", imageAccessInfoToStr(*img.finalAccess));
+    }
+    out += '\n';
+
+    // ——— Buffers —————————————————————————————————————————————————————————————
+    out += std::format("Buffers ({}):\n", buffers.size());
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        const BufferInfo& buf = buffers[i];
+        std::string flags;
+        if (buf.perFrame)             flags += "  per-frame";
+        if (!buf.initialData.empty()) flags += "  static";
+        out += std::format("  [{:2}] {:40}  {}{}\n",
+            i, '"' + buf.name + '"', formatSize(buf.size), flags);
+    }
+    out += '\n';
+
+    // ——— Build pass→group name lookup ————————————————————————————————————————
+    std::vector<std::string> passGroup(compiled.compiledPasses.size());
+    for (const CompiledSubmissionGroup& g : compiled.submissionGroups)
+        for (const PassHandle& ph : g.passes)
+            passGroup[ph.id] = g.name;
+
+    // ——— Passes ——————————————————————————————————————————————————————————————
+    out += std::format("Passes ({}):\n", compiled.compiledPasses.size());
+    for (const CompiledPass& pass : compiled.compiledPasses) {
+        out += std::format("  [{}] {}  {}  (group: {})\n",
+            pass.pass.id, pass.name, passTypeToStr(pass.type), passGroup[pass.pass.id]);
+
+        // Descriptor bindings sorted by slot
+        if (!pass.descriptorBindings.empty()) {
+            auto decls = pass.descriptorBindings;
+            std::sort(decls.begin(), decls.end(),
+                [](const DescriptorBindingDecl& a, const DescriptorBindingDecl& b) {
+                    return a.binding < b.binding;
+                });
+            out += "      Bindings:\n";
+            for (const DescriptorBindingDecl& d : decls) {
+                const std::string& name = d.isImage
+                    ? images[d.handleId].name
+                    : buffers[d.handleId].name;
+                out += std::format("        {:2}  {:6}  {:36}  {}\n",
+                    d.binding, d.isImage ? "image" : "buffer",
+                    '"' + name + '"',
+                    descriptorTypeToStr(d.descriptorType));
+            }
         }
+
+        // Fixed-function and attachment accesses
+        for (const BufferAccess& a : pass.bufferAccesses) {
+            if (a.info.usage == BufferUsageType::Vertex)
+                out += std::format("      Vertex:     \"{}\"\n", buffers[a.buffer.id].name);
+            else if (a.info.usage == BufferUsageType::Index)
+                out += std::format("      Index:      \"{}\"\n", buffers[a.buffer.id].name);
+        }
+        for (const ImageAccess& a : pass.imageAccesses) {
+            const ImageUsageType u = a.info.usage;
+            if (u == ImageUsageType::ColorAttachment || u == ImageUsageType::DepthAttachment)
+                out += std::format("      Attachment: \"{}\"  {}  load:{}\n",
+                    images[a.image.id].name,
+                    imageUsageToStr(u),
+                    attachmentLoadToStr(a.info.attachmentLoad));
+            else if (u == ImageUsageType::Present || u == ImageUsageType::TransferSrc || u == ImageUsageType::TransferDst)
+                out += std::format("      {}:  \"{}\"\n", imageUsageToStr(u), images[a.image.id].name);
+        }
+
+        // Pipeline
+        if (pass.pipelineId) {
+            if (pass.type == PassType::Compute) {
+                out += std::format("      Pipeline:   {}\n",
+                    compiled.computePipelines[*pass.pipelineId].shaderPath);
+            } else if (pass.type == PassType::Graphics) {
+                const GraphicsPipelineInfo& pi = compiled.graphicsPipelines[*pass.pipelineId];
+                std::string shaders;
+                for (size_t i = 0; i < pi.shaderPaths.size(); ++i) {
+                    if (i) shaders += " + ";
+                    shaders += pi.shaderPaths[i].second;
+                }
+                out += std::format("      Pipeline:   {}\n", shaders);
+            }
+        }
+
+        // Barriers before this pass
+        if (!pass.barriersBefore.empty() || !pass.bufferBarriersBefore.empty()) {
+            out += "      Barriers:\n";
+            for (const PassImageBarrier& b : pass.barriersBefore)
+                out += std::format("        image  \"{}\"  {} -> {}\n",
+                    images[b.image.id].name,
+                    imageAccessInfoToStr(b.srcAccess),
+                    imageAccessInfoToStr(b.dstAccess));
+            for (const PassBufferBarrier& b : pass.bufferBarriersBefore)
+                out += std::format("        buffer \"{}\"  {}/{} -> {}/{}\n",
+                    buffers[b.buffer.id].name,
+                    bufferUsageToStr(b.srcAccess.usage), accessTypeToStr(b.srcAccess.access),
+                    bufferUsageToStr(b.dstAccess.usage), accessTypeToStr(b.dstAccess.access));
+        }
+
+        out += '\n';
     }
 
-    out.append("Output Barriers:\n");
-    for (const PassImageBarrier& barrier : compiled.outputBarriers) {
-        const ImageInfo& image = builder.getImages()[barrier.image.id];
-        out.append(std::format("  image [{}]: {} -> {}\n", image.name, imageAccessInfoToStr(barrier.srcAccess), imageAccessInfoToStr(barrier.dstAccess)));
+    // ——— Submission groups ———————————————————————————————————————————————————
+    out += std::format("Submission Groups ({}):\n", compiled.submissionGroups.size());
+    for (const CompiledSubmissionGroup& g : compiled.submissionGroups) {
+        out += std::format("  [{}] \"{}\"\n", g.handle.id, g.name);
+        out += "      Passes: ";
+        for (size_t i = 0; i < g.passes.size(); ++i) {
+            if (i) out += " -> ";
+            out += compiled.compiledPasses[g.passes[i].id].name;
+        }
+        out += '\n';
+        if (g.waitsOnImageAvailable) out += "      Waits:   imageAvailable\n";
+        for (const SubmissionGroupHandle& dep : g.dependencies)
+            out += std::format("      Waits:   group \"{}\"\n", compiled.submissionGroups[dep.id].name);
+        if (g.signalsPresentSemaphore) out += "      Signals: present semaphore\n";
+    }
+    out += '\n';
+
+    // ——— Output barriers —————————————————————————————————————————————————————
+    if (!compiled.outputBarriers.empty()) {
+        out += "Output Barriers:\n";
+        for (const PassImageBarrier& b : compiled.outputBarriers)
+            out += std::format("  image \"{}\"  {} -> {}\n",
+                images[b.image.id].name,
+                imageAccessInfoToStr(b.srcAccess),
+                imageAccessInfoToStr(b.dstAccess));
     }
 
     return out;
@@ -329,7 +447,7 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
             isValid = access == AccessType::None; break;
         case ImageUsageType::Sampled:
             isValid = access == AccessType::Read; break;
-        case ImageUsageType::StorageImage:
+        case ImageUsageType::Storage:
             isValid = access == AccessType::Read || access == AccessType::Write; break;
         case ImageUsageType::ColorAttachment:
             isValid = access == AccessType::Write; break;

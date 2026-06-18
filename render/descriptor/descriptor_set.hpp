@@ -15,7 +15,7 @@ class DescriptorSetLayout;
 class DescriptorPool;
 class DescriptorSetGroup;
 
-class DescriptorSet: public TrackedResource<ResourceType::DescriptorSet> {
+class DescriptorSet: public TrackedResource {
 public:
     void alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout);
     static void free(const LogicalDevice& device, DescriptorSetGroup& descriptorSetGroup);

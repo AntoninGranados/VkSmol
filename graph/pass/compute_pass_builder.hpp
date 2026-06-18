@@ -7,15 +7,10 @@ class RenderGraphBuilder;
 
 class ComputePassBuilder: public PassBuilder {
 public:
-    void readImage(ImageHandle imageHandle, ImageUsageType usage);
-    void writeImage(ImageHandle imageHandle, ImageUsageType usage);
-    void readBuffer(BufferHandle buffer, BufferUsageType usage);
-    void writeBuffer(BufferHandle buffer, BufferUsageType usage);
-
-    // Overloads with descriptor binding slot
-    void readImage (ImageHandle  imageHandle, ImageUsageType  usage, uint32_t binding);
-    void writeImage(ImageHandle  imageHandle, ImageUsageType  usage, uint32_t binding);
-    void readBuffer(BufferHandle buffer,      BufferUsageType usage, uint32_t binding);
+    void readImage  (uint32_t binding, ImageHandle  imageHandle, ImageUsageType  usage);
+    void writeImage (uint32_t binding, ImageHandle  imageHandle, ImageUsageType  usage);
+    void readBuffer (uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
+    void writeBuffer(uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
 
     ComputePipelineHandle setPipeline(std::string shaderPath);
 

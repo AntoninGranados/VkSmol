@@ -15,7 +15,7 @@ class Queue;
 
 class Buffer;
 
-class Image: public TrackedResource<ResourceType::Image> {
+class Image: public TrackedResource {
 public:
     Image() = default;
     Image(const Image&) = delete;

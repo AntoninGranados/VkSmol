@@ -38,7 +38,7 @@ enum class AccessType : uint16_t {
 enum class ImageUsageType : uint16_t {
     Undefined,
     Sampled,
-    StorageImage,
+    Storage,
     ColorAttachment,
     DepthAttachment,
     Present,

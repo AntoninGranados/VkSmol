@@ -11,7 +11,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <array>
+#include <functional>
+#include <vector>
 
 #include "./platform/window.hpp"
 
@@ -47,13 +50,11 @@
 #include "./image/image_view.hpp"
 #include "./image/sampler.hpp"
 
-#include "./resource/resource_manager.hpp"
-
+#include "./utils.hpp"
 #include "./frame_context.hpp"
 #include "./graph/compiled_resource.hpp"
 
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
-// TODO: use more assert
 
 struct ImageBinding {
     VkImage     image;
@@ -75,7 +76,6 @@ public:
     void setGraph(RenderGraphBuilder& builder);
     void initGraph();
     void destroyGraph();
-    void resizeImage(ImageHandle handle, uint32_t width, uint32_t height);
 
     std::optional<FrameContext> beginFrame();
     void present();
@@ -88,6 +88,7 @@ public:
     Image& getImage(const ImageHandle& handle);
     const ImageView& getView(const ImageHandle& handle) const;
     const Sampler& getSampler(const ImageHandle& handle) const;
+    void resizeImage(ImageHandle handle, uint32_t width, uint32_t height);
 
     void bindBuffer(const BufferHandle& handle, VkBuffer buffer);
     Buffer& getBuffer(const BufferHandle& handle, uint32_t frameIndex = UINT32_MAX);
@@ -103,13 +104,13 @@ public:
     ImageBinding getTransferSrc(const PassHandle& passHandle) const;
     ImageBinding getTransferDst(const PassHandle& passHandle) const;
 
-    void bindDescriptors(const CommandBuffer& cmd, const PassHandle& pass);
+    void bindDescriptors(const CommandBuffer& commandBuffer, const PassHandle& pass);
 
     CommandBuffer allocCommandBuffer();
-    void freeCommandBuffer(CommandBuffer& cmd);
+    void freeCommandBuffer(CommandBuffer& commandBuffer);
 
     void submit(
-        CommandBuffer& cmd,
+        CommandBuffer& commandBuffer,
         Fence& fence,
         const std::vector<const Semaphore*>& waitSemaphores,
         const std::vector<VkPipelineStageFlags>& waitStages,
@@ -145,28 +146,15 @@ public:
     Image& getSwapchainImage(size_t imageIndex);
     ImageView& getSwapchainImageView(size_t imageIndex);
 
-    void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
-    void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
-
-    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
-    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
-    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
-
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
-    Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
     Buffer createReadbackBuffer(size_t size, bool persistentMapping = true, std::string name = {});
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
 
-    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
     Image createImageFromPath(std::string path, std::string name = {});
-    void destroyImage(Image& image);
-    ImageView createImageView(Image& image, std::string name = {});
-    void destroyImageView(ImageView& imageView);
-    Sampler createSampler(std::string name = {});
-    void destroySampler(Sampler& sampler);
-    
+
+    std::string dumpGraph() const;
+
 
 private:
     Window window;
@@ -192,7 +180,27 @@ private:
 
     bool framebufferResized = false;
 
-    ResourceManager resourceManager;
+    uint32_t currentRetirementFrame = 0;
+    std::array<std::vector<std::function<void(const LogicalDevice&)>>, MAX_FRAME_IN_FLIGHT> retirementQueue;
+
+    void flushAll();
+
+    void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
+    void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
+
+    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
+    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
+    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
+
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
+    Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
+
+    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
+    void destroyImage(Image& image);
+    ImageView createImageView(Image& image, std::string name = {});
+    void destroyImageView(ImageView& imageView);
+    Sampler createSampler(std::string name = {});
+    void destroySampler(Sampler& sampler);
 
     GraphicsPipeline initGraphicsPipeline(
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
@@ -235,6 +243,7 @@ private:
 
     std::unordered_map<uint32_t, DescriptorSetLayout> passDescriptorLayouts;
     std::unordered_map<uint32_t, DescriptorSetGroup>  passDescriptorGroups;
+    std::unordered_set<uint32_t>                      dirtyDescriptors;
 
     std::vector<Semaphore>                  imageAvailableSemaphores;
     std::vector<std::vector<Semaphore>>     groupSemaphores;

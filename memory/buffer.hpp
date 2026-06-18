@@ -11,7 +11,7 @@ class CommandBuffer;
 class CommandPool;
 class Queue;
 
-class Buffer: public TrackedResource<ResourceType::Buffer> {
+class Buffer: public TrackedResource {
 public:
     Buffer() = default;
     Buffer(const Buffer&) = delete;

@@ -197,6 +197,7 @@ void VkSmol::destroySync() {
 // ——— Public lifecycle ————————————————————————————————————————————————————————
 
 void VkSmol::initGraph() {
+    dirtyDescriptors.clear();
     initImages();
     initBuffers();
     initPerFrameBuffers();
@@ -210,6 +211,7 @@ void VkSmol::initGraph() {
 }
 
 void VkSmol::destroyGraph() {
+    dirtyDescriptors.clear();
     destroySync();
     destroyPipelines();
     destroyDescriptorSets();
@@ -261,8 +263,10 @@ std::optional<FrameContext> VkSmol::beginFrame() {
         fences.push_back(&groupFenceRow[currentFrame]);
 
     Fence::wait(fences, device);
-    resourceManager.collectFrame(currentFrame);
-    resourceManager.setRetirementFrame(currentFrame);
+
+    for (auto& payload : retirementQueue[currentFrame]) payload(device);
+    retirementQueue[currentFrame].clear();
+    currentRetirementFrame = currentFrame;
 
     const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
     if (result == RECREATE_SWAPCHAIN) {
@@ -335,7 +339,7 @@ void VkSmol::swapBindings(const ImageHandle& a, const ImageHandle& b) {
         if (!passDescriptorGroups.count(pass.pass.id)) continue;
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
             if (decl.isImage && (decl.handleId == a.id || decl.handleId == b.id)) {
-                updateDescriptors(pass.pass, currentFrame);
+                dirtyDescriptors.insert(pass.pass.id * MAX_FRAME_IN_FLIGHT + currentFrame);
                 break;
             }
         }
@@ -459,7 +463,7 @@ void VkSmol::refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex) {
         if (!passDescriptorGroups.count(pass.pass.id)) continue;
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
             if (decl.isImage && decl.handleId == imageId) {
-                updateDescriptors(pass.pass, frameIndex);
+                dirtyDescriptors.insert(pass.pass.id * MAX_FRAME_IN_FLIGHT + frameIndex);
                 break;
             }
         }
@@ -472,7 +476,7 @@ void VkSmol::refreshDescriptorsForBuffer(uint32_t bufferId) {
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
             if (!decl.isImage && decl.handleId == bufferId) {
                 for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
-                    updateDescriptors(pass.pass, f);
+                    dirtyDescriptors.insert(pass.pass.id * MAX_FRAME_IN_FLIGHT + f);
                 break;
             }
         }
@@ -508,6 +512,12 @@ void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHan
     uint32_t passId = passHandle.id;
     auto groupIt = passDescriptorGroups.find(passId);
     if (groupIt == passDescriptorGroups.end()) return;
+
+    auto dirtyIt = dirtyDescriptors.find(passId * MAX_FRAME_IN_FLIGHT + currentFrame);
+    if (dirtyIt != dirtyDescriptors.end()) {
+        updateDescriptors(passHandle, currentFrame);
+        dirtyDescriptors.erase(dirtyIt);
+    }
 
     const CompiledPass& compiled = graph.compiledPasses[passId];
     assert(compiled.pipelineId.has_value());
@@ -600,4 +610,8 @@ ImageBinding VkSmol::getTransferDst(const PassHandle& passHandle) const {
         if (access.info.usage == ImageUsageType::TransferDst)
             return bindings.at(access.image.id);
     throw std::runtime_error("No transfer dst image found in pass");
+}
+
+std::string VkSmol::dumpGraph() const {
+    return ::dumpGraph(graph);
 }

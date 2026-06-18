@@ -8,7 +8,7 @@
 class LogicalDevice;
 class PhysicalDevice;
 
-class Sampler: public UniqueHandle<VkSampler, VK_NULL_HANDLE>, public TrackedResource<ResourceType::Sampler> {
+class Sampler: public UniqueHandle<VkSampler, VK_NULL_HANDLE>, public TrackedResource {
 public:
     void init(const LogicalDevice& device, PhysicalDevice physicalDevice);
     void destroy(const LogicalDevice& device);
