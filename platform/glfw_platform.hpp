@@ -37,9 +37,11 @@ public:
 
     double getTime() const override;
 
-    void imguiInitGlfwBackend() override;
-    void imguiGlfwNewFrame() override;
-    void imguiGlfwShutdown() override;
+    GLFWwindow* getWindow() const { return window; }
+
+    void imguiInitGlfwBackend();
+    void imguiGlfwNewFrame();
+    void imguiGlfwShutdown();
 
 private:
     GLFWwindow* window = nullptr;

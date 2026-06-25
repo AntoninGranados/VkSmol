@@ -6,11 +6,10 @@
 #include <memory>
 #include <vector>
 
-#include "engine/device/queue.hpp"
+#include "device/queue.hpp"
+#include "platform/glfw_platform.hpp"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_vulkan.h"
-
-struct GLFWwindow; // forward-declare so we can cast getNativeWindowHandle() without pulling GLFW in
 
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
@@ -136,7 +135,7 @@ void VkSmol::terminate() {
 
     if (!platform->isHeadless()) {
         ImGui_ImplVulkan_Shutdown();
-        platform->imguiGlfwShutdown();
+        static_cast<GLFWPlatform*>(platform)->imguiGlfwShutdown();
         ImGui::DestroyContext();
     }
 
@@ -473,7 +472,7 @@ void VkSmol::initImgui() {
     style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    platform->imguiInitGlfwBackend();
+    static_cast<GLFWPlatform*>(platform)->imguiInitGlfwBackend();
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();

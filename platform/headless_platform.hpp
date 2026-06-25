@@ -30,10 +30,6 @@ public:
 
     double getTime() const override { return 0.0; }
 
-    void imguiInitGlfwBackend() override {}
-    void imguiGlfwNewFrame() override {}
-    void imguiGlfwShutdown() override {}
-
 private:
     VkExtent2D extent;
 };

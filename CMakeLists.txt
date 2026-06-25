@@ -40,8 +40,7 @@ if(NOT TARGET imgui_third_party)
   )
   add_library(imgui_third_party STATIC ${VKSMOL_IMGUI_SOURCES})
   target_include_directories(imgui_third_party PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../include/imgui"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui"
   )
   target_link_libraries(imgui_third_party PUBLIC ${VKSMOL_GLFW_TARGET} Vulkan::Vulkan)
 endif()
@@ -50,8 +49,11 @@ endif()
 add_library(VkSmol STATIC ${VKSMOL_SOURCES})
 
 target_include_directories(VkSmol PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/.."
   "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
+target_include_directories(VkSmol PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
 
 if(DEFINED VKSMOL_INCLUDE_DIR)

@@ -40,9 +40,4 @@ public:
     virtual void setCursorMode(int mode) = 0;
 
     virtual double getTime() const = 0;
-
-    // ImGui GLFW backend — no-ops for headless
-    virtual void imguiInitGlfwBackend() = 0;
-    virtual void imguiGlfwNewFrame() = 0;
-    virtual void imguiGlfwShutdown() = 0;
 };

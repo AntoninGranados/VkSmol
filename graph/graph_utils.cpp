@@ -4,7 +4,7 @@
 #include <format>
 #include <algorithm>
 
-#include "engine/graph/compiled_resource.hpp"
+#include "compiled_resource.hpp"
 #include "builder_resource.hpp"
 
 namespace {
