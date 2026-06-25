@@ -2,15 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
-#include <GLFW/glfw3.h>
-
 #include <vector>
 #include <cstdint>
 
 #include "../image/image.hpp"
 #include "../image/image_view.hpp"
 
-class Window;
+struct GLFWwindow;   // forward-declare to avoid pulling GLFW into the header
 class PhysicalDevice;
 class LogicalDevice;
 class Surface;
@@ -33,7 +31,7 @@ public:
     Swapchain(const Swapchain&) = delete;
     Swapchain& operator=(const Swapchain&) = delete;
 
-    void init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window, const Swapchain* oldSwapChain = nullptr);
+    void init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, GLFWwindow* window, const Swapchain* oldSwapChain = nullptr);
     void destroy(const LogicalDevice& device);
     VkSwapchainKHR& get() { return swapchain; };
     const VkSwapchainKHR& get() const { return swapchain; };

@@ -1,6 +1,8 @@
 #include "swapchain.hpp"
 
-#include "../platform/window.hpp"
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include "../device/physical_device.hpp"
 #include "../device/logical_device.hpp"
 #include "../device/queue.hpp"
@@ -31,12 +33,12 @@ SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, cons
 }
 
 
-void Swapchain::init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, const Window& window, const Swapchain* oldSwapChain) {
+void Swapchain::init(const LogicalDevice& device, const PhysicalDevice& physicalDevice, const Surface& surface, GLFWwindow* window, const Swapchain* oldSwapChain) {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    extent = chooseSwapExtent(swapChainSupport.capabilities, window.get());
+    extent = chooseSwapExtent(swapChainSupport.capabilities, window);
     imageFormat = surfaceFormat.format;
 
     imageCount = swapChainSupport.capabilities.minImageCount + 1;

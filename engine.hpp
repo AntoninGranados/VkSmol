@@ -2,9 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
@@ -16,7 +13,7 @@
 #include <functional>
 #include <vector>
 
-#include "./platform/window.hpp"
+#include "./platform/platform.hpp"
 
 #include "./instance/instance.hpp"
 #include "./instance/debug_messenger.hpp"
@@ -71,7 +68,9 @@ class RenderGraphBuilder;
 
 class VkSmol {
 public:
-    void init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height, bool headless = false);
+    void init(std::string appName, uint32_t appVersion, Platform& platform);
+
+    bool isHeadless() const { return platform->isHeadless(); }
 
     void setGraph(RenderGraphBuilder& builder);
     void initGraph();
@@ -138,17 +137,15 @@ public:
     void endDynamicRenderer(const CommandBuffer& commandBuffer);
 
     VkExtent2D& getExtent() {
-        return headless ?
+        return platform->isHeadless() ?
             std::get<HeadlessState>(displayState).extent :
             std::get<WindowedState>(displayState).swapchain.getExtent();
     };
     const VkExtent2D& getExtent() const {
-        return headless ?
+        return platform->isHeadless() ?
             std::get<HeadlessState>(displayState).extent :
             std::get<WindowedState>(displayState).swapchain.getExtent();
     };
-    Window& getWindow() { return std::get<WindowedState>(displayState).window; }
-    const Window& getWindow() const { return std::get<WindowedState>(displayState).window; }
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 
@@ -167,7 +164,6 @@ public:
 
 private:
     struct WindowedState {
-        Window  window;
         Surface surface;
 
         Swapchain swapchain;
@@ -181,7 +177,7 @@ private:
         VkExtent2D extent;
     };
 
-    bool headless;
+    Platform* platform = nullptr;
     std::variant<WindowedState, HeadlessState> displayState;
 
     Instance instance;

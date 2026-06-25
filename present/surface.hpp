@@ -10,5 +10,6 @@ class Instance;
 class Surface: public UniqueHandle<VkSurfaceKHR, VK_NULL_HANDLE> {
 public:
     void init(const Instance& instance, const Window& window);
+    void initFromRaw(VkSurfaceKHR handle) { rawHandle() = handle; }
     void destroy(const Instance& instance);
 };

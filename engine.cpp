@@ -1,4 +1,5 @@
 #include "engine.hpp"
+#include "engine_version.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -7,8 +8,9 @@
 
 #include "engine/device/queue.hpp"
 #include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
+
+struct GLFWwindow; // forward-declare so we can cast getNativeWindowHandle() without pulling GLFW in
 
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
@@ -32,41 +34,35 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height, bool _headless) {
-    headless = _headless;
+void VkSmol::init(std::string appName, uint32_t appVersion, Platform& p) {
+    platform = &p;
 
-    // VkSmol informations
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = appName.c_str();
     appInfo.applicationVersion = appVersion;
     appInfo.pEngineName = "VkSmol";
-    appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 0);
+    appInfo.engineVersion = VK_SMOL_VERSION;
     appInfo.apiVersion = VK_API_VERSION_1_4;
 
-    
-    if (!headless) {
-        glfwInit();
-        displayState = (WindowedState){};
-        std::get<WindowedState>(displayState).window.setFrameBufferResizeCallback([this](int, int) {
-            framebufferResized = true;
-        });
-        std::get<WindowedState>(displayState).window.init(width, height, appName.c_str());
-    }
-    
-    instance.init(appInfo, getRequiredInstanceExtensions(), validationLayers);
-    debugMessenger.init(instance);
-    
-    if (!headless) {
-        std::get<WindowedState>(displayState).surface.init(instance, std::get<WindowedState>(displayState).window);
+    if (!platform->isHeadless()) {
+        displayState = WindowedState{};
+        platform->setResizeCallback([this](int, int) { framebufferResized = true; });
     }
 
+    instance.init(appInfo, getRequiredInstanceExtensions(), validationLayers);
+    debugMessenger.init(instance);
+
+    if (!platform->isHeadless()) {
+        VkSurfaceKHR rawSurface = platform->createSurface(instance.get());
+        std::get<WindowedState>(displayState).surface.initFromRaw(rawSurface);
+    }
 
     std::function<int(PhysicalDevice)> scoring = [this](PhysicalDevice device) { return scoreDevice(device); };
     physicalDevice.init(instance, scoring);
 
     QueueFamilyIndices queueFamilyIndices;
-    if (!headless) {
+    if (!platform->isHeadless()) {
         queueFamilyIndices = findQueueFamilies(physicalDevice, std::get<WindowedState>(displayState).surface);
     } else {
         queueFamilyIndices = findQueueFamiliesHeadless(physicalDevice);
@@ -74,29 +70,31 @@ void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint
 
     device.init(
         physicalDevice,
-        queueFamilyIndices.getIndices(headless),
+        queueFamilyIndices.getIndices(platform->isHeadless()),
         getRequiredDeviceExtensions(),
         validationLayers
     );
 
     graphicsQueue.init(device, queueFamilyIndices.graphicsFamily.value());
     transferQueue.init(device, queueFamilyIndices.transferFamily.value());
-    if (!headless) std::get<WindowedState>(displayState).presentQueue.init(device, queueFamilyIndices.presentFamily.value());
-    
-    if (!headless) {
-        std::get<WindowedState>(displayState).swapchain.init(device, physicalDevice,
+
+    if (!platform->isHeadless()) {
+        std::get<WindowedState>(displayState).presentQueue.init(device, queueFamilyIndices.presentFamily.value());
+        auto* glfwWindow = static_cast<GLFWwindow*>(platform->getNativeWindowHandle());
+        std::get<WindowedState>(displayState).swapchain.init(
+            device, physicalDevice,
             std::get<WindowedState>(displayState).surface,
-            std::get<WindowedState>(displayState).window);
+            glfwWindow);
     } else {
-        displayState = (HeadlessState){};
-        std::get<HeadlessState>(displayState).extent = { width, height };
+        displayState = HeadlessState{};
+        std::get<HeadlessState>(displayState).extent = platform->getExtent();
     }
-    
+
     dynamicRenderer.init(device);
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 
-    if (!headless) initImgui();
+    if (!platform->isHeadless()) initImgui();
 }
 
 
@@ -136,9 +134,9 @@ void VkSmol::waitIdle() {
 void VkSmol::terminate() {
     device.waitIdle();
 
-    if (!headless) {
+    if (!platform->isHeadless()) {
         ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
+        platform->imguiGlfwShutdown();
         ImGui::DestroyContext();
     }
 
@@ -149,23 +147,18 @@ void VkSmol::terminate() {
     assert(passDescriptorLayouts.empty() && passDescriptorGroups.empty());
     assert(ownedComputePipelines.empty() && ownedGraphicsPipelines.empty());
 
-   if (!headless) uiDescriptorPool.destroy(device);
+    if (!platform->isHeadless()) uiDescriptorPool.destroy(device);
 
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
 
-    if (!headless) std::get<WindowedState>(displayState).swapchain.destroy(device);
+    if (!platform->isHeadless()) std::get<WindowedState>(displayState).swapchain.destroy(device);
 
     device.destroy();
-    if (!headless) std::get<WindowedState>(displayState).surface.destroy(instance);
+    if (!platform->isHeadless()) std::get<WindowedState>(displayState).surface.destroy(instance);
 
     debugMessenger.destroy(instance);
     instance.destroy();
-
-    if (!headless) {
-        std::get<WindowedState>(displayState).window.destroy();
-        glfwTerminate();
-    }
 }
 
 GraphicsPipeline VkSmol::initGraphicsPipeline(
@@ -178,7 +171,7 @@ GraphicsPipeline VkSmol::initGraphicsPipeline(
     // Dynamic Rendering Info
     VkFormat format;
     if (colorFormat == VK_FORMAT_UNDEFINED) {
-        format = headless ? VK_FORMAT_R8G8B8A8_UNORM : *std::get<WindowedState>(displayState).swapchain.getImageFormat();
+        format = platform->isHeadless() ? VK_FORMAT_R8G8B8A8_UNORM : *std::get<WindowedState>(displayState).swapchain.getImageFormat();
     } else {
         format = colorFormat;
     }
@@ -441,11 +434,7 @@ void VkSmol::beginDynamicRenderer(
         commandBuffer,
         imageView, imageLayout,
         loadOp, storeOp,
-        clearColor, (VkRect2D){
-            (VkOffset2D){},
-            headless ?
-                std::get<HeadlessState>(displayState).extent :
-                std::get<WindowedState>(displayState).swapchain.getExtent() }
+        clearColor, (VkRect2D){ (VkOffset2D){}, getExtent() }
     );
 }
 
@@ -455,22 +444,21 @@ void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
 
 
 bool VkSmol::shouldTerminate() {
-    if (headless) return false;
-    return std::get<WindowedState>(displayState).window.shouldClose();
+    return platform->shouldClose();
 }
 
 Image& VkSmol::getSwapchainImage(size_t imageIndex) {
-    assert(!headless);
+    assert(!platform->isHeadless());
     return std::get<WindowedState>(displayState).swapchain.getImage(imageIndex);
 }
 
 ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
-    assert(!headless);
+    assert(!platform->isHeadless());
     return std::get<WindowedState>(displayState).swapchain.getImageView(imageIndex);
 }
 
 void VkSmol::initImgui() {
-    assert(!headless);
+    assert(!platform->isHeadless());
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, std::get<WindowedState>(displayState).surface);
 
@@ -482,10 +470,10 @@ void VkSmol::initImgui() {
 
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
-    style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f); // keep docked windows transparent
+    style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    ImGui_ImplGlfw_InitForVulkan(std::get<WindowedState>(displayState).window.get(), true);
+    platform->imguiInitGlfwBackend();
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();
@@ -524,15 +512,16 @@ void VkSmol::initImgui() {
 }
 
 void VkSmol::recreateSwapchain() {
-    assert(!headless);
+    assert(!platform->isHeadless());
 
-    std::get<WindowedState>(displayState).window.pauseWhileMinimized();
+    platform->pauseWhileMinimized();
 
+    auto* glfwWindow = static_cast<GLFWwindow*>(platform->getNativeWindowHandle());
     Swapchain newSwapchain;
     newSwapchain.init(
         device, physicalDevice,
         std::get<WindowedState>(displayState).surface,
-        std::get<WindowedState>(displayState).window,
+        glfwWindow,
         &std::get<WindowedState>(displayState).swapchain);
 
     auto retired = std::make_shared<Swapchain>(std::move(std::get<WindowedState>(displayState).swapchain));
@@ -548,13 +537,8 @@ void VkSmol::recreateSwapchain() {
 std::vector<const char*> VkSmol::getRequiredInstanceExtensions() {
     std::vector<const char*> requiredExtensions;
 
-    // Extensions needed by GLFW
-    if (!headless) {
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        for (uint32_t i = 0; i < glfwExtensionCount; i++)
-            requiredExtensions.emplace_back(glfwExtensions[i]);
-    }
+    for (const char* ext : platform->getRequiredInstanceExtensions())
+        requiredExtensions.emplace_back(ext);
 
     requiredExtensions.insert(requiredExtensions.end(), instanceExtensions.begin(), instanceExtensions.end());
 
@@ -564,7 +548,8 @@ std::vector<const char*> VkSmol::getRequiredInstanceExtensions() {
 std::vector<const char*> VkSmol::getRequiredDeviceExtensions() {
     std::vector<const char*> requiredExtensions;
 
-    if (!headless) requiredExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    for (const char* ext : platform->getRequiredDeviceExtensions())
+        requiredExtensions.emplace_back(ext);
 
     requiredExtensions.insert(requiredExtensions.end(), deviceExtensions.begin(), deviceExtensions.end());
 
@@ -572,11 +557,10 @@ std::vector<const char*> VkSmol::getRequiredDeviceExtensions() {
 }
 
 int VkSmol::scoreDevice(const PhysicalDevice& device) {
-    // Check if all the queue families are available
-    QueueFamilyIndices indices = headless ?
+    QueueFamilyIndices indices = platform->isHeadless() ?
         findQueueFamiliesHeadless(device) :
         findQueueFamilies(device, std::get<WindowedState>(displayState).surface);
-    if (!indices.isComplete(headless)) return 0;
+    if (!indices.isComplete(platform->isHeadless())) return 0;
 
     // Check if all extensions are supported by the GPU
     uint32_t extensionCount;
@@ -600,7 +584,7 @@ int VkSmol::scoreDevice(const PhysicalDevice& device) {
     if (!supportedFeatures.fragmentStoresAndAtomics) return 0;
 
     // Check swap chain support
-    if (!headless) {
+    if (!platform->isHeadless()) {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, std::get<WindowedState>(displayState).surface);
         if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty()) return 0;
     }
