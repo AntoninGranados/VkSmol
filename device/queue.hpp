@@ -18,11 +18,11 @@ class Fence;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily; // queue for graphics
-    std::optional<uint32_t> presentFamily;  // queue for prensenting surface to the screen
     std::optional<uint32_t> transferFamily; // queue for transfering data from the CPU to the GPU
+    std::optional<uint32_t> presentFamily;  // queue for presenting surface to the screen (not needed for headless mode)
 
-    bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
+    bool isComplete(bool headless = false) {
+        return graphicsFamily.has_value() && transferFamily.has_value() && (headless || presentFamily.has_value());
     }
 
     // Check if all the families are the same
@@ -30,12 +30,17 @@ struct QueueFamilyIndices {
         return std::ranges::all_of(getIndices(), [&](int i) { return i == getIndices()[0]; });
     }
 
-    std::vector<uint32_t> getIndices() {
-        return std::vector<uint32_t> { graphicsFamily.value(), presentFamily.value(), transferFamily.value() };
+    std::vector<uint32_t> getIndices(bool headless = false) {
+        std::vector<uint32_t> indices;
+        indices.push_back(graphicsFamily.value());
+        indices.push_back(transferFamily.value());
+        if (!headless) indices.push_back(presentFamily.value());
+        return indices;
     }
 };
 
 QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface);
+QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice);
 
 class Queue: public BorrowedHandle<VkQueue, VK_NULL_HANDLE> {
 public:
@@ -49,7 +54,7 @@ public:
         const std::vector<const Semaphore*>& signalSemaphores
     );
     void submit(const std::vector<const CommandBuffer*>& commandBuffers);
-    // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
+    // Returns SMOL_RECREATE_SWAPCHAIN if we need to recreate the swapchain
     uint32_t present(
         const std::vector<const Swapchain*>& swapchains,
         const std::vector<uint32_t>& frameIndices,

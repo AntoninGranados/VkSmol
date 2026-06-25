@@ -47,7 +47,7 @@ public:
     VkExtent2D& getExtent() { return extent; };
     const VkExtent2D& getExtent() const { return extent; };
 
-    // Returns RECREATE_SWAPCHAIN if we need to recreate the swapchain
+    // Returns SMOL_RECREATE_SWAPCHAIN if we need to recreate the swapchain
     uint32_t getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);
 
 private:

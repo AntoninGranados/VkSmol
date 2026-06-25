@@ -9,7 +9,7 @@
 
 const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
 
-#define RECREATE_SWAPCHAIN ~(0u)
+#define SMOL_RECREATE_SWAPCHAIN ~(0u)
 
 // Message formating
 #define MAX_MSG_SIZE 256u

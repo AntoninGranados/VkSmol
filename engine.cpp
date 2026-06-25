@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "engine/device/queue.hpp"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -20,7 +21,7 @@ const std::vector<const char*> instanceExtensions = {
 };
 
 const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    // VK_KHR_SWAPCHAIN_EXTENSION_NAME, // added automatically when not in headless mode
     VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 #ifdef __APPLE__
     "VK_KHR_portability_subset",
@@ -31,14 +32,8 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height) {
-    glfwInit();
-
-    window.setFrameBufferResizeCallback([this](int, int) {
-        framebufferResized = true;
-    });
-
-    window.init(width, height, appName.c_str());
+void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height, bool _headless) {
+    headless = _headless;
 
     // VkSmol informations
     VkApplicationInfo appInfo{};
@@ -49,37 +44,59 @@ void VkSmol::init(std::string appName, uint32_t appVersion, uint32_t width, uint
     appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_4;
 
-    instance.init(appInfo, getRequiredExtensions(), validationLayers);
-
+    
+    if (!headless) {
+        glfwInit();
+        displayState = (WindowedState){};
+        std::get<WindowedState>(displayState).window.setFrameBufferResizeCallback([this](int, int) {
+            framebufferResized = true;
+        });
+        std::get<WindowedState>(displayState).window.init(width, height, appName.c_str());
+    }
+    
+    instance.init(appInfo, getRequiredInstanceExtensions(), validationLayers);
     debugMessenger.init(instance);
+    
+    if (!headless) {
+        std::get<WindowedState>(displayState).surface.init(instance, std::get<WindowedState>(displayState).window);
+    }
 
-    surface.init(instance, window);
 
     std::function<int(PhysicalDevice)> scoring = [this](PhysicalDevice device) { return scoreDevice(device); };
     physicalDevice.init(instance, scoring);
 
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
+    QueueFamilyIndices queueFamilyIndices;
+    if (!headless) {
+        queueFamilyIndices = findQueueFamilies(physicalDevice, std::get<WindowedState>(displayState).surface);
+    } else {
+        queueFamilyIndices = findQueueFamiliesHeadless(physicalDevice);
+    }
+
     device.init(
         physicalDevice,
-        queueFamilyIndices.getIndices(),
-        deviceExtensions,
+        queueFamilyIndices.getIndices(headless),
+        getRequiredDeviceExtensions(),
         validationLayers
     );
 
     graphicsQueue.init(device, queueFamilyIndices.graphicsFamily.value());
-    presentQueue.init(device, queueFamilyIndices.presentFamily.value());
     transferQueue.init(device, queueFamilyIndices.transferFamily.value());
-
-    swapchain.init(device, physicalDevice, surface, window);
-
+    if (!headless) std::get<WindowedState>(displayState).presentQueue.init(device, queueFamilyIndices.presentFamily.value());
+    
+    if (!headless) {
+        std::get<WindowedState>(displayState).swapchain.init(device, physicalDevice,
+            std::get<WindowedState>(displayState).surface,
+            std::get<WindowedState>(displayState).window);
+    } else {
+        displayState = (HeadlessState){};
+        std::get<HeadlessState>(displayState).extent = { width, height };
+    }
+    
     dynamicRenderer.init(device);
-
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 
-    initImgui();
-
-
+    if (!headless) initImgui();
 }
 
 
@@ -119,9 +136,11 @@ void VkSmol::waitIdle() {
 void VkSmol::terminate() {
     device.waitIdle();
 
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    if (!headless) {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
 
     flushAll();
 
@@ -130,21 +149,23 @@ void VkSmol::terminate() {
     assert(passDescriptorLayouts.empty() && passDescriptorGroups.empty());
     assert(ownedComputePipelines.empty() && ownedGraphicsPipelines.empty());
 
-    uiDescriptorPool.destroy(device);
+   if (!headless) uiDescriptorPool.destroy(device);
 
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
 
-    swapchain.destroy(device);
+    if (!headless) std::get<WindowedState>(displayState).swapchain.destroy(device);
 
     device.destroy();
-    surface.destroy(instance);
+    if (!headless) std::get<WindowedState>(displayState).surface.destroy(instance);
 
     debugMessenger.destroy(instance);
     instance.destroy();
 
-    window.destroy();
-    glfwTerminate();
+    if (!headless) {
+        std::get<WindowedState>(displayState).window.destroy();
+        glfwTerminate();
+    }
 }
 
 GraphicsPipeline VkSmol::initGraphicsPipeline(
@@ -155,7 +176,12 @@ GraphicsPipeline VkSmol::initGraphicsPipeline(
     VkFormat colorFormat
 ) {
     // Dynamic Rendering Info
-    VkFormat format = colorFormat == VK_FORMAT_UNDEFINED ? *swapchain.getImageFormat() : colorFormat;
+    VkFormat format;
+    if (colorFormat == VK_FORMAT_UNDEFINED) {
+        format = headless ? VK_FORMAT_R8G8B8A8_UNORM : *std::get<WindowedState>(displayState).swapchain.getImageFormat();
+    } else {
+        format = colorFormat;
+    }
     VkPipelineRenderingCreateInfoKHR pipelineCreate{};
     pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
     pipelineCreate.colorAttachmentCount    = 1;
@@ -415,7 +441,11 @@ void VkSmol::beginDynamicRenderer(
         commandBuffer,
         imageView, imageLayout,
         loadOp, storeOp,
-        clearColor, VkRect2D { VkOffset2D {}, swapchain.getExtent() }
+        clearColor, (VkRect2D){
+            (VkOffset2D){},
+            headless ?
+                std::get<HeadlessState>(displayState).extent :
+                std::get<WindowedState>(displayState).swapchain.getExtent() }
     );
 }
 
@@ -425,19 +455,24 @@ void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
 
 
 bool VkSmol::shouldTerminate() {
-    return window.shouldClose();
+    if (headless) return false;
+    return std::get<WindowedState>(displayState).window.shouldClose();
 }
 
 Image& VkSmol::getSwapchainImage(size_t imageIndex) {
-    return swapchain.getImage(imageIndex);
+    assert(!headless);
+    return std::get<WindowedState>(displayState).swapchain.getImage(imageIndex);
 }
 
 ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
-    return swapchain.getImageView(imageIndex);
+    assert(!headless);
+    return std::get<WindowedState>(displayState).swapchain.getImageView(imageIndex);
 }
 
 void VkSmol::initImgui() {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+    assert(!headless);
+
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice, std::get<WindowedState>(displayState).surface);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -450,7 +485,7 @@ void VkSmol::initImgui() {
     style.Colors[ImGuiCol_WindowBg]       = ImVec4(0.0f, 0.0f, 0.0f, 0.30f); // keep docked windows transparent
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    ImGui_ImplGlfw_InitForVulkan(window.get(), true);
+    ImGui_ImplGlfw_InitForVulkan(std::get<WindowedState>(displayState).window.get(), true);
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance       = instance.get();
     initInfo.PhysicalDevice = physicalDevice.get();
@@ -474,7 +509,7 @@ void VkSmol::initImgui() {
     VkPipelineRenderingCreateInfoKHR pipelineCreate{};
     pipelineCreate.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
     pipelineCreate.colorAttachmentCount    = 1;
-    pipelineCreate.pColorAttachmentFormats = swapchain.getImageFormat();
+    pipelineCreate.pColorAttachmentFormats = std::get<WindowedState>(displayState).swapchain.getImageFormat();
 
     initInfo.RenderPass                  = VK_NULL_HANDLE;
     initInfo.UseDynamicRendering         = true;
@@ -489,40 +524,59 @@ void VkSmol::initImgui() {
 }
 
 void VkSmol::recreateSwapchain() {
-    window.pauseWhileMinimized();
+    assert(!headless);
+
+    std::get<WindowedState>(displayState).window.pauseWhileMinimized();
 
     Swapchain newSwapchain;
-    newSwapchain.init(device, physicalDevice, surface, window, &swapchain);
+    newSwapchain.init(
+        device, physicalDevice,
+        std::get<WindowedState>(displayState).surface,
+        std::get<WindowedState>(displayState).window,
+        &std::get<WindowedState>(displayState).swapchain);
 
-    auto retired = std::make_shared<Swapchain>(std::move(swapchain));
+    auto retired = std::make_shared<Swapchain>(std::move(std::get<WindowedState>(displayState).swapchain));
     retirementQueue[currentRetirementFrame].push_back(
         [retired](const LogicalDevice& d) { retired->destroy(d); }
     );
 
-    swapchain = std::move(newSwapchain);
-    swapchainGeneration++;
+    std::get<WindowedState>(displayState).swapchain = std::move(newSwapchain);
+    std::get<WindowedState>(displayState).swapchainGeneration++;
     framebufferResized = false;
 }
 
-std::vector<const char*> VkSmol::getRequiredExtensions() {
-    // Extensions needed by GLFW
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    // Extensions required by the application
+std::vector<const char*> VkSmol::getRequiredInstanceExtensions() {
     std::vector<const char*> requiredExtensions;
-    for (uint32_t i = 0; i < glfwExtensionCount; i++)
-        requiredExtensions.emplace_back(glfwExtensions[i]);
+
+    // Extensions needed by GLFW
+    if (!headless) {
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        for (uint32_t i = 0; i < glfwExtensionCount; i++)
+            requiredExtensions.emplace_back(glfwExtensions[i]);
+    }
+
     requiredExtensions.insert(requiredExtensions.end(), instanceExtensions.begin(), instanceExtensions.end());
+
+    return requiredExtensions;
+}
+
+std::vector<const char*> VkSmol::getRequiredDeviceExtensions() {
+    std::vector<const char*> requiredExtensions;
+
+    if (!headless) requiredExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    requiredExtensions.insert(requiredExtensions.end(), deviceExtensions.begin(), deviceExtensions.end());
 
     return requiredExtensions;
 }
 
 int VkSmol::scoreDevice(const PhysicalDevice& device) {
     // Check if all the queue families are available
-    QueueFamilyIndices indices = findQueueFamilies(device, surface);
-    if (!indices.isComplete())
-        return 0;
+    QueueFamilyIndices indices = headless ?
+        findQueueFamiliesHeadless(device) :
+        findQueueFamilies(device, std::get<WindowedState>(displayState).surface);
+    if (!indices.isComplete(headless)) return 0;
 
     // Check if all extensions are supported by the GPU
     uint32_t extensionCount;
@@ -530,7 +584,7 @@ int VkSmol::scoreDevice(const PhysicalDevice& device) {
     std::vector<VkExtensionProperties> supportedExtensions(extensionCount);
     vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, supportedExtensions.data());
 
-    for (const char* extension : deviceExtensions) {
+    for (const char* extension : getRequiredDeviceExtensions()) {
         if (!std::any_of(
             supportedExtensions.begin(),
             supportedExtensions.end(),
@@ -541,16 +595,15 @@ int VkSmol::scoreDevice(const PhysicalDevice& device) {
 
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device.get(), &supportedFeatures);
-    if (!supportedFeatures.samplerAnisotropy)
-        return 0;
+    if (!supportedFeatures.samplerAnisotropy) return 0;
 
-    if (!supportedFeatures.fragmentStoresAndAtomics)
-        return 0;
+    if (!supportedFeatures.fragmentStoresAndAtomics) return 0;
 
     // Check swap chain support
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
-    if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
-        return 0;
+    if (!headless) {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, std::get<WindowedState>(displayState).surface);
+        if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty()) return 0;
+    }
 
     return 1;
 }

@@ -1,6 +1,23 @@
 #include "window.hpp"
 
-// Public
+Window::Window(Window&& other) noexcept
+    : UniqueHandle(std::move(other)),
+      onFramebufferResize(std::move(other.onFramebufferResize)),
+      onCursorPos(std::move(other.onCursorPos)),
+      onScroll(std::move(other.onScroll))
+{
+    if (isValid()) glfwSetWindowUserPointer(get(), this);
+}
+
+Window& Window::operator=(Window&& other) noexcept {
+    UniqueHandle::operator=(std::move(other));
+    onFramebufferResize = std::move(other.onFramebufferResize);
+    onCursorPos         = std::move(other.onCursorPos);
+    onScroll            = std::move(other.onScroll);
+    if (isValid()) glfwSetWindowUserPointer(get(), this);
+    return *this;
+}
+
 void Window::init(int width, int height, std::string name) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -39,7 +56,7 @@ void Window::framebufferResizeBridge(GLFWwindow* glfwWindow, int width, int heig
 
 void Window::cursorPosBridge(GLFWwindow* glfwWindow, double x, double y) {
     auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
-    if (self && self->onCursorPos) self->onCursorPos(x, y);
+if (self && self->onCursorPos) self->onCursorPos(x, y);
 }
 
 void Window::scrollBridge(GLFWwindow* glfwWindow, double xoffset, double yoffset) {

@@ -14,6 +14,10 @@ public:
     using CursorPosFn = std::function<void(double, double)>;
     using ScrollFn = std::function<void(double, double)>;
 
+    Window() = default;
+    Window(Window&& other) noexcept;
+    Window& operator=(Window&& other) noexcept;
+
     void init(int width, int height, std::string name);
     void destroy();
 

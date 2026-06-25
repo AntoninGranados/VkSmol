@@ -71,13 +71,14 @@ class RenderGraphBuilder;
 
 class VkSmol {
 public:
-    void init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height);
+    void init(std::string appName, uint32_t appVersion, uint32_t width, uint32_t height, bool headless = false);
 
     void setGraph(RenderGraphBuilder& builder);
     void initGraph();
     void destroyGraph();
 
     std::optional<FrameContext> beginFrame();
+    void advanceFrame();
     void present();
     CommandBuffer& beginRecording(const SubmissionGroupHandle& group);
     void  endRecording(const SubmissionGroupHandle& group);
@@ -136,10 +137,18 @@ public:
     );
     void endDynamicRenderer(const CommandBuffer& commandBuffer);
 
-    VkExtent2D& getExtent() { return swapchain.getExtent(); };
-    const VkExtent2D& getExtent() const { return swapchain.getExtent(); };
-    Window& getWindow() { return window; }
-    const Window& getWindow() const { return window; }
+    VkExtent2D& getExtent() {
+        return headless ?
+            std::get<HeadlessState>(displayState).extent :
+            std::get<WindowedState>(displayState).swapchain.getExtent();
+    };
+    const VkExtent2D& getExtent() const {
+        return headless ?
+            std::get<HeadlessState>(displayState).extent :
+            std::get<WindowedState>(displayState).swapchain.getExtent();
+    };
+    Window& getWindow() { return std::get<WindowedState>(displayState).window; }
+    const Window& getWindow() const { return std::get<WindowedState>(displayState).window; }
     uint32_t getFrame() { return currentFrame; }
     bool shouldTerminate();
 
@@ -157,20 +166,32 @@ public:
 
 
 private:
-    Window window;
+    struct WindowedState {
+        Window  window;
+        Surface surface;
+
+        Swapchain swapchain;
+        uint64_t  swapchainGeneration = 0;
+        std::vector<Semaphore> imageAvailableSemaphores;
+
+        Queue presentQueue;
+    };
+
+    struct HeadlessState {
+        VkExtent2D extent;
+    };
+
+    bool headless;
+    std::variant<WindowedState, HeadlessState> displayState;
 
     Instance instance;
     DebugMessenger debugMessenger;
-
-    Surface surface;
+    
+    DynamicRenderer dynamicRenderer;
 
     PhysicalDevice physicalDevice;
     LogicalDevice device;
-    Queue graphicsQueue, presentQueue, transferQueue;
-
-    Swapchain swapchain;
-    uint64_t swapchainGeneration = 0;
-    DynamicRenderer dynamicRenderer;
+    Queue graphicsQueue, transferQueue;
 
     DescriptorPool uiDescriptorPool;
 
@@ -245,7 +266,6 @@ private:
     std::unordered_map<uint32_t, DescriptorSetGroup>  passDescriptorGroups;
     std::unordered_set<uint32_t>                      dirtyDescriptors;
 
-    std::vector<Semaphore>                  imageAvailableSemaphores;
     std::vector<std::vector<Semaphore>>     groupSemaphores;
     std::vector<std::vector<Fence>>         groupFences;
     std::vector<std::vector<CommandBuffer>> groupCommandBuffers;
@@ -276,6 +296,7 @@ private:
     void initImgui();
     void recreateSwapchain();
 
-    std::vector<const char*> getRequiredExtensions();
+    std::vector<const char*> getRequiredInstanceExtensions();
+    std::vector<const char*> getRequiredDeviceExtensions();
     int scoreDevice(const PhysicalDevice& device);
 };

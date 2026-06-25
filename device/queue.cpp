@@ -9,7 +9,6 @@
 #include "../sync/fence.hpp"
 #include "../utils.hpp"
 
-// Search for the graphics queue and the present queue
 QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {
     QueueFamilyIndices indices;
 
@@ -35,6 +34,31 @@ QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const
             indices.transferFamily = i;
 
         if (indices.isComplete()) break;
+        i++;
+    }
+
+    return indices;
+}
+
+QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice) {
+    QueueFamilyIndices indices;
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, queueFamilies.data());
+
+    int i = 0;
+    for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
+        // Graphics family
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            indices.graphicsFamily = i;
+
+        // Transfer family
+        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
+            indices.transferFamily = i;
+
+        if (indices.isComplete(true)) break;
         i++;
     }
 
@@ -111,7 +135,7 @@ uint32_t Queue::present(
 
     VkResult result = vkQueuePresentKHR(rawHandle(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-        return RECREATE_SWAPCHAIN;
+        return SMOL_RECREATE_SWAPCHAIN;
     else if (result != VK_SUCCESS)
         throw std::runtime_error("Failed to present the queue");
 

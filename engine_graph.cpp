@@ -159,7 +159,7 @@ void VkSmol::destroyPipelines() {
 void VkSmol::initSync() {
     const uint32_t numGroups = static_cast<uint32_t>(graph.submissionGroups.size());
 
-    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    if (!headless) std::get<WindowedState>(displayState).imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
     groupSemaphores.resize(numGroups);
     groupFences.resize(numGroups);
     groupCommandBuffers.resize(numGroups);
@@ -170,7 +170,7 @@ void VkSmol::initSync() {
     }
 
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
-        imageAvailableSemaphores[f].init(device);
+        if (!headless) std::get<WindowedState>(displayState).imageAvailableSemaphores[f].init(device);
         for (uint32_t g = 0; g < numGroups; ++g) {
             groupSemaphores[g][f].init(device);
             groupFences[g][f].init(device, true);
@@ -181,14 +181,14 @@ void VkSmol::initSync() {
 
 void VkSmol::destroySync() {
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
-        imageAvailableSemaphores[f].destroy(device);
+        if (!headless) std::get<WindowedState>(displayState).imageAvailableSemaphores[f].destroy(device);
         for (uint32_t g = 0; g < groupSemaphores.size(); ++g) {
             groupSemaphores[g][f].destroy(device);
             groupFences[g][f].destroy(device);
             freeCommandBuffer(groupCommandBuffers[g][f]);
         }
     }
-    imageAvailableSemaphores.clear();
+    if (!headless) std::get<WindowedState>(displayState).imageAvailableSemaphores.clear();
     groupSemaphores.clear();
     groupFences.clear();
     groupCommandBuffers.clear();
@@ -268,34 +268,49 @@ std::optional<FrameContext> VkSmol::beginFrame() {
     retirementQueue[currentFrame].clear();
     currentRetirementFrame = currentFrame;
 
-    const uint32_t result = swapchain.getNextImageIndex(device, imageAvailableSemaphores[currentFrame]);
-    if (result == RECREATE_SWAPCHAIN) {
-        recreateSwapchain();
-        return {};
+    if (!headless) {
+        const uint32_t result = std::get<WindowedState>(displayState).swapchain.getNextImageIndex(
+            device,
+            std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
+        if (result == SMOL_RECREATE_SWAPCHAIN) {
+            recreateSwapchain();
+            return {};
+        }
+        
+        Fence::reset(fences, device);
+        imageIndex = result;
+        
+        return FrameContext{
+            .extent           = getExtent(),
+            .currentFrame     = currentFrame,
+            .imageIndex       = imageIndex,
+            .swapchainGeneration = std::get<WindowedState>(displayState).swapchainGeneration,
+        };
+    } else {
+        Fence::reset(fences, device);
+        return FrameContext{
+            .extent           = getExtent(),
+            .currentFrame     = currentFrame,
+        };
     }
 
-    Fence::reset(fences, device);
-    imageIndex = result;
-
-    return FrameContext{
-        .extent           = getExtent(),
-        .currentFrame     = currentFrame,
-        .imageIndex       = imageIndex,
-        .swapchainGeneration = swapchainGeneration,
-    };
 }
 
 void VkSmol::present() {
+    assert(!headless);
+
     uint32_t presentGroupId = 0;
     for (const CompiledSubmissionGroup& group : graph.submissionGroups)
         if (group.signalsPresentSemaphore) { presentGroupId = group.handle.id; break; }
 
-    const uint32_t result = presentQueue.present(
-        { &swapchain }, { imageIndex }, { &groupSemaphores[presentGroupId][currentFrame] });
-    if (result == RECREATE_SWAPCHAIN || framebufferResized) {
+    const uint32_t result = std::get<WindowedState>(displayState).presentQueue.present(
+        { &std::get<WindowedState>(displayState).swapchain }, { imageIndex }, { &groupSemaphores[presentGroupId][currentFrame] });
+    if (result == SMOL_RECREATE_SWAPCHAIN || framebufferResized) {
         recreateSwapchain();
     }
+}
 
+void VkSmol::advanceFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
@@ -315,8 +330,8 @@ void VkSmol::endRecording(const SubmissionGroupHandle& group) {
     std::vector<const Semaphore*> waitSemaphores;
     std::vector<VkPipelineStageFlags> waitStages;
 
-    if (compiled.waitsOnImageAvailable) {
-        waitSemaphores.push_back(&imageAvailableSemaphores[currentFrame]);
+    if (!headless && compiled.waitsOnImageAvailable) {
+        waitSemaphores.push_back(&std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
         waitStages.push_back(compiled.imageAvailableWaitStage);
     }
     for (const SubmissionGroupHandle& dep : compiled.dependencies) {

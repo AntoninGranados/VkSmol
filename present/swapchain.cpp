@@ -112,7 +112,7 @@ uint32_t Swapchain::getNextImageIndex(const LogicalDevice& device, const Semapho
 
     VkResult result = vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
-        return RECREATE_SWAPCHAIN;
+        return SMOL_RECREATE_SWAPCHAIN;
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
 
