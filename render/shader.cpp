@@ -6,6 +6,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+std::string Shader::spvOutputDir;
+
 // Public
 void Shader::init(const LogicalDevice& device, VkShaderStageFlagBits stage_, std::string filepath) {
     stage = stage_;
@@ -45,6 +47,10 @@ VkPipelineShaderStageCreateInfo Shader::getShaderStageCreateInfo(std::string ent
     return shaderStageInfo;
 }
 
+void Shader::setSpvOutputDir(const std::string& dir) {
+    spvOutputDir = dir;
+}
+
 std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, bool alwaysCompile) {
     // Check if the file exist
     if (!std::filesystem::exists(filepath.c_str())) {
@@ -61,7 +67,14 @@ std::string Shader::compile(std::string filepath, VkShaderStageFlagBits stage, b
         throw std::runtime_error(buf);
     }
 
-    std::string compiledfilepath = filepath.substr(0, idx) + ".spv";
+    std::string compiledfilepath;
+    if (!spvOutputDir.empty()) {
+        std::filesystem::path out = std::filesystem::path(spvOutputDir) / (filepath.substr(0, idx) + ".spv");
+        std::filesystem::create_directories(out.parent_path());
+        compiledfilepath = out.string();
+    } else {
+        compiledfilepath = filepath.substr(0, idx) + ".spv";
+    }
     // File already exist so we don't need to recompile (because alwaysCompile=false)
     if (!alwaysCompile && std::filesystem::exists(compiledfilepath))
         return compiledfilepath;

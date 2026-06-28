@@ -19,9 +19,11 @@ public:
     // If `alwaysCompile` is set to `false` (`true` by default), the compilation will not be done if the SPIR-V file already exists
     // Returns the name of the compiled file
     static std::string compile(std::string filename, VkShaderStageFlagBits stage, bool alwaysCompile=true);
+    static void setSpvOutputDir(const std::string& dir);
 
 private:
     VkShaderStageFlagBits stage;
+    static std::string spvOutputDir;
 
     // Read a SPIR-V file into a vector representation for easy access during ShaderModule creation
     static std::vector<char> read(std::string filename);
