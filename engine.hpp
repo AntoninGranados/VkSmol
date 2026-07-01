@@ -156,6 +156,7 @@ public:
     void fillBuffer(Buffer& buffer, void* data);
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
+    void copyBuffer(Buffer& src, Buffer& dst);
 
     Image createImageFromPath(std::string path, std::string name = {});
 

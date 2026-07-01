@@ -350,6 +350,10 @@ void VkSmol::fillBuffer(Buffer& buffer, void* data) {
     buffer.fill(device, data);
 }
 
+void VkSmol::copyBuffer(Buffer& src, Buffer& dst) {
+    Buffer::copy(src, dst, device, transferCommandPool, transferQueue);
+}
+
 void VkSmol::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {
     buffer.read(device, out, bytes, offset);
 }
