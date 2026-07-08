@@ -92,6 +92,7 @@ void VkSmol::init(std::string appName, uint32_t appVersion, Platform& p) {
     dynamicRenderer.init(device);
     graphicsCommandPool.init(device, queueFamilyIndices.graphicsFamily.value());
     transferCommandPool.init(device, queueFamilyIndices.transferFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+    immediateCommandPool.init(device, queueFamilyIndices.graphicsFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 
     if (!platform->isHeadless()) initImgui();
 }
@@ -150,6 +151,7 @@ void VkSmol::terminate() {
 
     graphicsCommandPool.destroy(device);
     transferCommandPool.destroy(device);
+    immediateCommandPool.destroy(device);
 
     if (!platform->isHeadless()) std::get<WindowedState>(displayState).swapchain.destroy(device);
 
@@ -352,6 +354,12 @@ void VkSmol::fillBuffer(Buffer& buffer, void* data) {
 
 void VkSmol::copyBuffer(Buffer& src, Buffer& dst) {
     Buffer::copy(src, dst, device, transferCommandPool, transferQueue);
+}
+
+void VkSmol::copyImageToBuffer(Image& src, Buffer& dst) {
+    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
+    src.copyToBuffer(commandBuffer, dst);
+    CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
 }
 
 void VkSmol::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {

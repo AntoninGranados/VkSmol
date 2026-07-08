@@ -157,6 +157,7 @@ public:
     void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
     void copyBuffer(Buffer& src, Buffer& dst);
+    void copyImageToBuffer(Image& src, Buffer& dst);
 
     Image createImageFromPath(std::string path, std::string name = {});
 
@@ -192,7 +193,7 @@ private:
 
     DescriptorPool uiDescriptorPool;
 
-    CommandPool graphicsCommandPool, transferCommandPool;
+    CommandPool graphicsCommandPool, transferCommandPool, immediateCommandPool;
 
     uint32_t currentFrame = 0, imageIndex;
 
