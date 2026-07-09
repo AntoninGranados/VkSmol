@@ -33,16 +33,16 @@ else()
   set(VKSMOL_GLFW_TARGET ${VKSMOL_GLFW_LIBRARY})
 endif()
 
-# ImGui — expect the parent to provide imgui_third_party, or build it here
-if(NOT TARGET imgui_third_party)
+# ImGui — expect the parent to provide imgui, or build it here
+if(NOT TARGET imgui)
   file(GLOB VKSMOL_IMGUI_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui/*.cpp"
   )
-  add_library(imgui_third_party STATIC ${VKSMOL_IMGUI_SOURCES})
-  target_include_directories(imgui_third_party PUBLIC
+  add_library(imgui STATIC ${VKSMOL_IMGUI_SOURCES})
+  target_include_directories(imgui PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui"
   )
-  target_link_libraries(imgui_third_party PUBLIC ${VKSMOL_GLFW_TARGET} Vulkan::Vulkan)
+  target_link_libraries(imgui PUBLIC ${VKSMOL_GLFW_TARGET} Vulkan::Vulkan)
 endif()
 
 # ── Library target ────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ endif()
 target_link_libraries(VkSmol PUBLIC
   ${VKSMOL_GLFW_TARGET}
   Vulkan::Vulkan
-  imgui_third_party
+  imgui
 )
 
 target_compile_options(VkSmol PRIVATE -Wall)
