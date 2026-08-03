@@ -352,6 +352,20 @@ void VkSmol::fillBuffer(Buffer& buffer, void* data) {
     buffer.fill(device, data);
 }
 
+void VkSmol::fillImage(Image& image, const void* data, size_t size) {
+    Buffer staging;
+    staging.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
+    staging.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    staging.fill(device, const_cast<void*>(data));
+
+    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
+    image.fillFromBuffer(device, cmd, staging);
+    CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, cmd);
+
+    staging.free(device);
+    staging.destroy(device);
+}
+
 void VkSmol::copyBuffer(Buffer& src, Buffer& dst) {
     Buffer::copy(src, dst, device, transferCommandPool, transferQueue);
 }
@@ -389,6 +403,27 @@ Image VkSmol::createImageFromPath(std::string path, std::string name) {
     Image img;
     img.setResourceName(name.empty() ? "Image" : std::move(name));
     img.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
+    return img;
+}
+
+Image VkSmol::createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name) {
+    Buffer staging;
+    staging.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
+    staging.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    staging.fill(device, const_cast<void*>(data));
+
+    Image img;
+    img.setResourceName(name.empty() ? "Image" : std::move(name));
+    img.init(device, width, height, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    img.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
+    img.fillFromBuffer(device, cmd, staging);
+    CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, cmd);
+
+    staging.free(device);
+    staging.destroy(device);
+
     return img;
 }
 
