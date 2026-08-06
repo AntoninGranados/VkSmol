@@ -208,9 +208,31 @@ void VkSmol::initGraph() {
         if (passDescriptorGroups.count(pass.pass.id))
             for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
                 updateDescriptors(pass.pass, f);
+
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(physicalDevice.get(), &props);
+    timestampPeriod = props.limits.timestampPeriod;
+
+    numTimestamps = 0;
+    for (const CompiledPass& p : graph.compiledPasses)
+        if (p.timestampIndex.has_value())
+            numTimestamps = std::max(numTimestamps, *p.timestampIndex + 1);
+
+    if (numTimestamps > 0) {
+        VkQueryPoolCreateInfo info{};
+        info.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        info.queryType  = VK_QUERY_TYPE_TIMESTAMP;
+        info.queryCount = numTimestamps * 2 * MAX_FRAME_IN_FLIGHT;
+        vkCheck(vkCreateQueryPool(device.get(), &info, nullptr, &timestampPool), "Failed to create timestamp query pool");
+    }
 }
 
 void VkSmol::destroyGraph() {
+    if (timestampPool != VK_NULL_HANDLE) {
+        vkDestroyQueryPool(device.get(), timestampPool, nullptr);
+        timestampPool = VK_NULL_HANDLE;
+    }
+    numTimestamps = 0;
     dirtyDescriptors.clear();
     destroySync();
     destroyPipelines();
@@ -263,6 +285,22 @@ std::optional<FrameContext> VkSmol::beginFrame() {
         fences.push_back(&groupFenceRow[currentFrame]);
 
     Fence::wait(fences, device);
+
+    if (timestampPool && numTimestamps > 0) {
+        cachedTimestamps.resize(numTimestamps, -1.0);
+        for (uint32_t i = 0; i < numTimestamps; ++i) {
+            uint32_t base = (currentFrame * numTimestamps + i) * 2;
+            uint64_t data[4] = {};
+            vkGetQueryPoolResults(
+                device.get(), timestampPool, base, 2,
+                sizeof(data), data, 2 * sizeof(uint64_t),
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+            );
+            cachedTimestamps[i] = (data[1] && data[3])
+                ? static_cast<double>(data[2] - data[0]) * timestampPeriod / 1e6
+                : -1.0;
+        }
+    }
 
     for (auto& payload : retirementQueue[currentFrame]) payload(device);
     retirementQueue[currentFrame].clear();
@@ -438,6 +476,53 @@ ComputePipeline& VkSmol::getComputePipeline(ComputePipelineHandle handle) {
 
 GraphicsPipeline& VkSmol::getGraphicsPipeline(GraphicsPipelineHandle handle) {
     return ownedGraphicsPipelines.at(handle.id);
+}
+
+void VkSmol::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y) {
+    const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
+    if (compiled.timestampIndex.has_value()) {
+        uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
+        vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
+        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampPool, base);
+    }
+    emitBarriers(cmd, passHandle);
+    bindDescriptors(cmd, passHandle);
+    ComputePipeline& pipeline = ownedComputePipelines.at(*compiled.pipelineId);
+    pipeline.bind(cmd);
+    pipeline.dispatch(cmd, x, y);
+    if (compiled.timestampIndex.has_value()) {
+        uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
+        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+    }
+}
+
+void VkSmol::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandle, const float clearColor[4]) {
+    const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
+    if (compiled.timestampIndex.has_value()) {
+        uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
+        vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
+        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampPool, base);
+    }
+    emitBarriers(cmd, passHandle);
+    std::vector<AttachmentInfo> attachments = getColorAttachment(passHandle);
+    assert(attachments.size() == 1);
+    VkClearColorValue vkClear = {};
+    if (clearColor) memcpy(vkClear.float32, clearColor, 4 * sizeof(float));
+    beginDynamicRenderer(cmd, attachments[0].view, attachments[0].layout, attachments[0].loadOp, VK_ATTACHMENT_STORE_OP_STORE, vkClear);
+}
+
+void VkSmol::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle) {
+    endDynamicRenderer(cmd);
+    const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
+    if (compiled.timestampIndex.has_value()) {
+        uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
+        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+    }
+}
+
+double VkSmol::getTimestampMs(TimestampHandle handle) const {
+    if (handle.id >= cachedTimestamps.size()) return -1.0;
+    return cachedTimestamps[handle.id];
 }
 
 void VkSmol::reloadPipelines() {

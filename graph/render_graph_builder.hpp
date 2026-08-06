@@ -71,6 +71,7 @@ private:
     std::vector<BufferInfo>           buffers;
     std::vector<ComputePipelineInfo>  computePipelines;
     std::vector<GraphicsPipelineInfo> graphicsPipelines;
+    uint32_t nextTimestampIndex = 0;
 
     friend class PassBuilder;
     friend GraphicsPassBuilder;

@@ -17,6 +17,7 @@ struct PassHandle            { uint32_t id = InvalidHandle; };
 struct ImageHandle           { uint32_t id = InvalidHandle; };
 struct BufferHandle          { uint32_t id = InvalidHandle; };
 struct SubmissionGroupHandle { uint32_t id = InvalidHandle; };
+struct TimestampHandle       { uint32_t id = InvalidHandle; };
 
 enum class PassType : uint16_t {
     Graphics,
@@ -189,7 +190,8 @@ struct PassInfo {
     std::string name;
     PassType type;
     SubmissionGroupHandle group = {};
-    std::vector<ImageAccess>         imageAccesses       = {};
-    std::vector<BufferAccess>        bufferAccesses      = {};
+    std::vector<ImageAccess>           imageAccesses      = {};
+    std::vector<BufferAccess>          bufferAccesses     = {};
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
+    std::optional<uint32_t>            timestampIndex;
 };

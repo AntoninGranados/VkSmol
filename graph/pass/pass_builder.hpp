@@ -8,6 +8,7 @@ class PassBuilder {
 public:
     const PassHandle getHandle() { return handle; }
     void setGroup(SubmissionGroupHandle group);
+    TimestampHandle setTimestamp();
 
 protected:
     PassHandle handle;

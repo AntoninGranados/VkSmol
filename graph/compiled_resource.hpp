@@ -41,6 +41,7 @@ struct CompiledPass {
     std::vector<BufferAccess>          bufferAccesses       = {};
     std::vector<DescriptorBindingDecl> descriptorBindings   = {};
     std::optional<uint32_t>            pipelineId;
+    std::optional<uint32_t>            timestampIndex;
 };
 
 struct CompiledSubmissionGroup {

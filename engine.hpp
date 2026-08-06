@@ -98,6 +98,13 @@ public:
     GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
     void reloadPipelines();
 
+    void dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y);
+
+    void beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandle, const float clearColor[4] = nullptr);
+    void endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle);
+
+    double getTimestampMs(TimestampHandle handle) const;
+
     void emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const;
     void emitOutputBarriers(const CommandBuffer& commandBuffer) const;
     std::vector<AttachmentInfo> getColorAttachment(const PassHandle& passHandle) const;
@@ -249,6 +256,11 @@ private:
 
     // Graph state
     CompiledRenderGraph graph;
+
+    VkQueryPool          timestampPool    = VK_NULL_HANDLE;
+    uint32_t             numTimestamps    = 0;
+    float                timestampPeriod  = 1.0f;
+    std::vector<double>  cachedTimestamps;
 
     std::unordered_map<uint32_t, ImageBinding> bindings;
     std::unordered_map<uint32_t, Image>        ownedImages;

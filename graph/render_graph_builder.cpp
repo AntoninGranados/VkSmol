@@ -16,6 +16,12 @@ void PassBuilder::setGroup(SubmissionGroupHandle group) {
     graph->passes[handle.id].group = group;
 }
 
+TimestampHandle PassBuilder::setTimestamp() {
+    TimestampHandle h = { .id = graph->nextTimestampIndex++ };
+    graph->passes[handle.id].timestampIndex = h.id;
+    return h;
+}
+
 namespace {
 
 struct TimelineImageAccess {
@@ -149,6 +155,7 @@ std::vector<CompiledPass> computeCompiledPasses(
         compiledPasses[passId].imageAccesses       = passes[passId].imageAccesses;
         compiledPasses[passId].bufferAccesses      = passes[passId].bufferAccesses;
         compiledPasses[passId].descriptorBindings  = passes[passId].descriptorBindings;
+        compiledPasses[passId].timestampIndex      = passes[passId].timestampIndex;
     }
 
     for (const ImageTimeline& timeline : imageTimelines) {
