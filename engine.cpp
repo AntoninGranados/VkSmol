@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "device/queue.hpp"
+#include "image/image_barrier.hpp"
 #include "platform/glfw_platform.hpp"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_vulkan.h"
@@ -425,6 +426,37 @@ Image VkSmol::createImageFromData(const void* data, size_t size, VkFormat format
     staging.destroy(device);
 
     return img;
+}
+
+Image VkSmol::createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name) {
+    Image img;
+    img.setResourceName(name.empty() ? "Image" : std::move(name));
+    img.init(device, width, height, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    img.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    return img;
+}
+
+void VkSmol::copyImage(Image& src, Image& dst) {
+    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
+
+    ImageBarrier barrier;
+    barrier.call(
+        cmd, dst.get(),
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT
+    );
+
+    src.copyToImage(cmd, dst);
+
+    barrier.call(
+        cmd, dst.get(),
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+    );
+
+    CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, cmd);
 }
 
 void VkSmol::destroyImage(Image& image) {

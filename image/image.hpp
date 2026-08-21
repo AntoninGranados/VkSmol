@@ -40,6 +40,7 @@ public:
         const Buffer& buffer
     );
     void copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffer);
+    void copyToImage(const CommandBuffer& commandBuffer, Image& dst);
     void free(const LogicalDevice& device);
     void destroy(const LogicalDevice& device);
 

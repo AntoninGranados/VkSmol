@@ -169,7 +169,11 @@ public:
 
     Image createImageFromPath(std::string path, std::string name = {});
     Image createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name = {});
+    Image createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name = {});
+    void copyImage(Image& src, Image& dst);
     ImageView createImageView(Image& image, std::string name = {});
+    void destroyImage(Image& image);
+    void destroyImageView(ImageView& imageView);
 
     std::string dumpGraph() const;
 
@@ -225,8 +229,6 @@ private:
     Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
 
     Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
-    void destroyImage(Image& image);
-    void destroyImageView(ImageView& imageView);
     Sampler createSampler(std::string name = {});
     void destroySampler(Sampler& sampler);
 

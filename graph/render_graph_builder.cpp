@@ -250,24 +250,28 @@ std::vector<CompiledSubmissionGroup> computeCompiledSubmissionGroups(
 
     for (const ImageTimeline& timeline : timelines) {
         uint32_t lastGroup = InvalidHandle;
+        std::optional<ImageAccessInfo> lastAccess;
         for (const TimelineImageAccess& access : timeline.accesses) {
             uint32_t gid = passes[access.pass.id].group.id;
             if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-            if (lastGroup != InvalidHandle && lastGroup != gid)
+            if (lastGroup != InvalidHandle && lastGroup != gid && needsBarrier(*lastAccess, access.info))
                 addDep(compiled[gid].dependencies, lastGroup);
             lastGroup = gid;
+            lastAccess = access.info;
         }
     }
 
     // Derive cross-group dependency edges from buffer timelines
     for (const BufferTimeline& timeline : bufferTimelines) {
         uint32_t lastGroup = InvalidHandle;
+        std::optional<BufferAccessInfo> lastAccess;
         for (const TimelineBufferAccess& access : timeline.accesses) {
             uint32_t gid = passes[access.pass.id].group.id;
             if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-            if (lastGroup != InvalidHandle && lastGroup != gid)
+            if (lastGroup != InvalidHandle && lastGroup != gid && needsBufferBarrier(*lastAccess, access.info))
                 addDep(compiled[gid].dependencies, lastGroup);
             lastGroup = gid;
+            lastAccess = access.info;
         }
     }
 

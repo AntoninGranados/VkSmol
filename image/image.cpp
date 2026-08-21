@@ -214,6 +214,27 @@ void Image::copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffe
     );
 }
 
+void Image::copyToImage(const CommandBuffer& commandBuffer, Image& dst) {
+    VkImageCopy region{};
+    region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.srcSubresource.mipLevel = 0;
+    region.srcSubresource.baseArrayLayer = 0;
+    region.srcSubresource.layerCount = 1;
+    region.srcOffset = { 0, 0, 0 };
+
+    region.dstSubresource = region.srcSubresource;
+    region.dstOffset = { 0, 0, 0 };
+
+    region.extent = { width, height, 1 };
+
+    vkCmdCopyImage(
+        commandBuffer.get(),
+        image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        dst.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1, &region
+    );
+}
+
 void Image::free(const LogicalDevice& device) {
     if (imageMemory != VK_NULL_HANDLE) {
         vkFreeMemory(device.get(), imageMemory, nullptr);
