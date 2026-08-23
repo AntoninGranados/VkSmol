@@ -24,7 +24,7 @@ void VkSmol::setGraph(RenderGraphBuilder& builder) {
 void VkSmol::initImages() {
     for (uint32_t id = 0; id < graph.images.size(); ++id) {
         const ImageInfo& info = graph.images[id];
-        if (info.ownership == ImageOwnership::Imported) continue;
+        if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
 
         VkImageUsageFlags usageFlags = info.extraUsageFlags;
         for (const CompiledPass& pass : graph.compiledPasses)
@@ -61,7 +61,7 @@ void VkSmol::destroyImages() {
 void VkSmol::initBuffers() {
     for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
         const BufferInfo& info = graph.buffers[id];
-        if (info.ownership == BufferOwnership::Imported || info.perFrame) continue;
+        if (info.flags & (VKSMOL_BUFFER_CREATE_IMPORTED_BIT | VKSMOL_BUFFER_CREATE_PER_FRAME_BIT)) continue;
 
         VkBufferUsageFlags usageFlags = info.extraUsageFlags;
         for (const CompiledPass& pass : graph.compiledPasses)
@@ -70,8 +70,8 @@ void VkSmol::initBuffers() {
                     usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
 
         Buffer buf = info.initialData.empty()
-            ? createMappedBuffer(usageFlags, info.size, info.name)
-            : createBuffer(usageFlags, info.size, (void*)info.initialData.data(), info.name);
+            ? createBuffer(usageFlags, info.size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, info.name)
+            : createBuffer(usageFlags, info.size, 0, (void*)info.initialData.data(), info.name);
         bufferBindings[id] = buf.get();
         ownedBuffers.emplace(id, std::move(buf));
     }
@@ -88,7 +88,7 @@ void VkSmol::destroyBuffers() {
 void VkSmol::initPerFrameBuffers() {
     for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
         const BufferInfo& info = graph.buffers[id];
-        if (!info.perFrame || info.ownership == BufferOwnership::Imported) continue;
+        if (!(info.flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) || (info.flags & VKSMOL_BUFFER_CREATE_IMPORTED_BIT)) continue;
 
         VkBufferUsageFlags usageFlags = info.extraUsageFlags;
         for (const CompiledPass& pass : graph.compiledPasses)
@@ -98,7 +98,7 @@ void VkSmol::initPerFrameBuffers() {
 
         auto& arr = ownedPerFrameBuffers[id];
         for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
-            arr[f] = createMappedBuffer(usageFlags, info.size, info.name + "[" + std::to_string(f) + "]");
+            arr[f] = createBuffer(usageFlags, info.size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, info.name + "[" + std::to_string(f) + "]");
     }
 }
 
@@ -245,7 +245,7 @@ void VkSmol::destroyGraph() {
 void VkSmol::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
     uint32_t id = handle.id;
     ImageInfo& info = graph.images[id];
-    if (info.ownership == ImageOwnership::Imported) return;
+    if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) return;
 
     destroySampler(ownedSamplers.at(id));
     destroyImageView(ownedViews.at(id));
@@ -425,7 +425,7 @@ void VkSmol::bindBuffer(const BufferHandle& handle, VkBuffer buffer) {
 }
 
 Buffer& VkSmol::getBuffer(const BufferHandle& handle, uint32_t frameIndex) {
-    if (graph.buffers[handle.id].perFrame) {
+    if (graph.buffers[handle.id].flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) {
         uint32_t f = (frameIndex == UINT32_MAX) ? currentFrame : frameIndex;
         return ownedPerFrameBuffers.at(handle.id)[f];
     }
@@ -448,7 +448,7 @@ bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
     if (it != ownedBuffers.end()) {
         destroyBuffer(it->second);
         ownedBuffers.erase(it);
-        Buffer buf = createMappedBuffer(usageFlags, newSize, graph.buffers[handle.id].name);
+        Buffer buf = createBuffer(usageFlags, newSize, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, graph.buffers[handle.id].name);
         bufferBindings[handle.id] = buf.get();
         ownedBuffers.emplace(handle.id, std::move(buf));
         refreshDescriptorsForBuffer(handle.id);
@@ -459,7 +459,7 @@ bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
     if (pfIt != ownedPerFrameBuffers.end()) {
         for (Buffer& buf : pfIt->second) {
             destroyBuffer(buf);
-            buf = createMappedBuffer(usageFlags, newSize, graph.buffers[handle.id].name);
+            buf = createBuffer(usageFlags, newSize, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, graph.buffers[handle.id].name);
         }
         refreshDescriptorsForBuffer(handle.id);
         return true;
@@ -643,7 +643,7 @@ void VkSmol::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
     for (const PassBufferBarrier& b : graph.compiledPasses[passHandle.id].bufferBarriersBefore) {
         auto srcVk = bufferAccessToVk(b.srcAccess);
         auto dstVk = bufferAccessToVk(b.dstAccess);
-        VkBuffer buf = graph.buffers[b.buffer.id].perFrame
+        VkBuffer buf = graph.buffers[b.buffer.id].flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT
             ? ownedPerFrameBuffers.at(b.buffer.id)[currentFrame].get()
             : bufferBindings.at(b.buffer.id);
         VkBufferMemoryBarrier barrier{

@@ -91,7 +91,7 @@ void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vec
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
             // Transient images are created fresh (UNDEFINED layout); the executor always
             // emits an UNDEFINED→dst barrier, so reading uninitialized data is intentional.
-            if (imageInfo.ownership == ImageOwnership::Transient) {
+            if (imageInfo.ownership == VKSMOL_IMAGE_OWNERSHIP_TRANSIENT) {
                 if (timelineAccess.info.access == AccessType::Write)
                     hasPreviousContents = true;
                 continue;
@@ -278,7 +278,7 @@ std::vector<CompiledSubmissionGroup> computeCompiledSubmissionGroups(
     // Mark which group waits on imageAvailable (first write to the swapchain / Present image)
     for (const ImageTimeline& timeline : timelines) {
         const ImageInfo& info = images[timeline.image.id];
-        if (info.ownership != ImageOwnership::Imported) continue;
+        if (info.ownership != VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
         if (!info.finalAccess.has_value() || info.finalAccess->usage != ImageUsageType::Present) continue;
         for (const TimelineImageAccess& access : timeline.accesses) {
             if (access.info.access == AccessType::Write) {
@@ -313,103 +313,62 @@ SubmissionGroupHandle RenderGraphBuilder::addSubmissionGroup(std::string name) {
     return handle;
 }
 
-ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, VkImageUsageFlags extraUsageFlags) {
-    ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
+ImageHandle RenderGraphBuilder::createImage(
+    std::string name, VkFormat format,
+    uint32_t width, uint32_t height, uint32_t depth,
+    VkSmolImageOwnership ownership,
+    VkImageUsageFlags extraUsageFlags,
+    std::optional<ImageAccessInfo> initialAccess,
+    std::optional<ImageAccessInfo> finalAccess
+) {
+    if (ownership == VKSMOL_IMAGE_OWNERSHIP_MANAGED && (!initialAccess.has_value() || !finalAccess.has_value()))
+        throw std::runtime_error("Managed images require both initialAccess and finalAccess");
+    if (ownership == VKSMOL_IMAGE_OWNERSHIP_TRANSIENT && (initialAccess.has_value() || finalAccess.has_value()))
+        throw std::runtime_error("Transient images must not specify initialAccess/finalAccess");
 
+    if (initialAccess.has_value()) checkImageAccessInfoValid(*initialAccess);
+    if (finalAccess.has_value()) checkImageAccessInfoValid(*finalAccess);
+
+    ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
     images.push_back({
-        .name = name,
+        .name = std::move(name),
         .format = format,
         .width = width,
         .height = height,
         .depth = depth,
-        .ownership = ImageOwnership::Transient,
-        .extraUsageFlags = extraUsageFlags,
-    });
-
-    return handle;
-}
-
-ImageHandle RenderGraphBuilder::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess, VkImageUsageFlags extraUsageFlags) {
-    ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
-    checkImageAccessInfoValid(initialAccess);
-    checkImageAccessInfoValid(finalAccess);
-
-    images.push_back({
-        .name = name,
-        .format = format,
-        .width = width,
-        .height = height,
-        .depth = depth,
-        .ownership = ImageOwnership::Managed,
+        .ownership = ownership,
         .initialAccess = initialAccess,
         .finalAccess = finalAccess,
-        .extraUsageFlags = extraUsageFlags,
+        .extraUsageFlags = ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED ? 0 : extraUsageFlags,
     });
 
     return handle;
 }
 
-ImageHandle RenderGraphBuilder::importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess) {
-    ImageHandle handle = { .id = static_cast<uint32_t>(images.size()) };
-    checkImageAccessInfoValid(initialAccess);
-    checkImageAccessInfoValid(finalAccess);
+BufferHandle RenderGraphBuilder::createBuffer(
+    std::string name, size_t size,
+    VkSmolBufferCreateFlags flags,
+    VkBufferUsageFlags extraUsageFlags,
+    const void* initialData
+) {
+    if ((flags & VKSMOL_BUFFER_CREATE_IMPORTED_BIT) && (flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT))
+        throw std::runtime_error("Buffers cannot be both imported and per-frame");
+    if (initialData && (flags & (VKSMOL_BUFFER_CREATE_IMPORTED_BIT | VKSMOL_BUFFER_CREATE_PER_FRAME_BIT)))
+        throw std::runtime_error("Imported/per-frame buffers cannot have initial data");
 
-    images.push_back({
-        .name = name,
-        .format = format,
-        .width = width,
-        .height = height,
-        .depth = depth,
-        .ownership = ImageOwnership::Imported,
-        .initialAccess = initialAccess,
-        .finalAccess = finalAccess,
-    });
-
-    return handle;
-}
-
-BufferHandle RenderGraphBuilder::createBuffer(std::string name, size_t size, VkBufferUsageFlags extraUsageFlags) {
     BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
-    buffers.push_back({
+    BufferInfo info = {
         .name = std::move(name),
         .size = size,
-        .ownership = BufferOwnership::Managed,
+        .flags = flags,
         .extraUsageFlags = extraUsageFlags,
-    });
-    return handle;
-}
+    };
+    if (initialData) {
+        const uint8_t* bytes = static_cast<const uint8_t*>(initialData);
+        info.initialData = std::vector<uint8_t>(bytes, bytes + size);
+    }
+    buffers.push_back(std::move(info));
 
-BufferHandle RenderGraphBuilder::createStaticBuffer(std::string name, const void* data, size_t size, VkBufferUsageFlags extraUsageFlags) {
-    BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
-    const uint8_t* bytes = static_cast<const uint8_t*>(data);
-    buffers.push_back({
-        .name = std::move(name),
-        .size = size,
-        .ownership = BufferOwnership::Managed,
-        .extraUsageFlags = extraUsageFlags,
-        .initialData = std::vector<uint8_t>(bytes, bytes + size),
-    });
-    return handle;
-}
-
-BufferHandle RenderGraphBuilder::createPerFrameBuffer(std::string name, size_t size, VkBufferUsageFlags extraUsageFlags) {
-    BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
-    buffers.push_back({
-        .name = std::move(name),
-        .size = size,
-        .ownership = BufferOwnership::Managed,
-        .extraUsageFlags = extraUsageFlags,
-        .perFrame = true,
-    });
-    return handle;
-}
-
-BufferHandle RenderGraphBuilder::importBuffer(std::string name) {
-    BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
-    buffers.push_back({
-        .name = std::move(name),
-        .ownership = BufferOwnership::Imported,
-    });
     return handle;
 }
 

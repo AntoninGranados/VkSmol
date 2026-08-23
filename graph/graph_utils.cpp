@@ -266,11 +266,11 @@ std::string passTypeToStr(PassType type) {
     return "";
 }
 
-std::string imageOwnershipToStr(ImageOwnership o) {
+std::string imageOwnershipToStr(VkSmolImageOwnership o) {
     switch (o) {
-        case ImageOwnership::Transient: return "Transient";
-        case ImageOwnership::Managed:   return "Managed";
-        case ImageOwnership::Imported:  return "Imported";
+        case VKSMOL_IMAGE_OWNERSHIP_TRANSIENT: return "Transient";
+        case VKSMOL_IMAGE_OWNERSHIP_MANAGED:   return "Managed";
+        case VKSMOL_IMAGE_OWNERSHIP_IMPORTED:  return "Imported";
     }
     return "";
 }
@@ -319,7 +319,7 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
     for (size_t i = 0; i < buffers.size(); ++i) {
         const BufferInfo& buf = buffers[i];
         std::string flags;
-        if (buf.perFrame)             flags += "  per-frame";
+        if (buf.flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) flags += "  per-frame";
         if (!buf.initialData.empty()) flags += "  static";
         out += std::format("  [{:2}] {:40}  {}{}\n",
             i, '"' + buf.name + '"', formatSize(buf.size), flags);

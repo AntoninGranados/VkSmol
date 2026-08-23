@@ -20,26 +20,21 @@ public:
 
     // TODO: add support for 'ImageSubresourceRangeInfo'
 
-    // Transient: executor creates it, starts UNDEFINED, first access must be a write
-    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, VkImageUsageFlags extraUsageFlags = 0);
+    ImageHandle createImage(
+        std::string name, VkFormat format,
+        uint32_t width, uint32_t height, uint32_t depth = 1,
+        VkSmolImageOwnership ownership = VKSMOL_IMAGE_OWNERSHIP_TRANSIENT,
+        VkImageUsageFlags extraUsageFlags = 0,
+        std::optional<ImageAccessInfo> initialAccess = {},
+        std::optional<ImageAccessInfo> finalAccess = {}
+    );
 
-    // Managed: executor creates it, starts in the declared initialAccess layout, can be read first
-    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess, VkImageUsageFlags extraUsageFlags = 0);
-
-    // Imported: caller provides the VkImage/VkImageView each frame via bindImage
-    ImageHandle importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t depth = 1, ImageAccessInfo initialAccess = {}, ImageAccessInfo finalAccess = {});
-
-    // Managed: executor creates and owns a single buffer shared across all frames
-    BufferHandle createBuffer(std::string name, size_t size, VkBufferUsageFlags extraUsageFlags = 0);
-
-    // Static: executor uploads data once via staging at init; device-local, not CPU-writable afterward
-    BufferHandle createStaticBuffer(std::string name, const void* data, size_t size, VkBufferUsageFlags extraUsageFlags = 0);
-
-    // Managed, per-frame: executor creates MAX_FRAME_IN_FLIGHT copies (use for CPU-written UBOs)
-    BufferHandle createPerFrameBuffer(std::string name, size_t size, VkBufferUsageFlags extraUsageFlags = 0);
-
-    // Imported: caller provides the VkBuffer each frame via bindBuffer
-    BufferHandle importBuffer(std::string name);
+    BufferHandle createBuffer(
+        std::string name, size_t size,
+        VkSmolBufferCreateFlags flags = 0,
+        VkBufferUsageFlags extraUsageFlags = 0,
+        const void* initialData = nullptr
+    );
 
     GraphicsPassBuilder addGraphicsPass(std::string name);
     ComputePassBuilder  addComputePass(std::string name);

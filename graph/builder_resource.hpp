@@ -47,10 +47,10 @@ enum class ImageUsageType : uint16_t {
     TransferDst,
 };
 
-enum class ImageOwnership : uint16_t {
-    Transient,  // Executor creates it; starts UNDEFINED; first access must be a write
-    Managed,    // Executor creates it; starts in declared initialAccess layout; can be read first
-    Imported,   // Caller provides via bindImage each frame; executor never creates GPU resources
+enum VkSmolImageOwnership {
+    VKSMOL_IMAGE_OWNERSHIP_TRANSIENT,  // Executor creates it, starts UNDEFINED, first access must be a write
+    VKSMOL_IMAGE_OWNERSHIP_MANAGED,    // Executor creates it, starts in the declared initialAccess layout, can be read first
+    VKSMOL_IMAGE_OWNERSHIP_IMPORTED,   // Caller provides the VkImage/VkImageView each frame via bindImage
 };
 
 enum class WriteMode : uint16_t {
@@ -93,7 +93,7 @@ struct ImageInfo {
     uint32_t height = 1;
     uint32_t depth = 1;
 
-    ImageOwnership ownership = ImageOwnership::Transient;
+    VkSmolImageOwnership ownership = VKSMOL_IMAGE_OWNERSHIP_TRANSIENT;
     std::optional<ImageAccessInfo> initialAccess = {};
     std::optional<ImageAccessInfo> finalAccess = {};
 
@@ -117,9 +117,10 @@ enum class BufferUsageType : uint16_t {
     Indirect,
 };
 
-enum class BufferOwnership : uint8_t {
-    Managed,   // Executor creates and destroys the buffer
-    Imported,  // Caller provides via bindBuffer; executor never creates GPU resources
+typedef uint32_t VkSmolBufferCreateFlags;
+enum VkSmolBufferCreateFlagBits {
+    VKSMOL_BUFFER_CREATE_IMPORTED_BIT  = 1 << 0,  // Caller provides the VkBuffer each frame via bindBuffer
+    VKSMOL_BUFFER_CREATE_PER_FRAME_BIT = 1 << 1,  // Executor creates MAX_FRAME_IN_FLIGHT copies (use for CPU-written UBOs)
 };
 
 struct BufferAccessInfo {
@@ -135,12 +136,9 @@ struct BufferAccess {
 struct BufferInfo {
     std::string name;
     size_t size = 0;
-    BufferOwnership ownership = BufferOwnership::Managed;
+    VkSmolBufferCreateFlags flags = 0;
     // Additional VkBufferUsageFlags ORed on top of the flags inferred from declared pass accesses
     VkBufferUsageFlags extraUsageFlags = 0;
-    // When true, executor creates MAX_FRAME_IN_FLIGHT copies (one per in-flight frame).
-    // Use for CPU-written buffers (UBOs) that must not alias across frames.
-    bool perFrame = false;
     // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.
     std::vector<uint8_t> initialData;
 };

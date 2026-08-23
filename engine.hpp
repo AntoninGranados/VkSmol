@@ -225,8 +225,7 @@ private:
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
 
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, void* data = nullptr, std::string name = {});
-    Buffer createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name = {});
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferAllocFlags flags = 0, void* data = nullptr, std::string name = {});
 
     Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
     Sampler createSampler(std::string name = {});

@@ -322,22 +322,21 @@ void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
 
 // ——— Buffers ————————————————————————————————————————————————————————————————
 
-Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, void* data, std::string name) {
+Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferAllocFlags flags, void* data, std::string name) {
     Buffer buf;
     buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
-    if (data == nullptr) {
-        buf.init(device, usage, size);
-    } else {
-        buf.initFilled(device, physicalDevice, usage, transferCommandPool, transferQueue, size, data);
-    }
-    return buf;
-}
 
-Buffer VkSmol::createMappedBuffer(VkBufferUsageFlags usage, size_t size, std::string name) {
-    Buffer buf;
-    buf.setResourceName(name.empty() ? "MappedBuffer" : std::move(name));
-    buf.init(device, usage, size, true);
-    buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (flags & VKSMOL_BUFFER_ALLOC_MAPPED_BIT) {
+        buf.init(device, usage, size, true);
+        buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (data) buf.fill(device, data);
+    } else if (data) {
+        buf.initFilled(device, physicalDevice, usage, transferCommandPool, transferQueue, size, data);
+    } else {
+        buf.init(device, usage, size);
+        buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    }
+
     return buf;
 }
 
