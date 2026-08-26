@@ -9,6 +9,7 @@ class LogicalDevice;
 class Shader;
 class CommandBuffer;
 class DescriptorSetLayout;
+class PipelineCache;
 
 class GraphicsPipeline {
 public:
@@ -20,6 +21,7 @@ public:
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         const std::vector<const Shader*>& shaders,
         const std::vector<const DescriptorSetLayout*>& setLayouts,
+        const PipelineCache& pipelineCache,
         GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,
     );

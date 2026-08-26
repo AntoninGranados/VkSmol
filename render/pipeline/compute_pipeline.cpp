@@ -5,11 +5,13 @@
 #include "../../device/logical_device.hpp"
 #include "../shader.hpp"
 #include "../../utils.hpp"
+#include "./pipeline_cache.hpp"
 
 void ComputePipeline::init(
     const LogicalDevice& device,
     const Shader& shader,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
+    const PipelineCache& pipelineCache,
     ComputePipeline other
 ) {
     std::vector<VkDescriptorSetLayout> vkSetLayouts;
@@ -33,7 +35,7 @@ void ComputePipeline::init(
         pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
     }
 
-    vkCheck(vkCreateComputePipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline), "Failed to create compute pipeline");
+    vkCheck(vkCreateComputePipelines(device.get(), pipelineCache.get(), 1, &pipelineInfo, nullptr, &pipeline), "Failed to create compute pipeline");
 }
 
 void ComputePipeline::destroy(const LogicalDevice& device) {

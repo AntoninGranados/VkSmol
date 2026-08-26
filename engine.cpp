@@ -189,6 +189,7 @@ GraphicsPipeline VkSmol::initGraphicsPipeline(
         vertexInputInfo,
         shaders,
         setLayouts,
+        pipelineCache,
         other
     );
     return pipeline;
@@ -204,7 +205,7 @@ ComputePipeline VkSmol::initComputePipeline(
     ComputePipeline other
 ) {
     ComputePipeline pipeline;
-    pipeline.init(device, shader, setLayouts, std::move(other));
+    pipeline.init(device, shader, setLayouts, pipelineCache, std::move(other));
     return pipeline;
 }
 
@@ -215,9 +216,13 @@ void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
 void VkSmol::reloadComputePipeline(
     ComputePipeline& pipeline,
     const std::string& shaderPath,
-    const std::vector<const DescriptorSetLayout*>& setLayouts
+    const std::vector<const DescriptorSetLayout*>& setLayouts,
+    bool force
 ) {
-    Shader shader = createShader(VK_SHADER_STAGE_COMPUTE_BIT, shaderPath);
+    if (!force && pipeline.get() != VK_NULL_HANDLE && !Shader::isSourceStale(shaderPath))
+        return;
+
+    Shader shader = createShader(VK_SHADER_STAGE_COMPUTE_BIT, shaderPath, force);
     ComputePipeline next = initComputePipeline(shader, setLayouts, pipeline);
     destroyComputePipeline(pipeline);
     pipeline = std::move(next);
@@ -228,13 +233,20 @@ void VkSmol::reloadGraphicsPipeline(
     GraphicsPipeline& pipeline,
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
-    const std::vector<const DescriptorSetLayout*>& setLayouts
+    const std::vector<const DescriptorSetLayout*>& setLayouts,
+    bool force
 ) {
+    bool anyStale = force || pipeline.get() == VK_NULL_HANDLE;
+    for (size_t i = 0; i < shaderPaths.size() && !anyStale; ++i)
+        anyStale = Shader::isSourceStale(shaderPaths[i].second);
+    if (!anyStale)
+        return;
+
     std::vector<Shader> shaders;
     shaders.reserve(shaderPaths.size());
     try {
         for (auto& [stage, path] : shaderPaths)
-            shaders.push_back(createShader(stage, path));
+            shaders.push_back(createShader(stage, path, force));
     } catch (...) {
         for (auto& s : shaders) destroyShader(s);
         throw;
@@ -251,9 +263,9 @@ void VkSmol::reloadGraphicsPipeline(
     for (auto& s : shaders) destroyShader(s);
 }
 
-Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath) {
+Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath, bool forceRecompile) {
     Shader shader;
-    shader.init(device, stage, filepath);
+    shader.init(device, stage, filepath, forceRecompile);
     return shader;
 }
 

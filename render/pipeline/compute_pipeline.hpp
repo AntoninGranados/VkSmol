@@ -9,6 +9,7 @@ class LogicalDevice;
 class Shader;
 class CommandBuffer;
 class DescriptorSetLayout;
+class PipelineCache;
 
 class ComputePipeline {
 public:
@@ -18,6 +19,7 @@ public:
         const LogicalDevice& device,
         const Shader& shader,
         const std::vector<const DescriptorSetLayout*>& setLayouts,
+        const PipelineCache& pipelineCache,
         ComputePipeline other = {}
     );
     void destroy(const LogicalDevice& device);

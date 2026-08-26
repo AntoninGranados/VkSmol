@@ -35,6 +35,7 @@
 #include "./render/shader.hpp"
 #include "./render/pipeline/graphics_pipeline.hpp"
 #include "./render/pipeline/compute_pipeline.hpp"
+#include "./render/pipeline/pipeline_cache.hpp"
 #include "./command/command_pool.hpp"
 #include "./command/command_buffer.hpp"
 
@@ -73,7 +74,7 @@ public:
     bool isHeadless() const { return platform->isHeadless(); }
 
     void setGraph(RenderGraphBuilder& builder);
-    void initGraph();
+    void initGraph(std::string pipelineCachePath = {});
     void destroyGraph();
 
     std::optional<FrameContext> beginFrame();
@@ -96,7 +97,7 @@ public:
 
     ComputePipeline&  getComputePipeline(ComputePipelineHandle handle);
     GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
-    void reloadPipelines();
+    void reloadPipelines(bool force = false);
 
     void dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y);
 
@@ -132,7 +133,7 @@ public:
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
     void destroyComputePipeline(ComputePipeline& computePipeline);
 
-    Shader createShader(VkShaderStageFlagBits stage_, std::string filepath);
+    Shader createShader(VkShaderStageFlagBits stage_, std::string filepath, bool forceRecompile = false);
     void destroyShader(Shader& shader);
 
     void beginDynamicRenderer(
@@ -246,13 +247,15 @@ private:
     void reloadComputePipeline(
         ComputePipeline& pipeline,
         const std::string& shaderPath,
-        const std::vector<const DescriptorSetLayout*>& setLayouts
+        const std::vector<const DescriptorSetLayout*>& setLayouts,
+        bool force = false
     );
     void reloadGraphicsPipeline(
         GraphicsPipeline& pipeline,
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
         const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
-        const std::vector<const DescriptorSetLayout*>& setLayouts
+        const std::vector<const DescriptorSetLayout*>& setLayouts,
+        bool force = false
     );
 
     // Graph state
@@ -274,6 +277,7 @@ private:
 
     std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
+    PipelineCache pipelineCache;
 
     std::unordered_map<uint32_t, DescriptorSetLayout> passDescriptorLayouts;
     std::unordered_map<uint32_t, DescriptorSetGroup>  passDescriptorGroups;

@@ -196,8 +196,9 @@ void VkSmol::destroySync() {
 
 // ——— Public lifecycle ————————————————————————————————————————————————————————
 
-void VkSmol::initGraph() {
+void VkSmol::initGraph(std::string pipelineCachePath) {
     dirtyDescriptors.clear();
+    pipelineCache.init(device, pipelineCachePath);
     initImages();
     initBuffers();
     initPerFrameBuffers();
@@ -236,6 +237,7 @@ void VkSmol::destroyGraph() {
     dirtyDescriptors.clear();
     destroySync();
     destroyPipelines();
+    pipelineCache.destroy(device);
     destroyDescriptorSets();
     destroyPerFrameBuffers();
     destroyBuffers();
@@ -525,7 +527,7 @@ double VkSmol::getTimestampMs(TimestampHandle handle) const {
     return cachedTimestamps[handle.id];
 }
 
-void VkSmol::reloadPipelines() {
+void VkSmol::reloadPipelines(bool force) {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         std::vector<const DescriptorSetLayout*> layouts;
@@ -534,7 +536,7 @@ void VkSmol::reloadPipelines() {
             if (it != passDescriptorLayouts.end())
                 layouts = { &it->second };
         }
-        reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, layouts);
+        reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, layouts, force);
     }
     for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
         const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
@@ -551,7 +553,7 @@ void VkSmol::reloadPipelines() {
             .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
             .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
         };
-        reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, layouts);
+        reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, layouts, force);
     }
 }
 

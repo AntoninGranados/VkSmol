@@ -5,6 +5,7 @@
 #include "../../device/logical_device.hpp"
 #include "../shader.hpp"
 #include "../../utils.hpp"
+#include "./pipeline_cache.hpp"
 
 void GraphicsPipeline::init(
     const LogicalDevice& device,
@@ -12,6 +13,7 @@ void GraphicsPipeline::init(
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     const std::vector<const Shader*>& shaders,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
+    const PipelineCache& pipelineCache,
     GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
 ) {
@@ -108,7 +110,7 @@ void GraphicsPipeline::init(
         pipelineInfo.flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
     }
 
-    vkCheck(vkCreateGraphicsPipelines(device.get(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline), "Failed to create graphic pipeline");
+    vkCheck(vkCreateGraphicsPipelines(device.get(), pipelineCache.get(), 1, &pipelineInfo, nullptr, &pipeline), "Failed to create graphic pipeline");
 
 }
 

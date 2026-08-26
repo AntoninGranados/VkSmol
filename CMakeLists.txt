@@ -19,30 +19,47 @@ configure_file(
 
 # ── Sources ───────────────────────────────────────────────────────────────────
 file(GLOB_RECURSE VKSMOL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+list(FILTER VKSMOL_SOURCES EXCLUDE REGEX "^${CMAKE_CURRENT_SOURCE_DIR}/external/")
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 find_package(Vulkan REQUIRED)
-find_package(glfw3 REQUIRED)
 
-if(TARGET glfw)
-  set(VKSMOL_GLFW_TARGET glfw)
-elseif(TARGET glfw3)
-  set(VKSMOL_GLFW_TARGET glfw3)
-else()
-  find_library(VKSMOL_GLFW_LIBRARY glfw)
-  set(VKSMOL_GLFW_TARGET ${VKSMOL_GLFW_LIBRARY})
+if(NOT TARGET glfw)
+  set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+  set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/external/glfw" glfw)
 endif()
+set(VKSMOL_GLFW_TARGET glfw)
+
+set(SHADERC_GLSLANG_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/external/glslang"       CACHE STRING "" FORCE)
+set(SHADERC_SPIRV_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/spirv-headers" CACHE STRING "" FORCE)
+set(SHADERC_SPIRV_TOOLS_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/external/spirv-tools"   CACHE STRING "" FORCE)
+set(SHADERC_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_COPYRIGHT_CHECK ON CACHE BOOL "" FORCE)
+set(SHADERC_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+macro(install)
+endmacro()
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/external/shaderc" shaderc EXCLUDE_FROM_ALL)
+target_include_directories(shaderc_combined PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/external/shaderc/libshaderc/include"
+)
 
 # ImGui — expect the parent to provide imgui, or build it here
 if(NOT TARGET imgui)
   file(GLOB VKSMOL_IMGUI_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/*.cpp"
   )
   add_library(imgui STATIC ${VKSMOL_IMGUI_SOURCES})
   target_include_directories(imgui PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external"
   )
   target_link_libraries(imgui PUBLIC ${VKSMOL_GLFW_TARGET} Vulkan::Vulkan)
+  target_compile_options(imgui PRIVATE -Wno-nontrivial-memcall)
 endif()
 
 # ── Library target ────────────────────────────────────────────────────────────
@@ -50,9 +67,6 @@ add_library(VkSmol STATIC ${VKSMOL_SOURCES})
 
 target_include_directories(VkSmol PUBLIC
   "${CMAKE_CURRENT_BINARY_DIR}"
-)
-
-target_include_directories(VkSmol PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
 
@@ -64,6 +78,7 @@ target_link_libraries(VkSmol PUBLIC
   ${VKSMOL_GLFW_TARGET}
   Vulkan::Vulkan
   imgui
+  shaderc_combined
 )
 
 target_compile_options(VkSmol PRIVATE -Wall)
