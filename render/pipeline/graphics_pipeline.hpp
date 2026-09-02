@@ -32,7 +32,7 @@ public:
     void bind(const CommandBuffer& commandBuffer);
     void setViewport(const CommandBuffer& commandBuffer, VkViewport viewport); // In case it is set to be dynamic
     void setScissor(const CommandBuffer& commandBuffer, VkRect2D scissor);     // In case it is set to be dynamic
-    
+
     void draw(const CommandBuffer& commandBuffer, size_t vertexCount);
     void drawIndexed(const CommandBuffer& commandBuffer, size_t indexCount);
 

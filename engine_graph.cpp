@@ -4,6 +4,7 @@
 #include <utility>
 #include <algorithm>
 #include <cassert>
+#include <unordered_set>
 
 #include "./image/image_barrier.hpp"
 #include "./utils.hpp"
@@ -555,6 +556,16 @@ void VkSmol::reloadPipelines(bool force) {
         };
         reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, layouts, force);
     }
+}
+
+std::vector<std::string> VkSmol::getShaderPaths() const {
+    std::vector<std::string> paths;
+    for (const ComputePipelineInfo& info : graph.computePipelines)
+        paths.push_back(info.shaderPath);
+    for (const GraphicsPipelineInfo& info : graph.graphicsPipelines)
+        for (const auto& [stage, path] : info.shaderPaths)
+            paths.push_back(path);
+    return paths;
 }
 
 // ——— Descriptor management ———————————————————————————————————————————————————

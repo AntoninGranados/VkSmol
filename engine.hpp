@@ -98,6 +98,7 @@ public:
     ComputePipeline&  getComputePipeline(ComputePipelineHandle handle);
     GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
     void reloadPipelines(bool force = false);
+    std::vector<std::string> getShaderPaths() const;
 
     void dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y);
 

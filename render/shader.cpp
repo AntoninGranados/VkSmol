@@ -154,6 +154,15 @@ bool Shader::isSourceStale(const std::string& filepath) {
     return it == buildRecords.end() || isStale(it->second);
 }
 
+std::vector<std::string> Shader::getSourceFiles(const std::string& filepath) {
+    std::vector<std::string> files;
+    auto it = buildRecords.find(normalizeKey(filepath));
+    if (it != buildRecords.end())
+        for (const auto& [path, mtime] : it->second.fileMtimes)
+            files.push_back(path);
+    return files;
+}
+
 // Private helpers
 std::string Shader::normalizeKey(const std::string& filepath) {
     return std::filesystem::absolute(filepath).lexically_normal().string();

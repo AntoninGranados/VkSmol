@@ -29,6 +29,7 @@ public:
     // If `forceRecompile` is `false` (default) and the source hasn't changed since the last successful compile, compilation is skipped
     static CompileResult compile(std::string filename, VkShaderStageFlagBits stage, bool forceRecompile = false);
     static bool isSourceStale(const std::string& filepath);
+    static std::vector<std::string> getSourceFiles(const std::string& filepath);
     static void setSpvOutputDir(const std::string& dir);
 
 private:
