@@ -44,10 +44,8 @@ public:
 
     VkBuffer& get() { return buffer; };
     const VkBuffer& get() const { return buffer; };
-    size_t getSize() { return size; };
-    const size_t getSize() const { return size; };
-    VkBufferUsageFlags getUsage() { return usage; };
-    const VkBufferUsageFlags getUsage() const { return usage; };
+    size_t getSize() const { return size; };
+    VkBufferUsageFlags getUsage() const { return usage; };
     
     void fill(const LogicalDevice& device, void* data);
     void read(const LogicalDevice& device, void* out, size_t bytes, size_t offset = 0);

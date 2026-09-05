@@ -164,7 +164,7 @@ void Image::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, Vk
 }
 
 void Image::fillFromBuffer(
-    const LogicalDevice& device, const CommandBuffer& commandBuffer,
+    [[maybe_unused]] const LogicalDevice& device, const CommandBuffer& commandBuffer,
     const Buffer& buffer
 ) {
     VkBufferImageCopy region{};

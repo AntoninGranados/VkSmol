@@ -27,7 +27,7 @@ struct QueueFamilyIndices {
 
     // Check if all the families are the same
     bool sameFamilies() {
-        return std::ranges::all_of(getIndices(), [&](int i) { return i == getIndices()[0]; });
+        return std::ranges::all_of(getIndices(), [&](uint32_t i) { return i == getIndices()[0]; });
     }
 
     std::vector<uint32_t> getIndices(bool headless = false) {

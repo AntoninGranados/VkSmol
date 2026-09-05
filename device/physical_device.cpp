@@ -38,7 +38,7 @@ void PhysicalDevice::init(const Instance& instance, std::function<int(const Phys
 }
 
 // Scores every device with no difference
-int PhysicalDevice::scoreDeviceDefault(const PhysicalDevice& device) {
+int PhysicalDevice::scoreDeviceDefault([[maybe_unused]] const PhysicalDevice& device) {
     // VkPhysicalDeviceProperties deviceProperties;
     // vkGetPhysicalDeviceProperties(device, &deviceProperties);
     // VkPhysicalDeviceFeatures deviceFeatures;

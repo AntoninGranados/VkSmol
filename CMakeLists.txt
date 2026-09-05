@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(VkSmol LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── Version ───────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ target_link_libraries(VkSmol PUBLIC
   shaderc_combined
 )
 
-target_compile_options(VkSmol PRIVATE -Wall)
+target_compile_options(VkSmol PRIVATE -Wall -Wextra)
 if(APPLE)
   target_link_libraries(VkSmol PUBLIC
     "-framework Accelerate"

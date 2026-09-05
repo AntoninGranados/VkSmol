@@ -10,7 +10,7 @@ void LogicalDevice::init(
     PhysicalDevice physicalDevice,
     std::vector<uint32_t> queueFamilyIndices,
     std::vector<const char*> extensions,
-    std::vector<const char*> validationLayers
+    [[maybe_unused]] std::vector<const char*> validationLayers
 ) {
     // Logic to avoid duplicate queue families
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
