@@ -198,6 +198,7 @@ void VkSmol::destroySync() {
 // ——— Public lifecycle ————————————————————————————————————————————————————————
 
 void VkSmol::initGraph(std::string pipelineCachePath) {
+    assert(ownedImages.empty() && "VkSmol::initGraph() called without a prior destroyGraph() — bindings would be left dangling");
     dirtyDescriptors.clear();
     pipelineCache.init(device, pipelineCachePath);
     initImages();
