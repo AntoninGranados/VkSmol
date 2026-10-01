@@ -319,7 +319,7 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
     for (size_t i = 0; i < buffers.size(); ++i) {
         const BufferInfo& buf = buffers[i];
         std::string flags;
-        if (buf.flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) flags += "  per-frame";
+        if (buf.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED) flags += "  imported";
         if (!buf.initialData.empty()) flags += "  static";
         out += std::format("  [{:2}] {:40}  {}{}\n",
             i, '"' + buf.name + '"', formatSize(buf.size), flags);

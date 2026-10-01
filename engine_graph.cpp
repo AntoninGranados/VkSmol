@@ -25,15 +25,9 @@ void VkSmol::setGraph(RenderGraphBuilder& builder) {
 void VkSmol::initImages() {
     for (uint32_t id = 0; id < graph.images.size(); ++id) {
         const ImageInfo& info = graph.images[id];
-        if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
+        if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED || ownedImages.contains(id)) continue;
 
-        VkImageUsageFlags usageFlags = info.extraUsageFlags;
-        for (const CompiledPass& pass : graph.compiledPasses)
-            for (const ImageAccess& access : pass.imageAccesses)
-                if (access.image.id == id)
-                    usageFlags |= imageUsageTypeToVkFlags(access.info.usage);
-
-        Image img  = createImage(info.width, info.height, info.format, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
+        Image img  = createImage(info.width, info.height, info.format, imageUsageFlags(graph, id), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
         ImageView view = createImageView(img, info.name + "View");
         Sampler   smp  = createSampler(info.name + "Sampler");
 
@@ -57,22 +51,24 @@ void VkSmol::destroyImages() {
     ownedImages.clear();
 }
 
+VkImageUsageFlags VkSmol::imageUsageFlags(const CompiledRenderGraph& compiled, uint32_t imageId) const {
+    VkImageUsageFlags usageFlags = compiled.images[imageId].extraUsageFlags;
+    for (const CompiledPass& pass : compiled.compiledPasses)
+        for (const ImageAccess& access : pass.imageAccesses)
+            if (access.image.id == imageId)
+                usageFlags |= imageUsageTypeToVkFlags(access.info.usage);
+    return usageFlags;
+}
+
 // ——— Buffers —————————————————————————————————————————————————————————————————
 
 void VkSmol::initBuffers() {
     for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
         const BufferInfo& info = graph.buffers[id];
-        if (info.flags & (VKSMOL_BUFFER_CREATE_IMPORTED_BIT | VKSMOL_BUFFER_CREATE_PER_FRAME_BIT)) continue;
+        if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || ownedBuffers.contains(id)) continue;
 
-        VkBufferUsageFlags usageFlags = info.extraUsageFlags;
-        for (const CompiledPass& pass : graph.compiledPasses)
-            for (const BufferAccess& access : pass.bufferAccesses)
-                if (access.buffer.id == id)
-                    usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
-
-        Buffer buf = info.initialData.empty()
-            ? createBuffer(usageFlags, info.size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, info.name)
-            : createBuffer(usageFlags, info.size, 0, (void*)info.initialData.data(), info.name);
+        void* initialData = info.initialData.empty() ? nullptr : (void*)info.initialData.data();
+        Buffer buf = createBuffer(bufferUsageFlags(graph, id), info.size, 0, initialData, info.name);
         bufferBindings[id] = buf.get();
         ownedBuffers.emplace(id, std::move(buf));
     }
@@ -86,28 +82,114 @@ void VkSmol::destroyBuffers() {
     ownedBuffers.clear();
 }
 
-void VkSmol::initPerFrameBuffers() {
-    for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
-        const BufferInfo& info = graph.buffers[id];
-        if (!(info.flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) || (info.flags & VKSMOL_BUFFER_CREATE_IMPORTED_BIT)) continue;
-
-        VkBufferUsageFlags usageFlags = info.extraUsageFlags;
-        for (const CompiledPass& pass : graph.compiledPasses)
-            for (const BufferAccess& access : pass.bufferAccesses)
-                if (access.buffer.id == id)
-                    usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
-
-        auto& arr = ownedPerFrameBuffers[id];
-        for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
-            arr[f] = createBuffer(usageFlags, info.size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, info.name + "[" + std::to_string(f) + "]");
-    }
+VkBufferUsageFlags VkSmol::bufferUsageFlags(const CompiledRenderGraph& compiled, uint32_t bufferId) const {
+    VkBufferUsageFlags usageFlags = compiled.buffers[bufferId].extraUsageFlags
+        | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    for (const CompiledPass& pass : compiled.compiledPasses)
+        for (const BufferAccess& access : pass.bufferAccesses)
+            if (access.buffer.id == bufferId)
+                usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
+    return usageFlags;
 }
 
-void VkSmol::destroyPerFrameBuffers() {
-    for (auto& [id, arr] : ownedPerFrameBuffers)
-        for (Buffer& buf : arr)
-            destroyBuffer(buf);
-    ownedPerFrameBuffers.clear();
+void VkSmol::replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve) {
+    BufferInfo& info = graph.buffers[bufferId];
+    Buffer next = createBuffer(bufferUsageFlags(graph, bufferId), newSize, 0, nullptr, info.name);
+
+    auto previous = ownedBuffers.find(bufferId);
+    pendingBufferTransfers.push_back(PendingBufferReplace{
+        .previous      = std::move(previous->second),
+        .next          = next.get(),
+        .preservedSize = preserve ? info.size : 0,
+    });
+    ownedBuffers.erase(previous);
+
+    bufferBindings[bufferId] = next.get();
+    ownedBuffers.emplace(bufferId, std::move(next));
+    info.size = newSize;
+    refreshDescriptorsForBuffer(bufferId);
+}
+
+size_t VkSmol::stage(const void* data, size_t size) {
+    StagingArena& arena = stagingArenas[currentFrame];
+    size_t offset = (arena.used + 15) & ~size_t(15);
+    if (offset + size > arena.buffer.getSize()) {
+        const size_t capacity = std::max(arena.buffer.getSize() * 2, size);
+        destroyBuffer(arena.buffer);
+        arena.buffer = createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, "StagingBuffer");
+        offset = 0;
+    }
+    arena.buffer.write(device, data, size, offset);
+    arena.used = offset + size;
+    return offset;
+}
+
+void VkSmol::flushBufferTransfers(const CommandBuffer& commandBuffer) {
+    if (pendingBufferTransfers.empty()) return;
+
+    constexpr VkAccessFlags transferAccess = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, transferAccess);
+
+    struct WrittenRange { VkBuffer buffer; size_t begin, end; };
+    std::vector<WrittenRange> written;
+    auto serializeTransfers = [&] {
+        emitMemoryBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, transferAccess);
+        written.clear();
+    };
+
+    for (auto& transfer : pendingBufferTransfers) {
+        if (auto* write = std::get_if<PendingBufferWrite>(&transfer)) {
+            const size_t end = write->offset + write->data.size();
+            for (const WrittenRange& range : written)
+                if (range.buffer == write->dst && write->offset < range.end && range.begin < end) {
+                    serializeTransfers();
+                    break;
+                }
+
+            const size_t stagingOffset = stage(write->data.data(), write->data.size());
+            const VkBufferCopy region{ .srcOffset = stagingOffset, .dstOffset = write->offset, .size = write->data.size() };
+            vkCmdCopyBuffer(commandBuffer.get(), stagingArenas[currentFrame].buffer.get(), write->dst, 1, &region);
+            written.push_back({ write->dst, write->offset, end });
+        } else {
+            auto& replace = std::get<PendingBufferReplace>(transfer);
+            if (replace.preservedSize > 0) {
+                serializeTransfers();
+                const VkBufferCopy region{ .srcOffset = 0, .dstOffset = 0, .size = replace.preservedSize };
+                vkCmdCopyBuffer(commandBuffer.get(), replace.previous.get(), replace.next, 1, &region);
+                serializeTransfers();
+            }
+            destroyBuffer(replace.previous);
+        }
+    }
+    pendingBufferTransfers.clear();
+
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+}
+
+void VkSmol::discardBufferTransfers() {
+    for (auto& transfer : pendingBufferTransfers)
+        if (auto* replace = std::get_if<PendingBufferReplace>(&transfer))
+            destroyBuffer(replace->previous);
+    pendingBufferTransfers.clear();
+}
+
+void VkSmol::emitMemoryBarrier(
+    const CommandBuffer& commandBuffer,
+    VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+    VkPipelineStageFlags dstStage, VkAccessFlags dstAccess
+) const {
+    const VkMemoryBarrier barrier{
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = srcAccess,
+        .dstAccessMask = dstAccess,
+    };
+    vkCmdPipelineBarrier(commandBuffer.get(), srcStage, dstStage, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 }
 
 // ——— Descriptor sets —————————————————————————————————————————————————————————
@@ -199,11 +281,101 @@ void VkSmol::destroySync() {
 
 void VkSmol::initGraph(std::string pipelineCachePath) {
     assert(ownedImages.empty() && "VkSmol::initGraph() called without a prior destroyGraph() — bindings would be left dangling");
+    initGraphState(std::move(pipelineCachePath));
+}
+
+void VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath) {
+    CompiledRenderGraph next = builder.compile();
+    if (!graphInitialized) {
+        graph = std::move(next);
+        initGraphState(std::move(pipelineCachePath));
+        return;
+    }
+
+    waitIdle();
+    if (!pendingBufferTransfers.empty()) {
+        CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
+        flushBufferTransfers(commandBuffer);
+        CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
+    }
+
+    ReusedResources reused = takeReusableResources(next);
+    destroyGraph();
+    graph = std::move(next);
+
+    for (auto& [id, image] : reused.images) {
+        ImageHandle handle = { .id = id };
+        bindImage(handle, image.get(), reused.views.at(id).get());
+        ownedImages.emplace(id, std::move(image));
+        ownedViews.emplace(id, std::move(reused.views.at(id)));
+        ownedSamplers.emplace(id, std::move(reused.samplers.at(id)));
+    }
+    for (auto& [id, buffer] : reused.buffers) {
+        bufferBindings[id] = buffer.get();
+        ownedBuffers.emplace(id, std::move(buffer));
+    }
+
+    initGraphState(std::move(pipelineCachePath));
+}
+
+VkSmol::ReusedResources VkSmol::takeReusableResources(CompiledRenderGraph& next) {
+    auto sameAccess = [](const std::optional<ImageAccessInfo>& a, const std::optional<ImageAccessInfo>& b) {
+        if (a.has_value() != b.has_value()) return false;
+        return !a.has_value() || (a->usage == b->usage && a->access == b->access);
+    };
+
+    ReusedResources reused;
+
+    for (uint32_t nextId = 0; nextId < next.images.size(); ++nextId) {
+        const ImageInfo& wanted = next.images[nextId];
+        if (wanted.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
+
+        for (auto& [id, image] : ownedImages) {
+            const ImageInfo& current = graph.images[id];
+            if (current.name != wanted.name || current.format != wanted.format || current.width != wanted.width ||
+                current.height != wanted.height || current.depth != wanted.depth ||
+                current.ownership != wanted.ownership || !sameAccess(current.initialAccess, wanted.initialAccess) ||
+                !sameAccess(current.finalAccess, wanted.finalAccess) ||
+                imageUsageFlags(graph, id) != imageUsageFlags(next, nextId))
+                continue;
+
+            reused.images.emplace(nextId, std::move(image));
+            reused.views.emplace(nextId, std::move(ownedViews.at(id)));
+            reused.samplers.emplace(nextId, std::move(ownedSamplers.at(id)));
+            ownedImages.erase(id);
+            ownedViews.erase(id);
+            ownedSamplers.erase(id);
+            bindings.erase(id);
+            break;
+        }
+    }
+
+    for (uint32_t nextId = 0; nextId < next.buffers.size(); ++nextId) {
+        BufferInfo& wanted = next.buffers[nextId];
+        if (wanted.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || !wanted.initialData.empty()) continue;
+
+        for (auto& [id, buffer] : ownedBuffers) {
+            const BufferInfo& current = graph.buffers[id];
+            if (current.name != wanted.name || current.size < wanted.size || !current.initialData.empty() ||
+                bufferUsageFlags(graph, id) != bufferUsageFlags(next, nextId))
+                continue;
+
+            wanted.size = current.size;
+            reused.buffers.emplace(nextId, std::move(buffer));
+            ownedBuffers.erase(id);
+            bufferBindings.erase(id);
+            break;
+        }
+    }
+
+    return reused;
+}
+
+void VkSmol::initGraphState(std::string pipelineCachePath) {
     dirtyDescriptors.clear();
     pipelineCache.init(device, pipelineCachePath);
     initImages();
     initBuffers();
-    initPerFrameBuffers();
     initDescriptorSets();
     initPipelines();
     initSync();
@@ -228,9 +400,11 @@ void VkSmol::initGraph(std::string pipelineCachePath) {
         info.queryCount = numTimestamps * 2 * MAX_FRAME_IN_FLIGHT;
         vkCheck(vkCreateQueryPool(device.get(), &info, nullptr, &timestampPool), "Failed to create timestamp query pool");
     }
+    graphInitialized = true;
 }
 
 void VkSmol::destroyGraph() {
+    graphInitialized = false;
     if (timestampPool != VK_NULL_HANDLE) {
         vkDestroyQueryPool(device.get(), timestampPool, nullptr);
         timestampPool = VK_NULL_HANDLE;
@@ -241,7 +415,7 @@ void VkSmol::destroyGraph() {
     destroyPipelines();
     pipelineCache.destroy(device);
     destroyDescriptorSets();
-    destroyPerFrameBuffers();
+    discardBufferTransfers();
     destroyBuffers();
     destroyImages();
 }
@@ -309,6 +483,7 @@ std::optional<FrameContext> VkSmol::beginFrame() {
     for (auto& payload : retirementQueue[currentFrame]) payload(device);
     retirementQueue[currentFrame].clear();
     currentRetirementFrame = currentFrame;
+    stagingArenas[currentFrame].used = 0;
 
     if (!platform->isHeadless()) {
         const uint32_t result = std::get<WindowedState>(displayState).swapchain.getNextImageIndex(
@@ -361,6 +536,7 @@ CommandBuffer& VkSmol::beginRecording(const SubmissionGroupHandle& group) {
     CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
     cmd.reset();
     cmd.beginRecording();
+    flushBufferTransfers(cmd);
     return cmd;
 }
 
@@ -428,48 +604,53 @@ void VkSmol::bindBuffer(const BufferHandle& handle, VkBuffer buffer) {
     bufferBindings[handle.id] = buffer;
 }
 
-Buffer& VkSmol::getBuffer(const BufferHandle& handle, uint32_t frameIndex) {
-    if (graph.buffers[handle.id].flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT) {
-        uint32_t f = (frameIndex == UINT32_MAX) ? currentFrame : frameIndex;
-        return ownedPerFrameBuffers.at(handle.id)[f];
-    }
+Buffer& VkSmol::getBuffer(const BufferHandle& handle) {
     return ownedBuffers.at(handle.id);
 }
 
 bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
-    if (graph.buffers[handle.id].size >= newSize) return false;
-    if (!graph.buffers[handle.id].initialData.empty()) return false;
+    const BufferInfo& info = graph.buffers[handle.id];
+    if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || info.size >= newSize) return false;
+    replaceBuffer(handle.id, newSize, false);
+    return true;
+}
 
-    graph.buffers[handle.id].size = newSize;
+void VkSmol::writeBuffer(const BufferHandle& handle, const void* data, size_t size, size_t offset) {
+    if (size == 0) return;
+    const BufferInfo& info = graph.buffers[handle.id];
+    if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED)
+        throw std::runtime_error("Cannot write to imported buffer \"" + info.name + "\"");
+    if (offset + size > info.size)
+        replaceBuffer(handle.id, std::max(offset + size, info.size * 2), true);
 
-    VkBufferUsageFlags usageFlags = graph.buffers[handle.id].extraUsageFlags;
-    for (const CompiledPass& pass : graph.compiledPasses)
-        for (const BufferAccess& access : pass.bufferAccesses)
-            if (access.buffer.id == handle.id)
-                usageFlags |= bufferUsageTypeToVkFlags(access.info.usage);
+    const std::byte* bytes = static_cast<const std::byte*>(data);
+    pendingBufferTransfers.push_back(PendingBufferWrite{
+        .dst    = bufferBindings.at(handle.id),
+        .offset = offset,
+        .data   = std::vector<std::byte>(bytes, bytes + size),
+    });
+}
 
-    auto it = ownedBuffers.find(handle.id);
-    if (it != ownedBuffers.end()) {
-        destroyBuffer(it->second);
-        ownedBuffers.erase(it);
-        Buffer buf = createBuffer(usageFlags, newSize, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, graph.buffers[handle.id].name);
-        bufferBindings[handle.id] = buf.get();
-        ownedBuffers.emplace(handle.id, std::move(buf));
-        refreshDescriptorsForBuffer(handle.id);
-        return true;
-    }
+void VkSmol::readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset) {
+    if (size == 0) return;
+    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr,
+                                   graph.buffers[handle.id].name + "Readback");
 
-    auto pfIt = ownedPerFrameBuffers.find(handle.id);
-    if (pfIt != ownedPerFrameBuffers.end()) {
-        for (Buffer& buf : pfIt->second) {
-            destroyBuffer(buf);
-            buf = createBuffer(usageFlags, newSize, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, graph.buffers[handle.id].name);
-        }
-        refreshDescriptorsForBuffer(handle.id);
-        return true;
-    }
+    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
+    flushBufferTransfers(commandBuffer);
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
+    vkCmdCopyBuffer(commandBuffer.get(), bufferBindings.at(handle.id), readback.get(), 1, &region);
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+    CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
 
-    return false;
+    readback.read(device, out, size);
+    readback.free(device);
+    readback.destroy(device);
 }
 
 // ——— Pipelines (runtime) —————————————————————————————————————————————————————
@@ -483,6 +664,7 @@ GraphicsPipeline& VkSmol::getGraphicsPipeline(GraphicsPipelineHandle handle) {
 }
 
 void VkSmol::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y) {
+    flushBufferTransfers(cmd);
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
@@ -501,6 +683,7 @@ void VkSmol::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
 }
 
 void VkSmol::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandle, const float clearColor[4]) {
+    flushBufferTransfers(cmd);
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
@@ -613,9 +796,9 @@ void VkSmol::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
         } else {
             BufferHandle h = { .id = decl.handleId };
             if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                writer.uniform(decl.binding, getBuffer(h, frameIndex));
+                writer.uniform(decl.binding, getBuffer(h));
             else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                writer.storage(decl.binding, getBuffer(h, frameIndex));
+                writer.storage(decl.binding, getBuffer(h));
         }
     }
     updateDescriptorSetGroup(groupIt->second, frameIndex, writer);
@@ -657,9 +840,7 @@ void VkSmol::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
     for (const PassBufferBarrier& b : graph.compiledPasses[passHandle.id].bufferBarriersBefore) {
         auto srcVk = bufferAccessToVk(b.srcAccess);
         auto dstVk = bufferAccessToVk(b.dstAccess);
-        VkBuffer buf = graph.buffers[b.buffer.id].flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT
-            ? ownedPerFrameBuffers.at(b.buffer.id)[currentFrame].get()
-            : bufferBindings.at(b.buffer.id);
+        VkBuffer buf = bufferBindings.at(b.buffer.id);
         VkBufferMemoryBarrier barrier{
             .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
             .srcAccessMask       = srcVk.access,

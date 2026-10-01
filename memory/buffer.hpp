@@ -48,6 +48,7 @@ public:
     VkBufferUsageFlags getUsage() const { return usage; };
     
     void fill(const LogicalDevice& device, void* data);
+    void write(const LogicalDevice& device, const void* data, size_t bytes, size_t offset = 0);
     void read(const LogicalDevice& device, void* out, size_t bytes, size_t offset = 0);
     static void copy(const Buffer& srcBuffer, const Buffer& dstBuffer, const LogicalDevice& device, const CommandPool& transferCommandPool, Queue transferQueue);
 

@@ -10,7 +10,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <array>
+#include <cstddef>
 #include <functional>
+#include <ranges>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "./platform/platform.hpp"
@@ -75,6 +79,7 @@ public:
 
     void setGraph(RenderGraphBuilder& builder);
     void initGraph(std::string pipelineCachePath = {});
+    void rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath = {});
     void destroyGraph();
 
     std::optional<FrameContext> beginFrame();
@@ -92,8 +97,25 @@ public:
     void resizeImage(ImageHandle handle, uint32_t width, uint32_t height);
 
     void bindBuffer(const BufferHandle& handle, VkBuffer buffer);
-    Buffer& getBuffer(const BufferHandle& handle, uint32_t frameIndex = UINT32_MAX);
+    Buffer& getBuffer(const BufferHandle& handle);
     bool resizeBuffer(const BufferHandle& handle, size_t newSize);
+
+    void writeBuffer(const BufferHandle& handle, const void* data, size_t size, size_t offset = 0);
+    template <typename T>
+        requires(std::is_trivially_copyable_v<T> && !std::ranges::range<T>)
+    void writeBuffer(const BufferHandle& handle, const T& value, size_t offset = 0) {
+        writeBuffer(handle, &value, sizeof(T), offset);
+    }
+    template <std::ranges::contiguous_range R>
+    void writeBuffer(const BufferHandle& handle, const R& values, size_t offset = 0) {
+        writeBuffer(handle, std::ranges::data(values), std::ranges::size(values) * sizeof(std::ranges::range_value_t<R>), offset);
+    }
+
+    void readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset = 0);
+    template <std::ranges::contiguous_range R>
+    void readBuffer(const BufferHandle& handle, R& out, size_t offset = 0) {
+        readBuffer(handle, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>), offset);
+    }
 
     ComputePipeline&  getComputePipeline(ComputePipelineHandle handle);
     GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
@@ -161,13 +183,9 @@ public:
     Image& getSwapchainImage(size_t imageIndex);
     ImageView& getSwapchainImageView(size_t imageIndex);
 
-    Buffer createReadbackBuffer(size_t size, bool persistentMapping = true, std::string name = {});
-    void fillBuffer(Buffer& buffer, void* data);
-    void readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset = 0);
     void destroyBuffer(Buffer& buffer);
-    void copyBuffer(Buffer& src, Buffer& dst);
-    void copyImageToBuffer(Image& src, Buffer& dst);
     void fillImage(Image& image, const void* data, size_t size);
+    void readImage(Image& image, void* out, size_t size);
 
     Image createImageFromPath(std::string path, std::string name = {});
     Image createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name = {});
@@ -261,6 +279,7 @@ private:
 
     // Graph state
     CompiledRenderGraph graph;
+    bool graphInitialized = false;
 
     VkQueryPool          timestampPool    = VK_NULL_HANDLE;
     uint32_t             numTimestamps    = 0;
@@ -274,7 +293,24 @@ private:
 
     std::unordered_map<uint32_t, VkBuffer> bufferBindings;
     std::unordered_map<uint32_t, Buffer>   ownedBuffers;
-    std::unordered_map<uint32_t, std::array<Buffer, MAX_FRAME_IN_FLIGHT>> ownedPerFrameBuffers;
+
+    struct PendingBufferWrite {
+        VkBuffer dst;
+        size_t offset;
+        std::vector<std::byte> data;
+    };
+    struct PendingBufferReplace {
+        Buffer previous;
+        VkBuffer next;
+        size_t preservedSize;
+    };
+    std::vector<std::variant<PendingBufferWrite, PendingBufferReplace>> pendingBufferTransfers;
+
+    struct StagingArena {
+        Buffer buffer;
+        size_t used = 0;
+    };
+    std::array<StagingArena, MAX_FRAME_IN_FLIGHT> stagingArenas;
 
     std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
@@ -290,12 +326,29 @@ private:
 
     void initImages();
     void destroyImages();
+    VkImageUsageFlags imageUsageFlags(const CompiledRenderGraph& compiled, uint32_t imageId) const;
+
+    struct ReusedResources {
+        std::unordered_map<uint32_t, Image>     images;
+        std::unordered_map<uint32_t, ImageView> views;
+        std::unordered_map<uint32_t, Sampler>   samplers;
+        std::unordered_map<uint32_t, Buffer>    buffers;
+    };
+    ReusedResources takeReusableResources(CompiledRenderGraph& next);
+    void initGraphState(std::string pipelineCachePath);
 
     void initBuffers();
     void destroyBuffers();
-    
-    void initPerFrameBuffers();
-    void destroyPerFrameBuffers();
+    VkBufferUsageFlags bufferUsageFlags(const CompiledRenderGraph& compiled, uint32_t bufferId) const;
+    void replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve);
+    size_t stage(const void* data, size_t size);
+    void flushBufferTransfers(const CommandBuffer& commandBuffer);
+    void discardBufferTransfers();
+    void emitMemoryBarrier(
+        const CommandBuffer& commandBuffer,
+        VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+        VkPipelineStageFlags dstStage, VkAccessFlags dstAccess
+    ) const;
     
     void initDescriptorSets();
     void destroyDescriptorSets();

@@ -141,6 +141,20 @@ void Buffer::fill(const LogicalDevice& device, void* data) {
     }
 }
 
+void Buffer::write(const LogicalDevice& device, const void* data, size_t bytes, size_t offset) {
+    if (offset + bytes > size)
+        throw std::runtime_error("Buffer write out of range");
+
+    if (persistentMapping) {
+        memcpy(static_cast<char*>(bufferMapped) + offset, data, bytes);
+    } else {
+        void* mem;
+        vkMapMemory(device.get(), bufferMemory, offset, bytes, 0, &mem);
+        memcpy(mem, data, bytes);
+        vkUnmapMemory(device.get(), bufferMemory);
+    }
+}
+
 void Buffer::read(const LogicalDevice& device, void* out, size_t bytes, size_t offset) {
     if (offset + bytes > size)
         throw std::runtime_error("Buffer read out of range");

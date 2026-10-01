@@ -31,7 +31,7 @@ public:
 
     BufferHandle createBuffer(
         std::string name, size_t size,
-        VkSmolBufferCreateFlags flags = 0,
+        VkSmolBufferOwnership ownership = VKSMOL_BUFFER_OWNERSHIP_MANAGED,
         VkBufferUsageFlags extraUsageFlags = 0,
         const void* initialData = nullptr
     );

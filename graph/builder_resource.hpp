@@ -117,10 +117,9 @@ enum class BufferUsageType : uint16_t {
     Indirect,
 };
 
-typedef uint32_t VkSmolBufferCreateFlags;
-enum VkSmolBufferCreateFlagBits {
-    VKSMOL_BUFFER_CREATE_IMPORTED_BIT  = 1 << 0,  // Caller provides the VkBuffer each frame via bindBuffer
-    VKSMOL_BUFFER_CREATE_PER_FRAME_BIT = 1 << 1,  // Executor creates MAX_FRAME_IN_FLIGHT copies (use for CPU-written UBOs)
+enum VkSmolBufferOwnership {
+    VKSMOL_BUFFER_OWNERSHIP_MANAGED,
+    VKSMOL_BUFFER_OWNERSHIP_IMPORTED,  // Caller provides the VkBuffer each frame via bindBuffer
 };
 
 struct BufferAccessInfo {
@@ -136,7 +135,7 @@ struct BufferAccess {
 struct BufferInfo {
     std::string name;
     size_t size = 0;
-    VkSmolBufferCreateFlags flags = 0;
+    VkSmolBufferOwnership ownership = VKSMOL_BUFFER_OWNERSHIP_MANAGED;
     // Additional VkBufferUsageFlags ORed on top of the flags inferred from declared pass accesses
     VkBufferUsageFlags extraUsageFlags = 0;
     // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.

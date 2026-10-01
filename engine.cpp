@@ -141,10 +141,11 @@ void VkSmol::terminate() {
         ImGui::DestroyContext();
     }
 
+    for (StagingArena& arena : stagingArenas) destroyBuffer(arena.buffer);
     flushAll();
 
     assert(ownedImages.empty() && ownedViews.empty() && ownedSamplers.empty());
-    assert(ownedBuffers.empty() && ownedPerFrameBuffers.empty());
+    assert(ownedBuffers.empty() && pendingBufferTransfers.empty());
     assert(passDescriptorLayouts.empty() && passDescriptorGroups.empty());
     assert(ownedComputePipelines.empty() && ownedGraphicsPipelines.empty());
 
@@ -352,18 +353,6 @@ Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferA
     return buf;
 }
 
-Buffer VkSmol::createReadbackBuffer(size_t size, bool persistentMapping, std::string name) {
-    Buffer buf;
-    buf.setResourceName(name.empty() ? "ReadbackBuffer" : std::move(name));
-    buf.init(device, VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, persistentMapping);
-    buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    return buf;
-}
-
-void VkSmol::fillBuffer(Buffer& buffer, void* data) {
-    buffer.fill(device, data);
-}
-
 void VkSmol::fillImage(Image& image, const void* data, size_t size) {
     Buffer staging;
     staging.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
@@ -378,18 +367,22 @@ void VkSmol::fillImage(Image& image, const void* data, size_t size) {
     staging.destroy(device);
 }
 
-void VkSmol::copyBuffer(Buffer& src, Buffer& dst) {
-    Buffer::copy(src, dst, device, transferCommandPool, transferQueue);
-}
+void VkSmol::readImage(Image& image, void* out, size_t size) {
+    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, "ImageReadback");
 
-void VkSmol::copyImageToBuffer(Image& src, Buffer& dst) {
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
-    src.copyToBuffer(commandBuffer, dst);
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    image.copyToBuffer(commandBuffer, readback);
+    emitMemoryBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
     CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
-}
 
-void VkSmol::readBuffer(Buffer& buffer, void* out, size_t bytes, size_t offset) {
-    buffer.read(device, out, bytes, offset);
+    readback.read(device, out, size);
+    readback.free(device);
+    readback.destroy(device);
 }
 
 void VkSmol::destroyBuffer(Buffer& buffer) {

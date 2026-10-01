@@ -347,20 +347,18 @@ ImageHandle RenderGraphBuilder::createImage(
 
 BufferHandle RenderGraphBuilder::createBuffer(
     std::string name, size_t size,
-    VkSmolBufferCreateFlags flags,
+    VkSmolBufferOwnership ownership,
     VkBufferUsageFlags extraUsageFlags,
     const void* initialData
 ) {
-    if ((flags & VKSMOL_BUFFER_CREATE_IMPORTED_BIT) && (flags & VKSMOL_BUFFER_CREATE_PER_FRAME_BIT))
-        throw std::runtime_error("Buffers cannot be both imported and per-frame");
-    if (initialData && (flags & (VKSMOL_BUFFER_CREATE_IMPORTED_BIT | VKSMOL_BUFFER_CREATE_PER_FRAME_BIT)))
-        throw std::runtime_error("Imported/per-frame buffers cannot have initial data");
+    if (initialData && ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED)
+        throw std::runtime_error("Imported buffers cannot have initial data");
 
     BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };
     BufferInfo info = {
         .name = std::move(name),
         .size = size,
-        .flags = flags,
+        .ownership = ownership,
         .extraUsageFlags = extraUsageFlags,
     };
     if (initialData) {
