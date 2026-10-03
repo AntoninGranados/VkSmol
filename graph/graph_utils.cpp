@@ -377,18 +377,10 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
 
         // Pipeline
         if (pass.pipelineId) {
-            if (pass.type == PassType::Compute) {
-                out += std::format("      Pipeline:   {}\n",
-                    compiled.computePipelines[*pass.pipelineId].shaderPath);
-            } else if (pass.type == PassType::Graphics) {
-                const GraphicsPipelineInfo& pi = compiled.graphicsPipelines[*pass.pipelineId];
-                std::string shaders;
-                for (size_t i = 0; i < pi.shaderPaths.size(); ++i) {
-                    if (i) shaders += " + ";
-                    shaders += pi.shaderPaths[i].second;
-                }
-                out += std::format("      Pipeline:   {}\n", shaders);
-            }
+            if (pass.type == PassType::Compute)
+                out += std::format("      Pipeline:   {}\n", compiled.computePipelines[*pass.pipelineId].name);
+            else if (pass.type == PassType::Graphics)
+                out += std::format("      Pipeline:   {}\n", compiled.graphicsPipelines[*pass.pipelineId].name);
         }
 
         // Barriers before this pass

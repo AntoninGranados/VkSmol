@@ -224,8 +224,44 @@ void VkSmol::destroyDescriptorSets() {
 
 // ——— Pipelines ———————————————————————————————————————————————————————————————
 
-void VkSmol::initPipelines() {
-    reloadPipelines();
+std::vector<std::string> VkSmol::initPipelines() {
+    std::vector<std::string> errors;
+    auto layoutsOf = [&](uint32_t passId) -> std::vector<const DescriptorSetLayout*> {
+        auto it = passDescriptorLayouts.find(passId);
+        if (it == passDescriptorLayouts.end()) return {};
+        return { &it->second };
+    };
+
+    for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
+        const ComputePipelineInfo& info = graph.computePipelines[id];
+        Shader shader;
+        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compileShader(info.name, VK_SHADER_STAGE_COMPUTE_BIT, info.shaderCode, errors));
+        ownedComputePipelines[id] = initComputePipeline(shader, layoutsOf(info.passId));
+        shader.destroy(device);
+    }
+
+    for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
+        const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
+        VkPipelineVertexInputStateCreateInfo vi{
+            .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount   = 1,
+            .pVertexBindingDescriptions      = &info.bindingDescription,
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
+            .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
+        };
+
+        std::vector<Shader> shaders(info.shaderCodes.size());
+        std::vector<const Shader*> shaderPointers;
+        for (size_t i = 0; i < info.shaderCodes.size(); ++i) {
+            const auto& [stage, code] = info.shaderCodes[i];
+            shaders[i].init(device, stage, compileShader(info.name, stage, code, errors));
+            shaderPointers.push_back(&shaders[i]);
+        }
+        ownedGraphicsPipelines[id] = initGraphicsPipeline(vi, shaderPointers, layoutsOf(info.passId));
+        for (Shader& shader : shaders) shader.destroy(device);
+    }
+
+    return errors;
 }
 
 void VkSmol::destroyPipelines() {
@@ -279,17 +315,16 @@ void VkSmol::destroySync() {
 
 // ——— Public lifecycle ————————————————————————————————————————————————————————
 
-void VkSmol::initGraph(std::string pipelineCachePath) {
+std::vector<std::string> VkSmol::initGraph(std::string pipelineCachePath) {
     assert(ownedImages.empty() && "VkSmol::initGraph() called without a prior destroyGraph() — bindings would be left dangling");
-    initGraphState(std::move(pipelineCachePath));
+    return initGraphState(std::move(pipelineCachePath));
 }
 
-void VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath) {
+std::vector<std::string> VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath) {
     CompiledRenderGraph next = builder.compile();
     if (!graphInitialized) {
         graph = std::move(next);
-        initGraphState(std::move(pipelineCachePath));
-        return;
+        return initGraphState(std::move(pipelineCachePath));
     }
 
     waitIdle();
@@ -315,7 +350,7 @@ void VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCache
         ownedBuffers.emplace(id, std::move(buffer));
     }
 
-    initGraphState(std::move(pipelineCachePath));
+    return initGraphState(std::move(pipelineCachePath));
 }
 
 VkSmol::ReusedResources VkSmol::takeReusableResources(CompiledRenderGraph& next) {
@@ -371,13 +406,13 @@ VkSmol::ReusedResources VkSmol::takeReusableResources(CompiledRenderGraph& next)
     return reused;
 }
 
-void VkSmol::initGraphState(std::string pipelineCachePath) {
+std::vector<std::string> VkSmol::initGraphState(std::string pipelineCachePath) {
     dirtyDescriptors.clear();
     pipelineCache.init(device, pipelineCachePath);
     initImages();
     initBuffers();
     initDescriptorSets();
-    initPipelines();
+    std::vector<std::string> errors = initPipelines();
     initSync();
     for (const CompiledPass& pass : graph.compiledPasses)
         if (passDescriptorGroups.count(pass.pass.id))
@@ -401,6 +436,7 @@ void VkSmol::initGraphState(std::string pipelineCachePath) {
         vkCheck(vkCreateQueryPool(device.get(), &info, nullptr, &timestampPool), "Failed to create timestamp query pool");
     }
     graphInitialized = true;
+    return errors;
 }
 
 void VkSmol::destroyGraph() {
@@ -710,46 +746,6 @@ void VkSmol::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle)
 double VkSmol::getTimestampMs(TimestampHandle handle) const {
     if (handle.id >= cachedTimestamps.size()) return -1.0;
     return cachedTimestamps[handle.id];
-}
-
-void VkSmol::reloadPipelines(bool force) {
-    for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
-        const ComputePipelineInfo& info = graph.computePipelines[id];
-        std::vector<const DescriptorSetLayout*> layouts;
-        if (info.passId != InvalidHandle) {
-            auto it = passDescriptorLayouts.find(info.passId);
-            if (it != passDescriptorLayouts.end())
-                layouts = { &it->second };
-        }
-        reloadComputePipeline(ownedComputePipelines[id], info.shaderPath, layouts, force);
-    }
-    for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
-        const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
-        std::vector<const DescriptorSetLayout*> layouts;
-        if (info.passId != InvalidHandle) {
-            auto it = passDescriptorLayouts.find(info.passId);
-            if (it != passDescriptorLayouts.end())
-                layouts = { &it->second };
-        }
-        VkPipelineVertexInputStateCreateInfo vi{
-            .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            .vertexBindingDescriptionCount   = 1,
-            .pVertexBindingDescriptions      = &info.bindingDescription,
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
-            .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
-        };
-        reloadGraphicsPipeline(ownedGraphicsPipelines[id], vi, info.shaderPaths, layouts, force);
-    }
-}
-
-std::vector<std::string> VkSmol::getShaderPaths() const {
-    std::vector<std::string> paths;
-    for (const ComputePipelineInfo& info : graph.computePipelines)
-        paths.push_back(info.shaderPath);
-    for (const GraphicsPipelineInfo& info : graph.graphicsPipelines)
-        for (const auto& [stage, path] : info.shaderPaths)
-            paths.push_back(path);
-    return paths;
 }
 
 // ——— Descriptor management ———————————————————————————————————————————————————

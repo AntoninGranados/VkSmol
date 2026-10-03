@@ -12,7 +12,7 @@ public:
     void readBuffer (uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
     void writeBuffer(uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
 
-    ComputePipelineHandle setPipeline(std::string shaderPath);
+    ComputePipelineHandle setPipeline(std::string shaderCode);
 
 private:
     ComputePassBuilder(PassHandle handle, RenderGraphBuilder* graph)

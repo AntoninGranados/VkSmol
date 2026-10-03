@@ -12,8 +12,11 @@
 #include <array>
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <ranges>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -78,8 +81,8 @@ public:
     bool isHeadless() const { return platform->isHeadless(); }
 
     void setGraph(RenderGraphBuilder& builder);
-    void initGraph(std::string pipelineCachePath = {});
-    void rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath = {});
+    [[nodiscard]] std::vector<std::string> initGraph(std::string pipelineCachePath = {});
+    [[nodiscard]] std::vector<std::string> rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath = {});
     void destroyGraph();
 
     std::optional<FrameContext> beginFrame();
@@ -119,8 +122,6 @@ public:
 
     ComputePipeline&  getComputePipeline(ComputePipelineHandle handle);
     GraphicsPipeline& getGraphicsPipeline(GraphicsPipelineHandle handle);
-    void reloadPipelines(bool force = false);
-    std::vector<std::string> getShaderPaths() const;
 
     void dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y);
 
@@ -155,9 +156,6 @@ public:
 
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
     void destroyComputePipeline(ComputePipeline& computePipeline);
-
-    Shader createShader(VkShaderStageFlagBits stage_, std::string filepath, bool forceRecompile = false);
-    void destroyShader(Shader& shader);
 
     void beginDynamicRenderer(
         const CommandBuffer& commandBuffer, 
@@ -263,19 +261,13 @@ private:
         const std::vector<const DescriptorSetLayout*>& setLayouts,
         ComputePipeline other = {}
     );
-    void reloadComputePipeline(
-        ComputePipeline& pipeline,
-        const std::string& shaderPath,
-        const std::vector<const DescriptorSetLayout*>& setLayouts,
-        bool force = false
-    );
-    void reloadGraphicsPipeline(
-        GraphicsPipeline& pipeline,
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
-        const std::vector<const DescriptorSetLayout*>& setLayouts,
-        bool force = false
-    );
+
+    struct CompiledShader {
+        std::string code;
+        std::vector<uint32_t> spirv;
+    };
+    std::map<std::pair<std::string, VkShaderStageFlagBits>, CompiledShader> compiledShaders;
+    const std::vector<uint32_t>& compileShader(const std::string& name, VkShaderStageFlagBits stage, const std::string& code, std::vector<std::string>& errors);
 
     // Graph state
     CompiledRenderGraph graph;
@@ -335,7 +327,7 @@ private:
         std::unordered_map<uint32_t, Buffer>    buffers;
     };
     ReusedResources takeReusableResources(CompiledRenderGraph& next);
-    void initGraphState(std::string pipelineCachePath);
+    std::vector<std::string> initGraphState(std::string pipelineCachePath);
 
     void initBuffers();
     void destroyBuffers();
@@ -356,7 +348,7 @@ private:
     void refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex);
     void refreshDescriptorsForBuffer(uint32_t bufferId);
     
-    void initPipelines();
+    std::vector<std::string> initPipelines();
     void destroyPipelines();
     
     void initSync();

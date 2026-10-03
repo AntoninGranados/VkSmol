@@ -214,64 +214,20 @@ void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-void VkSmol::reloadComputePipeline(
-    ComputePipeline& pipeline,
-    const std::string& shaderPath,
-    const std::vector<const DescriptorSetLayout*>& setLayouts,
-    bool force
-) {
-    if (!force && pipeline.get() != VK_NULL_HANDLE && !Shader::isSourceStale(shaderPath))
-        return;
+const std::vector<uint32_t>& VkSmol::compileShader(const std::string& name, VkShaderStageFlagBits stage, const std::string& code, std::vector<std::string>& errors) {
+    CompiledShader& compiled = compiledShaders[{name, stage}];
+    if (!compiled.spirv.empty() && compiled.code == code)
+        return compiled.spirv;
 
-    Shader shader = createShader(VK_SHADER_STAGE_COMPUTE_BIT, shaderPath, force);
-    ComputePipeline next = initComputePipeline(shader, setLayouts, pipeline);
-    destroyComputePipeline(pipeline);
-    pipeline = std::move(next);
-    destroyShader(shader);
-}
-
-void VkSmol::reloadGraphicsPipeline(
-    GraphicsPipeline& pipeline,
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-    const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& shaderPaths,
-    const std::vector<const DescriptorSetLayout*>& setLayouts,
-    bool force
-) {
-    bool anyStale = force || pipeline.get() == VK_NULL_HANDLE;
-    for (size_t i = 0; i < shaderPaths.size() && !anyStale; ++i)
-        anyStale = Shader::isSourceStale(shaderPaths[i].second);
-    if (!anyStale)
-        return;
-
-    std::vector<Shader> shaders;
-    shaders.reserve(shaderPaths.size());
     try {
-        for (auto& [stage, path] : shaderPaths)
-            shaders.push_back(createShader(stage, path, force));
-    } catch (...) {
-        for (auto& s : shaders) destroyShader(s);
-        throw;
+        compiled.spirv = Shader::compile(code, stage, name);
+        compiled.code = code;
+    } catch (const std::exception& e) {
+        if (compiled.spirv.empty())
+            throw;
+        errors.push_back(e.what());
     }
-
-    std::vector<const Shader*> ptrs;
-    ptrs.reserve(shaders.size());
-    for (auto& s : shaders) ptrs.push_back(&s);
-
-    GraphicsPipeline next = initGraphicsPipeline(vertexInputInfo, ptrs, setLayouts, pipeline);
-    destroyGraphicsPipeline(pipeline);
-    pipeline = std::move(next);
-
-    for (auto& s : shaders) destroyShader(s);
-}
-
-Shader VkSmol::createShader(VkShaderStageFlagBits stage, std::string filepath, bool forceRecompile) {
-    Shader shader;
-    shader.init(device, stage, filepath, forceRecompile);
-    return shader;
-}
-
-void VkSmol::destroyShader(Shader& shader) {
-    shader.destroy(device);
+    return compiled.spirv;
 }
 
 // ——— Descriptor sets ————————————————————————————————————————————————————————

@@ -78,7 +78,7 @@ GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputSta
     GraphicsPipelineHandle h = { .id = static_cast<uint32_t>(graph->graphicsPipelines.size()) };
     GraphicsPipelineInfo info;
     info.name        = graph->passes[handle.id].name + "Pipeline";
-    info.shaderPaths = std::move(shaders);
+    info.shaderCodes = std::move(shaders);
     info.passId      = handle.id;
     if (vi.pVertexBindingDescriptions)
         info.bindingDescription = *vi.pVertexBindingDescriptions;

@@ -163,7 +163,7 @@ struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
 
 struct ComputePipelineInfo {
     std::string name;
-    std::string shaderPath;
+    std::string shaderCode;
     uint32_t    passId = InvalidHandle;
 };
 
@@ -171,7 +171,7 @@ struct GraphicsPipelineInfo {
     std::string name;
     VkVertexInputBindingDescription                            bindingDescription;
     std::vector<VkVertexInputAttributeDescription>             attributeDescriptions;
-    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths;
+    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderCodes;
     uint32_t    passId = InvalidHandle;
 };
 

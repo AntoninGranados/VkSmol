@@ -48,11 +48,11 @@ void ComputePassBuilder::writeBuffer(uint32_t binding, BufferHandle buffer, Buff
         graph->passes[handle.id].descriptorBindings.push_back({ binding, false, buffer.id, dt, kComputeStage });
 }
 
-ComputePipelineHandle ComputePassBuilder::setPipeline(std::string shaderPath) {
+ComputePipelineHandle ComputePassBuilder::setPipeline(std::string shaderCode) {
     ComputePipelineHandle h = { .id = static_cast<uint32_t>(graph->computePipelines.size()) };
     graph->computePipelines.push_back({
         .name       = graph->passes[handle.id].name + "Pipeline",
-        .shaderPath = std::move(shaderPath),
+        .shaderCode = std::move(shaderCode),
         .passId     = handle.id,
     });
     return h;
