@@ -607,7 +607,8 @@ void VkSmol::swapBindings(const ImageHandle& a, const ImageHandle& b) {
         if (!passDescriptorGroups.count(pass.pass.id)) continue;
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
             if (decl.isImage && (decl.handleId == a.id || decl.handleId == b.id)) {
-                dirtyDescriptors.insert(pass.pass.id * MAX_FRAME_IN_FLIGHT + currentFrame);
+                for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+                    dirtyDescriptors.insert(pass.pass.id * MAX_FRAME_IN_FLIGHT + f);
                 break;
             }
         }
