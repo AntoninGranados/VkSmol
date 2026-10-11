@@ -4,6 +4,7 @@
 #include <utility>
 #include <algorithm>
 #include <cassert>
+#include <format>
 #include <unordered_set>
 
 #include "./image/image_barrier.hpp"
@@ -204,21 +205,33 @@ void VkSmol::initDescriptorSets() {
             return a.binding < b.binding;
         });
 
-        DescriptorSetLayout& layout = passDescriptorLayouts[passId];
+        uint32_t setCount = 0;
         for (const DescriptorBindingDecl& decl : decls)
-            layout.addBinding(decl.binding, decl.stageFlags, decl.descriptorType);
-        initDescriptorSetLayout(layout);
+            setCount = std::max(setCount, decl.set + 1);
 
-        passDescriptorGroups[passId] = createDescriptorSetGroup(layout, pass.name + "Descriptors");
+        std::vector<DescriptorSetLayout>& layouts = passDescriptorLayouts[passId];
+        layouts = std::vector<DescriptorSetLayout>(setCount);
+        for (const DescriptorBindingDecl& decl : decls)
+            layouts[decl.set].addBinding(decl.binding, decl.stageFlags, decl.descriptorType);
+
+        std::vector<DescriptorSetGroup>& groups = passDescriptorGroups[passId];
+        groups = std::vector<DescriptorSetGroup>(setCount);
+        for (uint32_t set = 0; set < setCount; ++set) {
+            initDescriptorSetLayout(layouts[set]);
+            if (!layouts[set].getBindings().empty())
+                groups[set] = createDescriptorSetGroup(layouts[set], std::format("{}Descriptors{}", pass.name, set));
+        }
     }
 }
 
 void VkSmol::destroyDescriptorSets() {
-    for (auto& [id, group] : passDescriptorGroups)
-        destroyDescriptorSetGroup(group);
+    for (auto& [id, groups] : passDescriptorGroups)
+        for (DescriptorSetGroup& group : groups)
+            if (group.isValid()) destroyDescriptorSetGroup(group);
     passDescriptorGroups.clear();
-    for (auto& [id, layout] : passDescriptorLayouts)
-        destroyDescriptorSetLayout(layout);
+    for (auto& [id, layouts] : passDescriptorLayouts)
+        for (DescriptorSetLayout& layout : layouts)
+            destroyDescriptorSetLayout(layout);
     passDescriptorLayouts.clear();
 }
 
@@ -229,13 +242,15 @@ std::vector<std::string> VkSmol::initPipelines() {
     auto layoutsOf = [&](uint32_t passId) -> std::vector<const DescriptorSetLayout*> {
         auto it = passDescriptorLayouts.find(passId);
         if (it == passDescriptorLayouts.end()) return {};
-        return { &it->second };
+        std::vector<const DescriptorSetLayout*> layouts;
+        for (const DescriptorSetLayout& layout : it->second) layouts.push_back(&layout);
+        return layouts;
     };
 
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         Shader shader;
-        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compileShader(info.name, VK_SHADER_STAGE_COMPUTE_BIT, info.shaderCode, errors));
+        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, errors));
         ownedComputePipelines[id] = initComputePipeline(shader, layoutsOf(info.passId));
         shader.destroy(device);
     }
@@ -250,11 +265,11 @@ std::vector<std::string> VkSmol::initPipelines() {
             .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
         };
 
-        std::vector<Shader> shaders(info.shaderCodes.size());
+        std::vector<Shader> shaders(info.shaderPaths.size());
         std::vector<const Shader*> shaderPointers;
-        for (size_t i = 0; i < info.shaderCodes.size(); ++i) {
-            const auto& [stage, code] = info.shaderCodes[i];
-            shaders[i].init(device, stage, compileShader(info.name, stage, code, errors));
+        for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
+            const auto& [stage, path] = info.shaderPaths[i];
+            shaders[i].init(device, stage, compilePassShader(graph.compiledPasses[info.passId], stage, path, info.shaderDefines, errors));
             shaderPointers.push_back(&shaders[i]);
         }
         ownedGraphicsPipelines[id] = initGraphicsPipeline(vi, shaderPointers, layoutsOf(info.passId));
@@ -413,6 +428,8 @@ std::vector<std::string> VkSmol::initGraphState(std::string pipelineCachePath) {
     initBuffers();
     initDescriptorSets();
     std::vector<std::string> errors = initPipelines();
+    for (auto& [key, compiled] : compiledShaders)
+        compiled.checked = false;
     initSync();
     for (const CompiledPass& pass : graph.compiledPasses)
         if (passDescriptorGroups.count(pass.pass.id))
@@ -782,23 +799,29 @@ void VkSmol::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
     if (groupIt == passDescriptorGroups.end()) return;
 
     const CompiledPass& compiled = graph.compiledPasses[passId];
-    DescriptorWriter writer(passDescriptorLayouts.at(passId));
-    for (const DescriptorBindingDecl& decl : compiled.descriptorBindings) {
-        if (decl.isImage) {
-            ImageHandle h = { .id = decl.handleId };
-            if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                writer.combinedImageSampler(decl.binding, getView(h), getSampler(h));
-            else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                writer.storageImage(decl.binding, getView(h));
-        } else {
-            BufferHandle h = { .id = decl.handleId };
-            if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                writer.uniform(decl.binding, getBuffer(h));
-            else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                writer.storage(decl.binding, getBuffer(h));
+    const std::vector<DescriptorSetLayout>& layouts = passDescriptorLayouts.at(passId);
+    for (uint32_t set = 0; set < layouts.size(); ++set) {
+        if (!groupIt->second[set].isValid()) continue;
+
+        DescriptorWriter writer(layouts[set]);
+        for (const DescriptorBindingDecl& decl : compiled.descriptorBindings) {
+            if (decl.set != set) continue;
+            if (decl.isImage) {
+                ImageHandle h = { .id = decl.handleId };
+                if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    writer.combinedImageSampler(decl.binding, getView(h), getSampler(h));
+                else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    writer.storageImage(decl.binding, getView(h));
+            } else {
+                BufferHandle h = { .id = decl.handleId };
+                if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                    writer.uniform(decl.binding, getBuffer(h));
+                else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    writer.storage(decl.binding, getBuffer(h));
+            }
         }
+        updateDescriptorSetGroup(groupIt->second[set], frameIndex, writer);
     }
-    updateDescriptorSetGroup(groupIt->second, frameIndex, writer);
 }
 
 void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHandle) {
@@ -825,7 +848,8 @@ void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHan
         bindPoint  = VK_PIPELINE_BIND_POINT_GRAPHICS;
     }
 
-    groupIt->second.at(currentFrame).bind(cmd, layout, bindPoint);
+    for (uint32_t set = 0; set < groupIt->second.size(); ++set)
+        if (groupIt->second[set].isValid()) groupIt->second[set].at(currentFrame).bind(cmd, layout, bindPoint, set);
 }
 
 // ——— Barriers ————————————————————————————————————————————————————————————————

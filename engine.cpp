@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <format>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "device/queue.hpp"
@@ -214,20 +216,55 @@ void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-const std::vector<uint32_t>& VkSmol::compileShader(const std::string& name, VkShaderStageFlagBits stage, const std::string& code, std::vector<std::string>& errors) {
-    CompiledShader& compiled = compiledShaders[{name, stage}];
-    if (!compiled.spirv.empty() && compiled.code == code)
-        return compiled.spirv;
+const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, const ShaderDefines& defines) {
+    CompiledShader& compiled = compiledShaders[{path, defines}];
+    if (compiled.checked)
+        return compiled;
 
-    try {
-        compiled.spirv = Shader::compile(code, stage, name);
-        compiled.code = code;
-    } catch (const std::exception& e) {
-        if (compiled.spirv.empty())
-            throw;
-        errors.push_back(e.what());
+    compiled.error.clear();
+    if (compiled.compilation.spirv.empty() || !Shader::isUpToDate(compiled.compilation.dependencies, *shaderFileSystem)) {
+        try {
+            compiled.compilation = Shader::compile(path, defines, *shaderFileSystem);
+        } catch (const std::exception& e) {
+            if (compiled.compilation.spirv.empty())
+                throw;
+            compiled.error = e.what();
+        }
     }
-    return compiled.spirv;
+    compiled.checked = true;
+    return compiled;
+}
+
+const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors) {
+    const CompiledShader& compiled = compileShader(path, defines);
+    if (!compiled.error.empty())
+        errors.push_back(compiled.error);
+
+    if (compiled.compilation.stage != stage) {
+        throw std::runtime_error(std::format("The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, path, MSG_RESET, pass.name));
+    }
+
+    for (const ShaderParameter& parameter : compiled.compilation.parameters) {
+        if (!parameter.used) continue;
+
+        const bool bound = std::ranges::any_of(pass.descriptorBindings, [&](const DescriptorBindingDecl& decl) {
+            return decl.set == parameter.location.set && decl.binding == parameter.location.binding;
+        });
+        if (!bound) {
+            throw std::runtime_error(std::format(
+                "The pass [{}] does not bind the parameter [{}{}{}] (set {}, binding {}) used by the shader [{}]",
+                pass.name, MSG_RED_B, parameter.name, MSG_RESET, parameter.location.set, parameter.location.binding, path
+            ));
+        }
+    }
+    return compiled.compilation.spirv;
+}
+
+ShaderLocation VkSmol::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines) {
+    for (const ShaderParameter& parameter : compileShader(shaderPath, defines).compilation.parameters)
+        if (parameter.name == parameterName) return parameter.location;
+
+    throw std::runtime_error(std::format("The shader [{}{}{}] has no parameter named [{}]", MSG_RED_B, shaderPath, MSG_RESET, parameterName));
 }
 
 // ——— Descriptor sets ————————————————————————————————————————————————————————

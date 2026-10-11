@@ -6,7 +6,7 @@
 
 static constexpr VkShaderStageFlags kGraphicsStage = VK_SHADER_STAGE_ALL_GRAPHICS;
 
-void GraphicsPassBuilder::readImage(uint32_t binding, ImageHandle imageHandle, ImageUsageType usage) {
+void GraphicsPassBuilder::readImage(ShaderLocation location, ImageHandle imageHandle, ImageUsageType usage) {
     checkImageAccessInfoValid({ .usage = usage, .access = AccessType::Read });
     graph->passes[handle.id].imageAccesses.push_back({
         .image = imageHandle,
@@ -14,7 +14,7 @@ void GraphicsPassBuilder::readImage(uint32_t binding, ImageHandle imageHandle, I
     });
     VkDescriptorType dt = imageUsageTypeToDescriptorType(usage);
     if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ binding, true, imageHandle.id, dt, kGraphicsStage });
+        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, true, imageHandle.id, dt, kGraphicsStage });
 }
 
 void GraphicsPassBuilder::writeImage(
@@ -40,24 +40,24 @@ void GraphicsPassBuilder::writeImage(
     });
 }
 
-void GraphicsPassBuilder::readBuffer(uint32_t binding, BufferHandle buffer, BufferUsageType usage) {
+void GraphicsPassBuilder::readBuffer(ShaderLocation location, BufferHandle buffer, BufferUsageType usage) {
     graph->passes[handle.id].bufferAccesses.push_back({
         .buffer = buffer,
         .info   = { .usage = usage, .access = AccessType::Read },
     });
     VkDescriptorType dt = bufferUsageTypeToDescriptorType(usage);
     if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ binding, false, buffer.id, dt, kGraphicsStage });
+        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, false, buffer.id, dt, kGraphicsStage });
 }
 
-void GraphicsPassBuilder::writeBuffer(uint32_t binding, BufferHandle buffer, BufferUsageType usage) {
+void GraphicsPassBuilder::writeBuffer(ShaderLocation location, BufferHandle buffer, BufferUsageType usage) {
     graph->passes[handle.id].bufferAccesses.push_back({
         .buffer = buffer,
         .info   = { .usage = usage, .access = AccessType::Write },
     });
     VkDescriptorType dt = bufferUsageTypeToDescriptorType(usage);
     if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ binding, false, buffer.id, dt, kGraphicsStage });
+        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, false, buffer.id, dt, kGraphicsStage });
 }
 
 void GraphicsPassBuilder::bindVertexBuffer(BufferHandle buffer) {
@@ -74,11 +74,12 @@ void GraphicsPassBuilder::bindIndexBuffer(BufferHandle buffer) {
     });
 }
 
-GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaders) {
+GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines) {
     GraphicsPipelineHandle h = { .id = static_cast<uint32_t>(graph->graphicsPipelines.size()) };
     GraphicsPipelineInfo info;
     info.name        = graph->passes[handle.id].name + "Pipeline";
-    info.shaderCodes = std::move(shaders);
+    info.shaderPaths = std::move(shaderPaths);
+    info.shaderDefines = std::move(shaderDefines);
     info.passId      = handle.id;
     if (vi.pVertexBindingDescriptions)
         info.bindingDescription = *vi.pVertexBindingDescriptions;

@@ -129,8 +129,8 @@ void DescriptorSet::update(const LogicalDevice& device) {
     vkUpdateDescriptorSets(device.get(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
-void DescriptorSet::bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint) {
-    vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+void DescriptorSet::bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint, uint32_t setIndex) {
+    vkCmdBindDescriptorSets(commandBuffer.get(), bindPoint, pipelineLayout, setIndex, 1, &descriptorSet, 0, nullptr);
 }
 
 void DescriptorSet::clear() {

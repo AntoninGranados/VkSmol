@@ -7,16 +7,16 @@ class RenderGraphBuilder;
 
 class GraphicsPassBuilder: public PassBuilder {
 public:
-    void readImage  (uint32_t binding, ImageHandle  imageHandle, ImageUsageType  usage);
+    void readImage  (ShaderLocation location, ImageHandle  imageHandle, ImageUsageType  usage);
     void writeImage (ImageHandle imageHandle, ImageUsageType usage,
                      WriteMode writeMode = WriteMode::Overwrite,
                      AttachmentLoad attachmentLoad = AttachmentLoad::DontCare);
-    void readBuffer (uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
-    void writeBuffer(uint32_t binding, BufferHandle buffer,      BufferUsageType usage);
+    void readBuffer (ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
+    void writeBuffer(ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
     void bindVertexBuffer(BufferHandle buffer);
     void bindIndexBuffer (BufferHandle buffer);
 
-    GraphicsPipelineHandle setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaders);
+    GraphicsPipelineHandle setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines = {});
 
 private:
     GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)

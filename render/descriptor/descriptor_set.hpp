@@ -26,7 +26,7 @@ public:
     void linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding);
     void linkStorageImage(const ImageView& view, uint32_t binding);
     void update(const LogicalDevice& device);
-    void bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
+    void bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, uint32_t setIndex = 0);
     void clear();
 
 private:

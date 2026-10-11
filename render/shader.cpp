@@ -1,9 +1,15 @@
 #include "shader.hpp"
 
-#include <shaderc/shaderc.hpp>
+#include <slang-com-ptr.h>
+#include <slang.h>
+#include <spirv-tools/optimizer.hpp>
 
+#include <filesystem>
 #include <format>
+#include <functional>
+#include <optional>
 
+#include "shader_file_system.hpp"
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
@@ -32,21 +38,180 @@ VkPipelineShaderStageCreateInfo Shader::getShaderStageCreateInfo() const {
     return shaderStageInfo;
 }
 
-std::vector<uint32_t> Shader::compile(const std::string& code, VkShaderStageFlagBits stage, const std::string& name) {
-    shaderc_shader_kind kind;
-    switch (stage) {
-        case VK_SHADER_STAGE_VERTEX_BIT:   kind = shaderc_glsl_vertex_shader; break;
-        case VK_SHADER_STAGE_FRAGMENT_BIT: kind = shaderc_glsl_fragment_shader; break;
-        case VK_SHADER_STAGE_COMPUTE_BIT:  kind = shaderc_glsl_compute_shader; break;
+class Shader::SlangFileSystem final: public ISlangFileSystem {
+public:
+    SlangFileSystem(ShaderFileSystem& fileSystem, std::vector<ShaderDependency>& dependencies): fileSystem(fileSystem), dependencies(dependencies) {}
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL queryInterface(const SlangUUID& uuid, void** outObject) override {
+        *outObject = castAs(uuid);
+        return *outObject ? SLANG_OK : SLANG_E_NO_INTERFACE;
+    }
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override { return 1; }
+    SLANG_NO_THROW uint32_t SLANG_MCALL release() override { return 1; }
+
+    SLANG_NO_THROW void* SLANG_MCALL castAs(const SlangUUID& uuid) override {
+        const bool supported = uuid == ISlangUnknown::getTypeGuid() || uuid == ISlangCastable::getTypeGuid() || uuid == ISlangFileSystem::getTypeGuid();
+        return supported ? static_cast<ISlangFileSystem*>(this) : nullptr;
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL loadFile(const char* path, ISlangBlob** outBlob) override {
+        const std::optional<std::string> content = readFile(path);
+        if (!content) return SLANG_E_NOT_FOUND;
+
+        *outBlob = slang_createBlob(content->data(), content->size());
+        return SLANG_OK;
+    }
+
+    std::optional<std::string> readFile(const std::string& path) {
+        std::optional<std::string> content = fileSystem.readFile(path);
+        if (content) dependencies.push_back({ path, std::hash<std::string>{}(*content) });
+        return content;
+    }
+
+private:
+    ShaderFileSystem&              fileSystem;
+    std::vector<ShaderDependency>& dependencies;
+};
+
+bool Shader::isUpToDate(const std::vector<ShaderDependency>& dependencies, ShaderFileSystem& fileSystem) {
+    for (const ShaderDependency& dependency : dependencies) {
+        const std::optional<std::string> content = fileSystem.readFile(dependency.path);
+        if (!content || std::hash<std::string>{}(*content) != dependency.hash) return false;
+    }
+    return true;
+}
+
+ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& defines, ShaderFileSystem& fileSystem) {
+    ShaderCompilation compilation;
+    SlangFileSystem slangFileSystem(fileSystem, compilation.dependencies);
+    const std::optional<std::string> code = slangFileSystem.readFile(path);
+    if (!code) {
+        throw std::runtime_error(std::format("Failed to open the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
+    }
+
+    static const Slang::ComPtr<slang::IGlobalSession> globalSession = [] {
+        SlangGlobalSessionDesc globalSessionDesc{};
+
+        Slang::ComPtr<slang::IGlobalSession> created;
+        if (SLANG_FAILED(slang::createGlobalSession(&globalSessionDesc, created.writeRef()))) {
+            throw std::runtime_error("Failed to create the Slang global session");
+        }
+        return created;
+    }();
+
+    slang::TargetDesc targetDesc{};
+    targetDesc.format = SLANG_SPIRV;
+
+    std::vector<slang::PreprocessorMacroDesc> macros;
+    for (const auto& [defineName, defineValue] : defines) macros.push_back({ defineName.c_str(), defineValue.c_str() });
+
+    slang::SessionDesc sessionDesc{};
+    sessionDesc.targets = &targetDesc;
+    sessionDesc.targetCount = 1;
+    sessionDesc.fileSystem = &slangFileSystem;
+    sessionDesc.preprocessorMacros = macros.data();
+    sessionDesc.preprocessorMacroCount = static_cast<SlangInt>(macros.size());
+
+    Slang::ComPtr<slang::ISession> session;
+    if (SLANG_FAILED(globalSession->createSession(sessionDesc, session.writeRef()))) {
+        throw std::runtime_error(std::format("Failed to create the Slang session for the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
+    }
+
+    Slang::ComPtr<slang::IBlob> diagnostics;
+    const auto fail = [&] {
+        const std::string message = diagnostics ? std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize()) : std::string();
+        return std::runtime_error(std::format("Failed to compile the shader [{}{}{}]: {}", MSG_RED_B, path, MSG_RESET, message));
+    };
+
+    const std::string moduleName = std::filesystem::path(path).stem().string();
+    slang::IModule* module = session->loadModuleFromSourceString(moduleName.c_str(), path.c_str(), code->c_str(), diagnostics.writeRef());
+    if (!module) throw fail();
+
+    Slang::ComPtr<slang::IEntryPoint> entryPoint;
+    if (SLANG_FAILED(module->findEntryPointByName("main", entryPoint.writeRef()))) {
+        throw std::runtime_error(std::format("The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, path, MSG_RESET));
+    }
+
+    slang::IComponentType* components[] = { module, entryPoint.get() };
+    Slang::ComPtr<slang::IComponentType> program;
+    if (SLANG_FAILED(session->createCompositeComponentType(components, 2, program.writeRef(), diagnostics.writeRef()))) throw fail();
+
+    Slang::ComPtr<slang::IComponentType> linkedProgram;
+    if (SLANG_FAILED(program->link(linkedProgram.writeRef(), diagnostics.writeRef()))) throw fail();
+
+    Slang::ComPtr<slang::IBlob> spirv;
+    if (SLANG_FAILED(linkedProgram->getEntryPointCode(0, 0, spirv.writeRef(), diagnostics.writeRef()))) throw fail();
+
+    Slang::ComPtr<slang::IMetadata> metadata;
+    if (SLANG_FAILED(linkedProgram->getEntryPointMetadata(0, 0, metadata.writeRef(), diagnostics.writeRef()))) throw fail();
+
+    slang::ProgramLayout* layout = linkedProgram->getLayout();
+    switch (layout->getEntryPointByIndex(0)->getStage()) {
+        case SLANG_STAGE_VERTEX:   compilation.stage = VK_SHADER_STAGE_VERTEX_BIT; break;
+        case SLANG_STAGE_FRAGMENT: compilation.stage = VK_SHADER_STAGE_FRAGMENT_BIT; break;
+        case SLANG_STAGE_COMPUTE:  compilation.stage = VK_SHADER_STAGE_COMPUTE_BIT; break;
         default:
-            throw std::runtime_error(std::format("The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, name, MSG_RESET));
+            throw std::runtime_error(std::format("The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, path, MSG_RESET));
     }
 
-    shaderc::Compiler compiler;
-    shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(code, kind, name.c_str());
-    if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-        throw std::runtime_error(std::format("Failed to compile the shader [{}{}{}]: {}", MSG_RED_B, name, MSG_RESET, result.GetErrorMessage()));
+    const auto collectParameters = [&](this const auto& self, slang::VariableLayoutReflection* variable, const std::string& prefix, uint32_t set, uint32_t binding) -> void {
+        const std::string name = prefix.empty() ? variable->getName() : prefix + "." + variable->getName();
+        slang::TypeLayoutReflection* type = variable->getTypeLayout();
+        set += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_SUB_ELEMENT_REGISTER_SPACE));
+        binding += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
+
+        if (type->getKind() == slang::TypeReflection::Kind::ParameterBlock) {
+            slang::VariableLayoutReflection* element = type->getElementVarLayout();
+            slang::TypeLayoutReflection* elementType = element->getTypeLayout();
+            const uint32_t elementBinding = static_cast<uint32_t>(element->getOffset(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
+            for (unsigned int i = 0; i < elementType->getFieldCount(); i++) self(elementType->getFieldByIndex(i), name, set, elementBinding);
+            return;
+        }
+        if (type->getKind() == slang::TypeReflection::Kind::Struct) {
+            for (unsigned int i = 0; i < type->getFieldCount(); i++) self(type->getFieldByIndex(i), name, set, binding);
+            return;
+        }
+
+        bool used = false;
+        metadata->isParameterLocationUsed(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, used);
+        compilation.parameters.push_back({ name, ShaderLocation(set, binding), used });
+    };
+    for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
+
+    compilation.spirv = optimize(static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t), path);
+    return compilation;
+}
+
+std::vector<uint32_t> Shader::optimize(const uint32_t* words, size_t wordCount, const std::string& name) {
+    std::string messages;
+    spvtools::Optimizer optimizer(SPV_ENV_VULKAN_1_4);
+    optimizer.SetMessageConsumer([&](spv_message_level_t, const char*, const spv_position_t&, const char* message) {
+        if (message) messages += std::format("\n{}", message);
+    });
+
+    optimizer.RegisterPass(spvtools::CreateWrapOpKillPass());
+    optimizer.RegisterPass(spvtools::CreateDeadBranchElimPass());
+    optimizer.RegisterPass(spvtools::CreateMergeReturnPass());
+    optimizer.RegisterPass(spvtools::CreateInlineExhaustivePass());
+    optimizer.RegisterPass(spvtools::CreateEliminateDeadFunctionsPass());
+    optimizer.RegisterPass(spvtools::CreateAggressiveDCEPass());
+    optimizer.RegisterPass(spvtools::CreatePrivateToLocalPass());
+    optimizer.RegisterPass(spvtools::CreateScalarReplacementPass(100));
+    optimizer.RegisterPass(spvtools::CreateCCPPass());
+    optimizer.RegisterPass(spvtools::CreateSimplificationPass());
+    optimizer.RegisterPass(spvtools::CreateLocalAccessChainConvertPass());
+    optimizer.RegisterPass(spvtools::CreateLocalSingleBlockLoadStoreElimPass());
+    optimizer.RegisterPass(spvtools::CreateAggressiveDCEPass());
+    optimizer.RegisterPass(spvtools::CreateVectorDCEPass());
+
+    spvtools::OptimizerOptions options;
+    options.set_max_id_bound(0x3FFFFFFF);
+    options.set_run_validator(false);
+
+    std::vector<uint32_t> optimized;
+    if (!optimizer.Run(words, wordCount, &optimized, options)) {
+        throw std::runtime_error(std::format("Failed to optimize the shader [{}{}{}]:{}", MSG_RED_B, name, MSG_RESET, messages));
     }
 
-    return { result.cbegin(), result.cend() };
+    return optimized;
 }

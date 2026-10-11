@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <functional>
 #include <map>
+#include <memory>
 #include <ranges>
 #include <string>
 #include <type_traits>
@@ -40,6 +41,7 @@
 #include "./render/descriptor/descriptor_writer.hpp"
 
 #include "./render/shader.hpp"
+#include "./render/shader_file_system.hpp"
 #include "./render/pipeline/graphics_pipeline.hpp"
 #include "./render/pipeline/compute_pipeline.hpp"
 #include "./render/pipeline/pipeline_cache.hpp"
@@ -79,6 +81,9 @@ public:
     void init(std::string appName, uint32_t appVersion, Platform& platform);
 
     bool isHeadless() const { return platform->isHeadless(); }
+
+    void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
+    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {});
 
     void setGraph(RenderGraphBuilder& builder);
     [[nodiscard]] std::vector<std::string> initGraph(std::string pipelineCachePath = {});
@@ -263,11 +268,14 @@ private:
     );
 
     struct CompiledShader {
-        std::string code;
-        std::vector<uint32_t> spirv;
+        ShaderCompilation compilation;
+        std::string error;
+        bool checked = false;
     };
-    std::map<std::pair<std::string, VkShaderStageFlagBits>, CompiledShader> compiledShaders;
-    const std::vector<uint32_t>& compileShader(const std::string& name, VkShaderStageFlagBits stage, const std::string& code, std::vector<std::string>& errors);
+    std::map<std::pair<std::string, ShaderDefines>, CompiledShader> compiledShaders;
+    std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
+    const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines);
+    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors);
 
     // Graph state
     CompiledRenderGraph graph;
@@ -308,8 +316,8 @@ private:
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
     PipelineCache pipelineCache;
 
-    std::unordered_map<uint32_t, DescriptorSetLayout> passDescriptorLayouts;
-    std::unordered_map<uint32_t, DescriptorSetGroup>  passDescriptorGroups;
+    std::unordered_map<uint32_t, std::vector<DescriptorSetLayout>> passDescriptorLayouts;
+    std::unordered_map<uint32_t, std::vector<DescriptorSetGroup>>  passDescriptorGroups;
     std::unordered_set<uint32_t>                      dirtyDescriptors;
 
     std::vector<std::vector<Semaphore>>     groupSemaphores;

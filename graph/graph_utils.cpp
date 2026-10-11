@@ -343,15 +343,15 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
             auto decls = pass.descriptorBindings;
             std::sort(decls.begin(), decls.end(),
                 [](const DescriptorBindingDecl& a, const DescriptorBindingDecl& b) {
-                    return a.binding < b.binding;
+                    return a.set != b.set ? a.set < b.set : a.binding < b.binding;
                 });
             out += "      Bindings:\n";
             for (const DescriptorBindingDecl& d : decls) {
                 const std::string& name = d.isImage
                     ? images[d.handleId].name
                     : buffers[d.handleId].name;
-                out += std::format("        {:2}  {:6}  {:36}  {}\n",
-                    d.binding, d.isImage ? "image" : "buffer",
+                out += std::format("        {}.{:<2}  {:6}  {:36}  {}\n",
+                    d.set, d.binding, d.isImage ? "image" : "buffer",
                     '"' + name + '"',
                     descriptorTypeToStr(d.descriptorType));
             }

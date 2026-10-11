@@ -8,6 +8,8 @@
 #include <optional>
 #include <utility>
 
+#include "../render/shader.hpp"
+
 // ================
 // Handles
 // ================
@@ -147,6 +149,7 @@ struct BufferInfo {
 // ================
 
 struct DescriptorBindingDecl {
+    uint32_t           set;
     uint32_t           binding;
     bool               isImage;
     uint32_t           handleId;
@@ -163,7 +166,8 @@ struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
 
 struct ComputePipelineInfo {
     std::string name;
-    std::string shaderCode;
+    std::string shaderPath;
+    ShaderDefines shaderDefines;
     uint32_t    passId = InvalidHandle;
 };
 
@@ -171,7 +175,8 @@ struct GraphicsPipelineInfo {
     std::string name;
     VkVertexInputBindingDescription                            bindingDescription;
     std::vector<VkVertexInputAttributeDescription>             attributeDescriptions;
-    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderCodes;
+    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths;
+    ShaderDefines shaderDefines;
     uint32_t    passId = InvalidHandle;
 };
 
