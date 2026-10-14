@@ -470,7 +470,6 @@ void RenderGraph::initSync() {
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
         commandBuffers[f] = device.allocCommandBuffer();
         fences[f].init(logicalDevice, true);
-        renderFinishedSemaphores[f].init(logicalDevice);
     }
 }
 
@@ -478,7 +477,6 @@ void RenderGraph::destroySync() {
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
         device.freeCommandBuffer(commandBuffers[f]);
         fences[f].destroy(logicalDevice);
-        renderFinishedSemaphores[f].destroy(logicalDevice);
     }
 }
 
@@ -555,12 +553,12 @@ void RenderGraph::execute() {
     if (presentedImage) {
         waitSemaphores.push_back(&engine.imageAvailableSemaphores[frame]);
         waitStages.push_back(acquireWaitStage);
-        signalSemaphores.push_back(&renderFinishedSemaphores[frame]);
+        signalSemaphores.push_back(&engine.renderFinishedSemaphores[*imageIndex]);
     }
     device.getGraphicsQueue().submit({ &commandBuffer }, fences[frame], waitSemaphores, waitStages, signalSemaphores);
     engine.registerFence(frame, fences[frame]);
 
-    if (presentedImage) engine.presentImage(*imageIndex, renderFinishedSemaphores[frame]);
+    if (presentedImage) engine.presentImage(*imageIndex);
 }
 
 void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledPass& pass) {

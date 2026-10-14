@@ -77,7 +77,6 @@ private:
     uint32_t frame = 0;
     std::array<CommandBuffer, MAX_FRAME_IN_FLIGHT> commandBuffers;
     std::array<Fence, MAX_FRAME_IN_FLIGHT> fences;
-    std::array<Semaphore, MAX_FRAME_IN_FLIGHT> renderFinishedSemaphores;
     std::array<bool, MAX_FRAME_IN_FLIGHT> recordedSlots = {};
 
     DynamicRenderer dynamicRenderer;

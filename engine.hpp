@@ -150,6 +150,7 @@ private:
     ImageHandle swapchainImage;
 
     std::vector<Semaphore> imageAvailableSemaphores;
+    std::vector<Semaphore> renderFinishedSemaphores;
     bool framebufferResized = false;
     uint32_t currentFrame = 0;
 
@@ -179,8 +180,10 @@ private:
     void transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuffer& buffer, BufferAccessInfo access);
 
     std::optional<uint32_t> acquireImage();
-    void presentImage(uint32_t imageIndex, const Semaphore& waitSemaphore);
+    void presentImage(uint32_t imageIndex);
     void recreateSwapchain();
+    void createPresentSemaphores();
+    void destroyPresentSemaphores();
 
     friend class RenderGraph;
 };

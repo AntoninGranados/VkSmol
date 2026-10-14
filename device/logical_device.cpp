@@ -46,6 +46,11 @@ void LogicalDevice::init(
     synchronization2Feature.synchronization2 = VK_TRUE;
     dynamicRenderingFeature.pNext = &synchronization2Feature;
 
+    VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParametersFeature{};
+    shaderDrawParametersFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+    shaderDrawParametersFeature.shaderDrawParameters = VK_TRUE;
+    synchronization2Feature.pNext = &shaderDrawParametersFeature;
+
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pNext = &dynamicRenderingFeature;

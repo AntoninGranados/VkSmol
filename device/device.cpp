@@ -397,8 +397,11 @@ int Device::scoreDevice(const PhysicalDevice& device) const {
 
     if (!supportedFeatures.fragmentStoresAndAtomics) return 0;
 
+    VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParametersFeatures{};
+    shaderDrawParametersFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
     VkPhysicalDeviceSynchronization2Features synchronization2Features{};
     synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    synchronization2Features.pNext = &shaderDrawParametersFeatures;
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
     dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamicRenderingFeatures.pNext = &synchronization2Features;
@@ -407,6 +410,7 @@ int Device::scoreDevice(const PhysicalDevice& device) const {
     features2.pNext = &dynamicRenderingFeatures;
     vkGetPhysicalDeviceFeatures2(device.get(), &features2);
     if (!dynamicRenderingFeatures.dynamicRendering || !synchronization2Features.synchronization2) return 0;
+    if (!shaderDrawParametersFeatures.shaderDrawParameters) return 0;
 
     // Check swap chain support
     if (!headless) {

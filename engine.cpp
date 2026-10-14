@@ -20,9 +20,7 @@ Engine::Engine(const std::string& appName, uint32_t appVersion, std::optional<Wi
     swapchain.emplace(device, window->getExtent());
     swapchainImage = importImage("Swapchain", VK_NULL_HANDLE, VK_NULL_HANDLE, swapchain->getImageFormat(),
                                  swapchain->getExtent().width, swapchain->getExtent().height);
-    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
-    for (Semaphore& semaphore : imageAvailableSemaphores)
-        semaphore.init(logicalDevice);
+    createPresentSemaphores();
     window->setResizeCallback([this](int, int) { framebufferResized = true; });
 }
 
@@ -36,8 +34,7 @@ Engine::~Engine() {
     for (PersistentBuffer& buffer : buffers) releaseBuffer(buffer);
 
     if (window) {
-        for (Semaphore& semaphore : imageAvailableSemaphores)
-            semaphore.destroy(logicalDevice);
+        destroyPresentSemaphores();
         window->setResizeCallback({});
     }
 }
@@ -457,9 +454,9 @@ std::optional<uint32_t> Engine::acquireImage() {
     return imageIndex;
 }
 
-void Engine::presentImage(uint32_t imageIndex, const Semaphore& waitSemaphore) {
+void Engine::presentImage(uint32_t imageIndex) {
     assert(swapchain);
-    const bool outOfDate = swapchain->present(imageIndex, waitSemaphore);
+    const bool outOfDate = swapchain->present(imageIndex, renderFinishedSemaphores[imageIndex]);
     if (outOfDate || framebufferResized) recreateSwapchain();
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
     slotStarted = false;
@@ -471,6 +468,30 @@ void Engine::recreateSwapchain() {
     window->pauseWhileMinimized();
     swapchain->recreate(window->getExtent());
     framebufferResized = false;
+
+    if (renderFinishedSemaphores.size() != swapchain->getImageCount()) {
+        device.waitIdle();
+        destroyPresentSemaphores();
+        createPresentSemaphores();
+    }
+}
+
+void Engine::createPresentSemaphores() {
+    imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+    for (Semaphore& semaphore : imageAvailableSemaphores)
+        semaphore.init(logicalDevice);
+    renderFinishedSemaphores.resize(swapchain->getImageCount());
+    for (Semaphore& semaphore : renderFinishedSemaphores)
+        semaphore.init(logicalDevice);
+}
+
+void Engine::destroyPresentSemaphores() {
+    for (Semaphore& semaphore : imageAvailableSemaphores)
+        semaphore.destroy(logicalDevice);
+    imageAvailableSemaphores.clear();
+    for (Semaphore& semaphore : renderFinishedSemaphores)
+        semaphore.destroy(logicalDevice);
+    renderFinishedSemaphores.clear();
 }
 
 }
