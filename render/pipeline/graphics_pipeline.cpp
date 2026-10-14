@@ -15,6 +15,7 @@ void GraphicsPipeline::init(
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     const std::vector<const Shader*>& shaders,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
+    uint32_t pushConstantSize,
     const PipelineCache& pipelineCache,
     GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
@@ -82,6 +83,15 @@ void GraphicsPipeline::init(
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
     pipelineLayoutInfo.pSetLayouts = vkSetLayouts.data();
+    const VkPushConstantRange pushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset     = 0,
+        .size       = pushConstantSize,
+    };
+    if (pushConstantSize > 0) {
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+    }
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create pipeline layout");
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;

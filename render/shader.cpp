@@ -4,6 +4,7 @@
 #include <slang.h>
 #include <spirv-tools/optimizer.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -81,6 +82,22 @@ bool Shader::isUpToDate(const std::vector<ShaderDependency>& dependencies, Shade
         if (!content || std::hash<std::string>{}(*content) != dependency.hash) return false;
     }
     return true;
+}
+
+static std::optional<std::pair<VkDescriptorType, bool>> reflectDescriptorType(slang::TypeLayoutReflection* type) {
+    if (type->getBindingRangeCount() == 0) return std::nullopt;
+    switch (type->getBindingRangeType(0)) {
+        case slang::BindingType::CombinedTextureSampler: return std::pair{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, false };
+        case slang::BindingType::Texture:                return std::pair{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, false };
+        case slang::BindingType::MutableTexture:         return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true };
+        case slang::BindingType::Sampler:                return std::pair{ VK_DESCRIPTOR_TYPE_SAMPLER, false };
+        case slang::BindingType::ConstantBuffer:         return std::pair{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, false };
+        case slang::BindingType::RawBuffer:              return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, false };
+        case slang::BindingType::MutableRawBuffer:       return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, true };
+        case slang::BindingType::TypedBuffer:            return std::pair{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, false };
+        case slang::BindingType::MutableTypedBuffer:     return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, true };
+        default:                                         return std::nullopt;
+    }
 }
 
 ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& defines, ShaderFileSystem& fileSystem) {
@@ -162,6 +179,12 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
         set += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_SUB_ELEMENT_REGISTER_SPACE));
         binding += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
 
+        if (variable->getCategory() == slang::ParameterCategory::PushConstantBuffer) {
+            slang::TypeLayoutReflection* element = type->getElementTypeLayout();
+            compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>((element ? element : type)->getSize()));
+            return;
+        }
+
         if (type->getKind() == slang::TypeReflection::Kind::ParameterBlock) {
             slang::VariableLayoutReflection* element = type->getElementVarLayout();
             slang::TypeLayoutReflection* elementType = element->getTypeLayout();
@@ -174,11 +197,22 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
             return;
         }
 
+        const std::optional<std::pair<VkDescriptorType, bool>> descriptor = reflectDescriptorType(type);
+        if (!descriptor) return;
+
         bool used = false;
         metadata->isParameterLocationUsed(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, used);
-        compilation.parameters.push_back({ name, ShaderLocation(set, binding), used });
+        compilation.parameters.push_back({ name, ShaderLocation(set, binding), descriptor->first, descriptor->second, used });
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
+
+    slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(0);
+    for (unsigned int i = 0; i < entryPointLayout->getParameterCount(); i++) {
+        slang::VariableLayoutReflection* parameter = entryPointLayout->getParameterByIndex(i);
+        if (parameter->getCategory() != slang::ParameterCategory::Uniform) continue;
+        const size_t end = parameter->getOffset(SLANG_PARAMETER_CATEGORY_UNIFORM) + parameter->getTypeLayout()->getSize();
+        compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>(end));
+    }
 
     compilation.spirv = optimize(static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t), path);
     return compilation;

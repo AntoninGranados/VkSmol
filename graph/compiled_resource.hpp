@@ -43,17 +43,6 @@ struct CompiledPass {
     std::vector<BufferAccess>          bufferAccesses       = {};
     std::vector<DescriptorBindingDecl> descriptorBindings   = {};
     std::optional<uint32_t>            pipelineId;
-    std::optional<uint32_t>            timestampIndex;
-};
-
-struct CompiledSubmissionGroup {
-    SubmissionGroupHandle handle;
-    std::string name;
-    std::vector<PassHandle> passes;
-    std::vector<SubmissionGroupHandle> dependencies;
-    bool waitsOnImageAvailable = false;
-    VkPipelineStageFlags2 imageAvailableWaitStage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    bool signalsPresentSemaphore = false;
 };
 
 struct CompiledRenderGraph {
@@ -63,7 +52,6 @@ struct CompiledRenderGraph {
     std::vector<BufferInfo>              buffers          = {};
     std::vector<ComputePipelineInfo>     computePipelines = {};
     std::vector<GraphicsPipelineInfo>    graphicsPipelines = {};
-    std::vector<CompiledSubmissionGroup> submissionGroups = {};
 };
 
 }

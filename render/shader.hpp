@@ -26,9 +26,11 @@ struct ShaderLocation {
 };
 
 struct ShaderParameter {
-    std::string    name;
-    ShaderLocation location;
-    bool           used;
+    std::string      name;
+    ShaderLocation   location;
+    VkDescriptorType descriptorType;
+    bool             writable;
+    bool             used;
 };
 
 struct ShaderDependency {
@@ -40,6 +42,7 @@ struct ShaderCompilation {
     std::vector<uint32_t>         spirv;
     VkShaderStageFlagBits         stage;
     std::vector<ShaderParameter>  parameters;
+    uint32_t                      pushConstantSize = 0;
     std::vector<ShaderDependency> dependencies;
 };
 

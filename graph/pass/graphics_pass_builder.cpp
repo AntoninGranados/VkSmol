@@ -1,94 +1,31 @@
 #include "graphics_pass_builder.hpp"
 
 #include "../graph_utils.hpp"
-#include "../builder_resource.hpp"
 #include "../render_graph_builder.hpp"
 
 namespace VkSmol {
 
-static constexpr VkShaderStageFlags kGraphicsStage = VK_SHADER_STAGE_ALL_GRAPHICS;
-
-void GraphicsPassBuilder::readImage(ShaderLocation location, ImageHandle imageHandle, ImageUsageType usage) {
-    checkImageAccessInfoValid({ .usage = usage, .access = AccessType::Read });
-    graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
-        .info  = { .usage = usage, .access = AccessType::Read },
-    });
-    VkDescriptorType dt = imageUsageTypeToDescriptorType(usage);
-    if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, true, imageHandle.id, dt, kGraphicsStage });
-}
-
-void GraphicsPassBuilder::writeImage(
-    ImageHandle imageHandle,
-    ImageUsageType usage,
-    WriteMode writeMode,
-    AttachmentLoad attachmentLoad
-) {
-    checkImageAccessInfoValid({
-        .usage          = usage,
-        .access         = AccessType::Write,
-        .writeMode      = writeMode,
-        .attachmentLoad = attachmentLoad,
-    });
-    graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
-        .info  = {
-            .usage          = usage,
-            .access         = AccessType::Write,
-            .writeMode      = writeMode,
-            .attachmentLoad = attachmentLoad,
-        },
-    });
-}
-
-void GraphicsPassBuilder::readBuffer(ShaderLocation location, BufferHandle buffer, BufferUsageType usage) {
-    graph->passes[handle.id].bufferAccesses.push_back({
-        .buffer = buffer,
-        .info   = { .usage = usage, .access = AccessType::Read },
-    });
-    VkDescriptorType dt = bufferUsageTypeToDescriptorType(usage);
-    if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, false, buffer.id, dt, kGraphicsStage });
-}
-
-void GraphicsPassBuilder::writeBuffer(ShaderLocation location, BufferHandle buffer, BufferUsageType usage) {
-    graph->passes[handle.id].bufferAccesses.push_back({
-        .buffer = buffer,
-        .info   = { .usage = usage, .access = AccessType::Write },
-    });
-    VkDescriptorType dt = bufferUsageTypeToDescriptorType(usage);
-    if (dt != VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        graph->passes[handle.id].descriptorBindings.push_back({ location.set, location.binding, false, buffer.id, dt, kGraphicsStage });
-}
-
-void GraphicsPassBuilder::bindVertexBuffer(BufferHandle buffer) {
-    graph->passes[handle.id].bufferAccesses.push_back({
-        .buffer = buffer,
-        .info   = { .usage = BufferUsageType::Vertex, .access = AccessType::Read },
-    });
-}
-
-void GraphicsPassBuilder::bindIndexBuffer(BufferHandle buffer) {
-    graph->passes[handle.id].bufferAccesses.push_back({
-        .buffer = buffer,
-        .info   = { .usage = BufferUsageType::Index, .access = AccessType::Read },
-    });
-}
-
-GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines) {
-    GraphicsPipelineHandle h = { .id = static_cast<uint32_t>(graph->graphicsPipelines.size()) };
+GraphicsPassBuilder& GraphicsPassBuilder::pipeline(std::string vertexShaderPath, std::string fragmentShaderPath, ShaderDefines shaderDefines) {
     GraphicsPipelineInfo info;
-    info.name        = graph->passes[handle.id].name + "Pipeline";
-    info.shaderPaths = std::move(shaderPaths);
+    info.name          = graph->passes[handle.id].name + "Pipeline";
+    info.shaderPaths   = { { VK_SHADER_STAGE_VERTEX_BIT, std::move(vertexShaderPath) }, { VK_SHADER_STAGE_FRAGMENT_BIT, std::move(fragmentShaderPath) } };
     info.shaderDefines = std::move(shaderDefines);
-    info.passId      = handle.id;
-    if (vi.pVertexBindingDescriptions)
-        info.bindingDescription = *vi.pVertexBindingDescriptions;
-    for (uint32_t i = 0; i < vi.vertexAttributeDescriptionCount; ++i)
-        info.attributeDescriptions.push_back(vi.pVertexAttributeDescriptions[i]);
+    info.passId        = handle.id;
     graph->graphicsPipelines.push_back(std::move(info));
-    return h;
+    return *this;
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::colorAttachment(ImageHandle image, AttachmentLoad load, std::array<float, 4> clearColor) {
+    const ImageAccessInfo info{
+        .usage          = ImageUsageType::ColorAttachment,
+        .access         = AccessType::Write,
+        .writeMode      = load == AttachmentLoad::Load ? WriteMode::Preserve : WriteMode::Overwrite,
+        .attachmentLoad = load,
+    };
+    checkImageAccessInfoValid(info);
+    graph->passes[handle.id].imageAccesses.push_back({ .image = image, .info = info });
+    graph->passes[handle.id].clearColor = clearColor;
+    return *this;
 }
 
 }

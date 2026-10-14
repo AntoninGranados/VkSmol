@@ -6,7 +6,7 @@
 
 namespace VkSmol {
 
-void TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
+TransferPassBuilder& TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferSrc,
         .access = AccessType::Read,
@@ -19,9 +19,10 @@ void TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
             .access = AccessType::Read,
         },
     });
+    return *this;
 }
 
-void TransferPassBuilder::copyTo(ImageHandle imageHandle) {
+TransferPassBuilder& TransferPassBuilder::copyTo(ImageHandle imageHandle) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferDst,
         .access = AccessType::Write,
@@ -34,6 +35,7 @@ void TransferPassBuilder::copyTo(ImageHandle imageHandle) {
             .access = AccessType::Write,
         },
     });
+    return *this;
 }
 
 }

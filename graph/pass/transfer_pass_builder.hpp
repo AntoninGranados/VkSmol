@@ -5,10 +5,10 @@
 
 namespace VkSmol {
 
-class TransferPassBuilder: public PassBuilder {
+class TransferPassBuilder: public PassBuilder<TransferPassBuilder> {
 public:
-    void copyFrom(ImageHandle imageHandle);
-    void copyTo(ImageHandle imageHandle);
+    TransferPassBuilder& copyFrom(ImageHandle imageHandle);
+    TransferPassBuilder& copyTo(ImageHandle imageHandle);
 
 private:
     TransferPassBuilder(PassHandle handle, RenderGraphBuilder* graph): PassBuilder(handle, graph) {}

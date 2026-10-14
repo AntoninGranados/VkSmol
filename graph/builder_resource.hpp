@@ -2,7 +2,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 #include <optional>
@@ -17,11 +19,11 @@ namespace VkSmol {
 // ================
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
-struct PassHandle            { uint32_t id = InvalidHandle; };
-struct ImageHandle           { uint32_t id = InvalidHandle; };
-struct BufferHandle          { uint32_t id = InvalidHandle; };
-struct SubmissionGroupHandle { uint32_t id = InvalidHandle; };
-struct TimestampHandle       { uint32_t id = InvalidHandle; };
+struct PassHandle   { uint32_t id = InvalidHandle; };
+struct ImageHandle  { uint32_t id = InvalidHandle; };
+struct BufferHandle { uint32_t id = InvalidHandle; };
+
+class PassContext;
 
 enum class PassType : uint16_t {
     Graphics,
@@ -186,18 +188,22 @@ struct GraphicsPipelineInfo {
 // Pass
 // ================
 
-struct SubmissionGroupInfo {
+struct NamedBinding {
     std::string name;
+    bool        isImage;
+    uint32_t    handleId;
+    AccessType  access;
 };
 
 struct PassInfo {
     std::string name;
     PassType type;
-    SubmissionGroupHandle group = {};
     std::vector<ImageAccess>           imageAccesses      = {};
     std::vector<BufferAccess>          bufferAccesses     = {};
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
-    std::optional<uint32_t>            timestampIndex;
+    std::vector<NamedBinding>          namedBindings      = {};
+    std::array<float, 4>               clearColor         = { 0.0f, 0.0f, 0.0f, 1.0f };
+    std::function<void(PassContext&)>  execute;
 };
 
 }

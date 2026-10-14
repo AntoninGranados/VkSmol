@@ -9,20 +9,8 @@
 #include "pass/graphics_pass_builder.hpp"
 #include "pass/compute_pass_builder.hpp"
 #include "pass/transfer_pass_builder.hpp"
-#include "pass/present_pass_builder.hpp"
-#include "pass/pass_builder.hpp"
 
 namespace VkSmol {
-
-void PassBuilder::setGroup(SubmissionGroupHandle group) {
-    graph->passes[handle.id].group = group;
-}
-
-TimestampHandle PassBuilder::setTimestamp() {
-    TimestampHandle h = { .id = graph->nextTimestampIndex++ };
-    graph->passes[handle.id].timestampIndex = h.id;
-    return h;
-}
 
 namespace {
 
@@ -157,7 +145,6 @@ std::vector<CompiledPass> computeCompiledPasses(
         compiledPasses[passId].imageAccesses       = passes[passId].imageAccesses;
         compiledPasses[passId].bufferAccesses      = passes[passId].bufferAccesses;
         compiledPasses[passId].descriptorBindings  = passes[passId].descriptorBindings;
-        compiledPasses[passId].timestampIndex      = passes[passId].timestampIndex;
     }
 
     for (const ImageTimeline& timeline : imageTimelines) {
@@ -221,99 +208,7 @@ std::vector<PassImageBarrier> computeOutputBarriers(
     return outputBarriers;
 }
 
-std::vector<CompiledSubmissionGroup> computeCompiledSubmissionGroups(
-    const std::vector<SubmissionGroupInfo>& groups,
-    const std::vector<PassInfo>& passes,
-    const std::vector<ImageInfo>& images,
-    const std::vector<ImageTimeline>& timelines,
-    const std::vector<BufferTimeline>& bufferTimelines
-) {
-    uint32_t numGroups = groups.empty() ? 1 : static_cast<uint32_t>(groups.size());
-
-    std::vector<CompiledSubmissionGroup> compiled(numGroups);
-    for (uint32_t g = 0; g < numGroups; ++g) {
-        compiled[g].handle = { .id = g };
-        compiled[g].name   = groups.empty() ? "DefaultGroup" : groups[g].name;
-    }
-
-    // Assign passes to groups; unassigned passes default to group 0
-    for (uint32_t p = 0; p < passes.size(); ++p) {
-        uint32_t gid = passes[p].group.id;
-        if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-        compiled[gid].passes.push_back({ .id = p });
-    }
-
-    // Derive cross-group dependency edges from image timelines
-    auto addDep = [&](std::vector<SubmissionGroupHandle>& deps, uint32_t fromId) {
-        SubmissionGroupHandle from = { .id = fromId };
-        if (std::find_if(deps.begin(), deps.end(), [&](auto& d){ return d.id == from.id; }) == deps.end())
-            deps.push_back(from);
-    };
-
-    for (const ImageTimeline& timeline : timelines) {
-        uint32_t lastGroup = InvalidHandle;
-        std::optional<ImageAccessInfo> lastAccess;
-        for (const TimelineImageAccess& access : timeline.accesses) {
-            uint32_t gid = passes[access.pass.id].group.id;
-            if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-            if (lastGroup != InvalidHandle && lastGroup != gid && needsBarrier(*lastAccess, access.info))
-                addDep(compiled[gid].dependencies, lastGroup);
-            lastGroup = gid;
-            lastAccess = access.info;
-        }
-    }
-
-    // Derive cross-group dependency edges from buffer timelines
-    for (const BufferTimeline& timeline : bufferTimelines) {
-        uint32_t lastGroup = InvalidHandle;
-        std::optional<BufferAccessInfo> lastAccess;
-        for (const TimelineBufferAccess& access : timeline.accesses) {
-            uint32_t gid = passes[access.pass.id].group.id;
-            if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-            if (lastGroup != InvalidHandle && lastGroup != gid && needsBufferBarrier(*lastAccess, access.info))
-                addDep(compiled[gid].dependencies, lastGroup);
-            lastGroup = gid;
-            lastAccess = access.info;
-        }
-    }
-
-    // Mark which group waits on imageAvailable (first write to the swapchain / Present image)
-    for (const ImageTimeline& timeline : timelines) {
-        const ImageInfo& info = images[timeline.image.id];
-        if (info.ownership != ImageOwnership::Imported) continue;
-        if (!info.finalAccess.has_value() || info.finalAccess->usage != ImageUsageType::Present) continue;
-        for (const TimelineImageAccess& access : timeline.accesses) {
-            if (access.info.access == AccessType::Write) {
-                uint32_t gid = passes[access.pass.id].group.id;
-                if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-                compiled[gid].waitsOnImageAvailable = true;
-                compiled[gid].imageAvailableWaitStage = imageAccessToVk(access.info).stage;
-                break;
-            }
-        }
-        break;
-    }
-
-    // Mark which group signals the present semaphore (group containing the PresentPass)
-    for (uint32_t p = 0; p < passes.size(); ++p) {
-        if (passes[p].type == PassType::Present) {
-            uint32_t gid = passes[p].group.id;
-            if (gid == InvalidHandle || gid >= numGroups) gid = 0;
-            compiled[gid].signalsPresentSemaphore = true;
-            break;
-        }
-    }
-
-    return compiled;
-}
-
 } // namespace
-
-SubmissionGroupHandle RenderGraphBuilder::addSubmissionGroup(std::string name) {
-    SubmissionGroupHandle handle = { .id = static_cast<uint32_t>(groups.size()) };
-    groups.push_back({ .name = std::move(name) });
-    return handle;
-}
 
 ImageHandle RenderGraphBuilder::createImage(
     std::string name, VkFormat format,
@@ -384,8 +279,14 @@ TransferPassBuilder RenderGraphBuilder::addTransferPass(std::string name) {
     return addPass<TransferPassBuilder, PassType::Transfer>(name);
 }
 
-PresentPassBuilder RenderGraphBuilder:: addPresentPass(std::string name) {
-    return addPass<PresentPassBuilder, PassType::Present>(name);
+PassHandle RenderGraphBuilder::addPresentPass(ImageHandle image) {
+    PassHandle handle = { .id = static_cast<uint32_t>(passes.size()) };
+    passes.push_back({
+        .name = "Present",
+        .type = PassType::Present,
+        .imageAccesses = { { .image = image, .info = { .usage = ImageUsageType::Present, .access = AccessType::Read } } },
+    });
+    return handle;
 }
 
 CompiledRenderGraph RenderGraphBuilder::compile() {
@@ -400,7 +301,6 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
     compiled.buffers           = buffers;
     compiled.computePipelines  = computePipelines;
     compiled.graphicsPipelines = graphicsPipelines;
-    compiled.submissionGroups  = computeCompiledSubmissionGroups(groups, passes, images, imageTimelines, bufferTimelines);
 
     for (uint32_t i = 0; i < computePipelines.size(); ++i)
         if (computePipelines[i].passId != InvalidHandle)

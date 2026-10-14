@@ -20,6 +20,7 @@ public:
         const LogicalDevice& device,
         const Shader& shader,
         const std::vector<const DescriptorSetLayout*>& setLayouts,
+        uint32_t pushConstantSize,
         const PipelineCache& pipelineCache,
         ComputePipeline other = {}
     );

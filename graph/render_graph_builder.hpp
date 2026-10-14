@@ -12,14 +12,13 @@ namespace VkSmol {
 class GraphicsPassBuilder;
 class ComputePassBuilder;
 class TransferPassBuilder;
-class PresentPassBuilder;
+class RenderGraph;
+template <class Derived> class PassBuilder;
 
 struct CompiledRenderGraph;
 
 class RenderGraphBuilder {
 public:
-    SubmissionGroupHandle addSubmissionGroup(std::string name);
-
     // TODO: add support for 'ImageSubresourceRangeInfo'
 
     ImageHandle createImage(
@@ -41,7 +40,7 @@ public:
     GraphicsPassBuilder addGraphicsPass(std::string name);
     ComputePassBuilder  addComputePass(std::string name);
     TransferPassBuilder addTransferPass(std::string name);
-    PresentPassBuilder  addPresentPass(std::string name);
+    PassHandle          addPresentPass(ImageHandle image);
 
     const std::vector<PassInfo>&  getPasses()  const { return passes; }
     const std::vector<ImageInfo>& getImages()  const { return images; }
@@ -53,28 +52,21 @@ private:
     template <class TPassBuilder, PassType T>
     TPassBuilder addPass(std::string name) {
         PassHandle handle = { .id = static_cast<uint32_t>(passes.size()) };
-        PassInfo info = {
-            .name = std::move(name),
-            .type = T
-        };
-        passes.push_back(info);
-
+        passes.push_back({ .name = std::move(name), .type = T });
         return TPassBuilder(handle, this);
     }
 
-    std::vector<SubmissionGroupInfo>  groups;
     std::vector<PassInfo>             passes;
     std::vector<ImageInfo>            images;
     std::vector<BufferInfo>           buffers;
     std::vector<ComputePipelineInfo>  computePipelines;
     std::vector<GraphicsPipelineInfo> graphicsPipelines;
-    uint32_t nextTimestampIndex = 0;
 
-    friend class PassBuilder;
+    template <class Derived> friend class PassBuilder;
     friend GraphicsPassBuilder;
     friend ComputePassBuilder;
     friend TransferPassBuilder;
-    friend PresentPassBuilder;
+    friend RenderGraph;
 };
 
 }

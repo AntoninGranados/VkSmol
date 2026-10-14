@@ -328,17 +328,11 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
     }
     out += '\n';
 
-    // ——— Build pass→group name lookup ————————————————————————————————————————
-    std::vector<std::string> passGroup(compiled.compiledPasses.size());
-    for (const CompiledSubmissionGroup& g : compiled.submissionGroups)
-        for (const PassHandle& ph : g.passes)
-            passGroup[ph.id] = g.name;
-
     // ——— Passes ——————————————————————————————————————————————————————————————
     out += std::format("Passes ({}):\n", compiled.compiledPasses.size());
     for (const CompiledPass& pass : compiled.compiledPasses) {
-        out += std::format("  [{}] {}  {}  (group: {})\n",
-            pass.pass.id, pass.name, passTypeToStr(pass.type), passGroup[pass.pass.id]);
+        out += std::format("  [{}] {}  {}\n",
+            pass.pass.id, pass.name, passTypeToStr(pass.type));
 
         // Descriptor bindings sorted by slot
         if (!pass.descriptorBindings.empty()) {
@@ -402,23 +396,6 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
 
         out += '\n';
     }
-
-    // ——— Submission groups ———————————————————————————————————————————————————
-    out += std::format("Submission Groups ({}):\n", compiled.submissionGroups.size());
-    for (const CompiledSubmissionGroup& g : compiled.submissionGroups) {
-        out += std::format("  [{}] \"{}\"\n", g.handle.id, g.name);
-        out += "      Passes: ";
-        for (size_t i = 0; i < g.passes.size(); ++i) {
-            if (i) out += " -> ";
-            out += compiled.compiledPasses[g.passes[i].id].name;
-        }
-        out += '\n';
-        if (g.waitsOnImageAvailable) out += "      Waits:   imageAvailable\n";
-        for (const SubmissionGroupHandle& dep : g.dependencies)
-            out += std::format("      Waits:   group \"{}\"\n", compiled.submissionGroups[dep.id].name);
-        if (g.signalsPresentSemaphore) out += "      Signals: present semaphore\n";
-    }
-    out += '\n';
 
     // ——— Output barriers —————————————————————————————————————————————————————
     if (!compiled.outputBarriers.empty()) {
