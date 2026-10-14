@@ -43,6 +43,7 @@ struct ShaderCompilation {
     VkShaderStageFlagBits         stage;
     std::vector<ShaderParameter>  parameters;
     uint32_t                      pushConstantSize = 0;
+    VkExtent3D                    threadGroupSize = { 1, 1, 1 };
     std::vector<ShaderDependency> dependencies;
 };
 

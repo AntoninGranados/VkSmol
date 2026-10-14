@@ -207,6 +207,11 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
 
     slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(0);
+    if (compilation.stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+        SlangUInt size[3];
+        entryPointLayout->getComputeThreadGroupSize(3, size);
+        compilation.threadGroupSize = { static_cast<uint32_t>(size[0]), static_cast<uint32_t>(size[1]), static_cast<uint32_t>(size[2]) };
+    }
     for (unsigned int i = 0; i < entryPointLayout->getParameterCount(); i++) {
         slang::VariableLayoutReflection* parameter = entryPointLayout->getParameterByIndex(i);
         if (parameter->getCategory() != slang::ParameterCategory::Uniform) continue;

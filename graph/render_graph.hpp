@@ -53,7 +53,7 @@ public:
     TransferPassBuilder addTransferPass(std::string name);
     void present(ImageHandle image);
 
-    [[nodiscard]] std::vector<std::string> bake(std::string pipelineCachePath = {});
+    void bake(std::string pipelineCachePath = {});
     void execute();
 
     double getTimestampMs(const std::string& passName) const;
@@ -89,6 +89,7 @@ private:
     std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
     std::unordered_map<uint32_t, uint32_t>         computePushConstantSizes;
+    std::unordered_map<uint32_t, VkExtent3D>       computeThreadGroupSizes;
     std::unordered_map<uint32_t, uint32_t>         graphicsPushConstantSizes;
     std::unordered_map<uint32_t, VkShaderStageFlags> graphicsPushConstantStages;
     PipelineCache pipelineCache;
@@ -108,9 +109,9 @@ private:
     void updateDescriptors(const CompiledPass& pass, uint32_t frameIndex);
     void bindDescriptors(const CommandBuffer& commandBuffer, const CompiledPass& pass);
 
-    std::vector<std::string> initPipelines();
+    void initPipelines();
     void destroyPipelines();
-    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors);
+    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines);
 
     void initSync();
     void destroySync();

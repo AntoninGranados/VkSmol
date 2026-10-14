@@ -5,6 +5,7 @@
 #include <cstring>
 #include <format>
 #include <memory>
+#include <print>
 #include <stdexcept>
 #include <utility>
 
@@ -68,12 +69,16 @@ void RenderGraph::present(ImageHandle image) {
 
 // ——— Bake ————————————————————————————————————————————————————————————————————
 
-std::vector<std::string> RenderGraph::bake(std::string pipelineCachePath) {
+void RenderGraph::bake(std::string pipelineCachePath) {
     assert(!baked);
     std::vector<std::string> errors;
 
     resolveBindings(errors);
-    if (!errors.empty()) return errors;
+    if (!errors.empty()) {
+        std::string message = errors.front();
+        for (size_t i = 1; i < errors.size(); ++i) message += "\n" + errors[i];
+        throw std::runtime_error(message);
+    }
     graph = builder.compile();
 
     if (presentedImage) {
@@ -88,17 +93,18 @@ std::vector<std::string> RenderGraph::bake(std::string pipelineCachePath) {
     pipelineCache.init(logicalDevice, pipelineCachePath);
     initDescriptorSets();
     try {
-        std::vector<std::string> pipelineErrors = initPipelines();
-        errors.insert(errors.end(), pipelineErrors.begin(), pipelineErrors.end());
-    } catch (const std::exception& e) {
-        errors.push_back(e.what());
+        initPipelines();
+    } catch (...) {
+        device.markShadersStale();
+        destroyPipelines();
+        pipelineCache.destroy(logicalDevice);
+        throw;
     }
     device.markShadersStale();
     initSync();
     initTimestamps();
 
     baked = true;
-    return errors;
 }
 
 void RenderGraph::resolveBindings(std::vector<std::string>& errors) {
@@ -340,8 +346,7 @@ void RenderGraph::bindDescriptors(const CommandBuffer& commandBuffer, const Comp
 
 // ——— Pipelines ———————————————————————————————————————————————————————————————
 
-std::vector<std::string> RenderGraph::initPipelines() {
-    std::vector<std::string> errors;
+void RenderGraph::initPipelines() {
     auto layoutsOf = [&](uint32_t passId) -> std::vector<const DescriptorSetLayout*> {
         auto it = passDescriptorLayouts.find(passId);
         if (it == passDescriptorLayouts.end()) return {};
@@ -353,13 +358,14 @@ std::vector<std::string> RenderGraph::initPipelines() {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         Shader shader;
-        shader.init(logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, errors));
-        const uint32_t pushConstantSize = device.compileShader(info.shaderPath, info.shaderDefines).compilation.pushConstantSize;
+        shader.init(logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines));
+        const ShaderCompilation& compilation = device.compileShader(info.shaderPath, info.shaderDefines).compilation;
 
         ComputePipeline pipeline;
-        pipeline.init(logicalDevice, shader, layoutsOf(info.passId), pushConstantSize, pipelineCache);
+        pipeline.init(logicalDevice, shader, layoutsOf(info.passId), compilation.pushConstantSize, pipelineCache);
         ownedComputePipelines[id] = std::move(pipeline);
-        computePushConstantSizes[id] = pushConstantSize;
+        computePushConstantSizes[id] = compilation.pushConstantSize;
+        computeThreadGroupSizes[id] = compilation.threadGroupSize;
         shader.destroy(logicalDevice);
     }
 
@@ -386,7 +392,7 @@ std::vector<std::string> RenderGraph::initPipelines() {
         for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
             const auto& [stage, path] = info.shaderPaths[i];
             pushConstantStages |= stage;
-            shaders[i].init(logicalDevice, stage, compilePassShader(pass, stage, path, info.shaderDefines, errors));
+            shaders[i].init(logicalDevice, stage, compilePassShader(pass, stage, path, info.shaderDefines));
             shaderPointers.push_back(&shaders[i]);
             pushConstantSize = std::max(pushConstantSize, device.compileShader(path, info.shaderDefines).compilation.pushConstantSize);
         }
@@ -404,8 +410,6 @@ std::vector<std::string> RenderGraph::initPipelines() {
         graphicsPushConstantStages[id] = pushConstantStages;
         for (Shader& shader : shaders) shader.destroy(logicalDevice);
     }
-
-    return errors;
 }
 
 void RenderGraph::destroyPipelines() {
@@ -417,10 +421,10 @@ void RenderGraph::destroyPipelines() {
     ownedGraphicsPipelines.clear();
 }
 
-const std::vector<uint32_t>& RenderGraph::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors) {
+const std::vector<uint32_t>& RenderGraph::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines) {
     const Device::CompiledShader& compiled = device.compileShader(path, defines);
     if (!compiled.error.empty())
-        errors.push_back(compiled.error);
+        std::println(stderr, "{}", compiled.error);
 
     if (compiled.compilation.stage != stage) {
         throw std::runtime_error(std::format("The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, path, MSG_RESET, pass.name));
@@ -649,6 +653,13 @@ void PassContext::dispatch(uint32_t x, uint32_t y, uint32_t z) {
     if (pass.type != PassType::Compute || !pass.pipelineId)
         throw std::runtime_error(std::format("The pass [{}] has no compute pipeline to dispatch", pass.name));
     graph.ownedComputePipelines.at(*pass.pipelineId).dispatch(commandBuffer, x, y, z);
+}
+
+void PassContext::dispatchThreads(uint32_t x, uint32_t y, uint32_t z) {
+    if (pass.type != PassType::Compute || !pass.pipelineId)
+        throw std::runtime_error(std::format("The pass [{}] has no compute pipeline to dispatch", pass.name));
+    const VkExtent3D groupSize = graph.computeThreadGroupSizes.at(*pass.pipelineId);
+    dispatch((x + groupSize.width - 1) / groupSize.width, (y + groupSize.height - 1) / groupSize.height, (z + groupSize.depth - 1) / groupSize.depth);
 }
 
 void PassContext::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
