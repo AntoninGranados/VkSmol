@@ -152,7 +152,7 @@ public:
         CommandBuffer& commandBuffer,
         Fence& fence,
         const std::vector<const Semaphore*>& waitSemaphores,
-        const std::vector<VkPipelineStageFlags>& waitStages,
+        const std::vector<VkPipelineStageFlags2>& waitStages,
         const std::vector<const Semaphore*>& signalSemaphores
     );
 
@@ -348,8 +348,8 @@ private:
     void discardBufferTransfers();
     void emitMemoryBarrier(
         const CommandBuffer& commandBuffer,
-        VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
-        VkPipelineStageFlags dstStage, VkAccessFlags dstAccess
+        VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
+        VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess
     ) const;
     
     void initDescriptorSets();

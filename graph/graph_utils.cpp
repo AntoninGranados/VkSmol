@@ -50,41 +50,41 @@ VulkanBufferState bufferAccessToVk(const BufferAccessInfo& info) {
             return {
                 // Storage shaders often both read and write — be conservative with the write flag
                 .access = (info.access == AccessType::Read)
-                    ? VK_ACCESS_SHADER_READ_BIT
-                    : VkAccessFlags(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
-                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-                         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT  |
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    ? VK_ACCESS_2_SHADER_READ_BIT
+                    : VkAccessFlags2(VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT),
+                .stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                         VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT  |
+                         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
             };
         case BufferUsageType::Uniform:
             return {
-                .access = VK_ACCESS_UNIFORM_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                .access = VK_ACCESS_2_UNIFORM_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             };
         case BufferUsageType::TransferSrc:
             return {
-                .access = VK_ACCESS_TRANSFER_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
         case BufferUsageType::TransferDst:
             return {
-                .access = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
         case BufferUsageType::Vertex:
             return {
-                .access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                .access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
             };
         case BufferUsageType::Index:
             return {
-                .access = VK_ACCESS_INDEX_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                .access = VK_ACCESS_2_INDEX_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
             };
         case BufferUsageType::Indirect:
             return {
-                .access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                .access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
             };
     }
 }
@@ -168,16 +168,16 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
         case ImageUsageType::Undefined:
             return {
                 .layout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .access = 0,
-                .stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                .access = VK_ACCESS_2_NONE,
+                .stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::Sampled:
             return {
                 .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .access = VK_ACCESS_SHADER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                .access = VK_ACCESS_2_SHADER_READ_BIT,
+                .stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
@@ -185,50 +185,50 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
             return {
                 .layout = VK_IMAGE_LAYOUT_GENERAL,
                 .access = (info.access == AccessType::Read)
-                    ? VK_ACCESS_SHADER_READ_BIT
-                    : VK_ACCESS_SHADER_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    ? VK_ACCESS_2_SHADER_READ_BIT
+                    : VK_ACCESS_2_SHADER_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::ColorAttachment:
             return {
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::DepthAttachment:
             return {
                 .layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                .access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                 .aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
             };
 
         case ImageUsageType::TransferSrc:
             return {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .access = VK_ACCESS_TRANSFER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::TransferDst:
             return {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .access = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::Present:
             return {
                 .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                .access = 0,
-                .stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                .access = VK_ACCESS_2_NONE,
+                .stage = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
                 .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
     }

@@ -52,7 +52,7 @@ public:
     void submit(
         const std::vector<const CommandBuffer*>& commandBuffers,
         const Fence& fence,
-        const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+        const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags2>& waitStages,
         const std::vector<const Semaphore*>& signalSemaphores
     );
     void submit(const std::vector<const CommandBuffer*>& commandBuffers);
@@ -64,6 +64,12 @@ public:
     );
 
     void wait();
+
+private:
+    PFN_vkQueueSubmit2KHR queueSubmit2 = nullptr;
+
+    void submit(const std::vector<const CommandBuffer*>& commandBuffers, VkFence fence,
+                const std::vector<VkSemaphoreSubmitInfo>& waits, const std::vector<VkSemaphoreSubmitInfo>& signals);
 };
 
 }

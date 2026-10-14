@@ -124,22 +124,24 @@ void Image::initFromPath(
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
 
     barrier.call(
+        device,
         commandBuffer,
         image,
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT
+        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT
     );
     
     fillFromBuffer(device, commandBuffer, stagingBuffer);
     
     //! hardcoded destinations -> should be parameters (layout + access + stage)
     barrier.call(
+        device,
         commandBuffer,
         image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
     );
 
     CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, commandBuffer);

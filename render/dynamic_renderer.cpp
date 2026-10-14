@@ -7,8 +7,8 @@
 namespace VkSmol {
 
 void DynamicRenderer::init(const LogicalDevice& device) {
-    vkCmdBeginRenderingKHR = (PFN_vkCmdBeginRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdBeginRenderingKHR");
-    vkCmdEndRenderingKHR = ((PFN_vkCmdEndRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdEndRenderingKHR"));
+    cmdBeginRendering = device.functions().cmdBeginRendering;
+    cmdEndRendering = device.functions().cmdEndRendering;
 }
 
 void DynamicRenderer::begin(
@@ -32,11 +32,11 @@ void DynamicRenderer::begin(
     renderInfo.pColorAttachments = &colorAttachmentInfo;
     renderInfo.layerCount = 1;
     
-    vkCmdBeginRenderingKHR(commandBuffer.get(), &renderInfo);
+    cmdBeginRendering(commandBuffer.get(), &renderInfo);
 }
 
 void DynamicRenderer::end(const CommandBuffer& commandBuffer) {
-    vkCmdEndRenderingKHR(commandBuffer.get());
+    cmdEndRendering(commandBuffer.get());
 }
 
 }

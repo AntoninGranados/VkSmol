@@ -23,14 +23,14 @@ struct PassBufferBarrier {
 
 struct VulkanImageState {
     VkImageLayout layout;
-    VkAccessFlags access;
-    VkPipelineStageFlags stage;
+    VkAccessFlags2 access;
+    VkPipelineStageFlags2 stage;
     VkImageAspectFlags aspect;
 };
 
 struct VulkanBufferState {
-    VkAccessFlags access;
-    VkPipelineStageFlags stage;
+    VkAccessFlags2 access;
+    VkPipelineStageFlags2 stage;
 };
 
 struct CompiledPass {
@@ -52,7 +52,7 @@ struct CompiledSubmissionGroup {
     std::vector<PassHandle> passes;
     std::vector<SubmissionGroupHandle> dependencies;
     bool waitsOnImageAvailable = false;
-    VkPipelineStageFlags imageAvailableWaitStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkPipelineStageFlags2 imageAvailableWaitStage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     bool signalsPresentSemaphore = false;
 };
 

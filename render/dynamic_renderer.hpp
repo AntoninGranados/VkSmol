@@ -21,8 +21,8 @@ public:
     void end(const CommandBuffer& commandBuffer);
 
 private:
-    PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
-    PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
+    PFN_vkCmdBeginRenderingKHR cmdBeginRendering = nullptr;
+    PFN_vkCmdEndRenderingKHR cmdEndRendering = nullptr;
 };
 
 }

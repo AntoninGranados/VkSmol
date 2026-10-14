@@ -29,6 +29,7 @@ const std::vector<const char*> instanceExtensions = {
 const std::vector<const char*> deviceExtensions = {
     // VK_KHR_SWAPCHAIN_EXTENSION_NAME, // added automatically when not in headless mode
     VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 #ifdef __APPLE__
     "VK_KHR_portability_subset",
 #endif
@@ -117,7 +118,7 @@ void Engine::submit(
     CommandBuffer& commandBuffer,
     Fence& fence,
     const std::vector<const Semaphore*>& waitSemaphores,
-    const std::vector<VkPipelineStageFlags>& waitStages,
+    const std::vector<VkPipelineStageFlags2>& waitStages,
     const std::vector<const Semaphore*>& signalSemaphores
 ) {
     commandBuffer.endRecording();
@@ -367,12 +368,12 @@ void Engine::readImage(Image& image, void* out, size_t size) {
 
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
     image.copyToBuffer(commandBuffer, readback);
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
     CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
 
     readback.read(device, out, size);
@@ -440,19 +441,19 @@ void Engine::copyImage(Image& src, Image& dst) {
 
     ImageBarrier barrier;
     barrier.call(
-        cmd, dst.get(),
+        device, cmd, dst.get(),
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT
+        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT
     );
 
     src.copyToImage(cmd, dst);
 
     barrier.call(
-        cmd, dst.get(),
+        device, cmd, dst.get(),
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
     );
 
     CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, cmd);
@@ -659,6 +660,17 @@ int Engine::scoreDevice(const PhysicalDevice& device) {
     if (!supportedFeatures.samplerAnisotropy) return 0;
 
     if (!supportedFeatures.fragmentStoresAndAtomics) return 0;
+
+    VkPhysicalDeviceSynchronization2Features synchronization2Features{};
+    synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
+    dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamicRenderingFeatures.pNext = &synchronization2Features;
+    VkPhysicalDeviceFeatures2 features2{};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.pNext = &dynamicRenderingFeatures;
+    vkGetPhysicalDeviceFeatures2(device.get(), &features2);
+    if (!dynamicRenderingFeatures.dynamicRendering || !synchronization2Features.synchronization2) return 0;
 
     // Check swap chain support
     if (!platform->isHeadless()) {

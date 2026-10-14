@@ -130,17 +130,17 @@ size_t Engine::stage(const void* data, size_t size) {
 void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
     if (pendingBufferTransfers.empty()) return;
 
-    constexpr VkAccessFlags transferAccess = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    constexpr VkAccessFlags2 transferAccess = VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, transferAccess);
+        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, transferAccess);
 
     struct WrittenRange { VkBuffer buffer; size_t begin, end; };
     std::vector<WrittenRange> written;
     auto serializeTransfers = [&] {
         emitMemoryBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, transferAccess);
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, transferAccess);
         written.clear();
     };
 
@@ -171,8 +171,8 @@ void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
     pendingBufferTransfers.clear();
 
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
 }
 
 void Engine::discardBufferTransfers() {
@@ -184,15 +184,22 @@ void Engine::discardBufferTransfers() {
 
 void Engine::emitMemoryBarrier(
     const CommandBuffer& commandBuffer,
-    VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
-    VkPipelineStageFlags dstStage, VkAccessFlags dstAccess
+    VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
+    VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess
 ) const {
-    const VkMemoryBarrier barrier{
-        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+    const VkMemoryBarrier2 barrier{
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .srcStageMask  = srcStage,
         .srcAccessMask = srcAccess,
+        .dstStageMask  = dstStage,
         .dstAccessMask = dstAccess,
     };
-    vkCmdPipelineBarrier(commandBuffer.get(), srcStage, dstStage, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+    const VkDependencyInfo dependency{
+        .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers    = &barrier,
+    };
+    device.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
 }
 
 // ——— Descriptor sets —————————————————————————————————————————————————————————
@@ -600,7 +607,7 @@ void Engine::endRecording(const SubmissionGroupHandle& group) {
     CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
 
     std::vector<const Semaphore*> waitSemaphores;
-    std::vector<VkPipelineStageFlags> waitStages;
+    std::vector<VkPipelineStageFlags2> waitStages;
 
     if (!platform->isHeadless() && compiled.waitsOnImageAvailable) {
         waitSemaphores.push_back(&std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
@@ -608,7 +615,7 @@ void Engine::endRecording(const SubmissionGroupHandle& group) {
     }
     for (const SubmissionGroupHandle& dep : compiled.dependencies) {
         waitSemaphores.push_back(&groupSemaphores[dep.id][currentFrame]);
-        waitStages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        waitStages.push_back(VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
     }
 
     submit(cmd, groupFences[group.id][currentFrame], waitSemaphores, waitStages,
@@ -695,13 +702,13 @@ void Engine::readBuffer(const BufferHandle& handle, void* out, size_t size, size
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
     flushBufferTransfers(commandBuffer);
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
     const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
     vkCmdCopyBuffer(commandBuffer.get(), bufferBindings.at(handle.id), readback.get(), 1, &region);
     emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
     CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
 
     readback.read(device, out, size);
@@ -725,7 +732,7 @@ void Engine::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
         vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
-        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampPool, base);
+        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
     }
     emitBarriers(cmd, passHandle);
     bindDescriptors(cmd, passHandle);
@@ -734,7 +741,7 @@ void Engine::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
     pipeline.dispatch(cmd, x, y);
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
-        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
     }
 }
 
@@ -744,7 +751,7 @@ void Engine::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandl
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
         vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
-        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampPool, base);
+        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
     }
     emitBarriers(cmd, passHandle);
     std::vector<AttachmentInfo> attachments = getColorAttachment(passHandle);
@@ -759,7 +766,7 @@ void Engine::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle)
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
-        vkCmdWriteTimestamp(cmd.get(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
     }
 }
 
@@ -864,9 +871,11 @@ void Engine::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
         auto srcVk = bufferAccessToVk(b.srcAccess);
         auto dstVk = bufferAccessToVk(b.dstAccess);
         VkBuffer buf = bufferBindings.at(b.buffer.id);
-        VkBufferMemoryBarrier barrier{
-            .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        const VkBufferMemoryBarrier2 barrier{
+            .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask        = srcVk.stage,
             .srcAccessMask       = srcVk.access,
+            .dstStageMask        = dstVk.stage,
             .dstAccessMask       = dstVk.access,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -874,8 +883,12 @@ void Engine::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
             .offset              = 0,
             .size                = VK_WHOLE_SIZE,
         };
-        vkCmdPipelineBarrier(commandBuffer.get(), srcVk.stage, dstVk.stage,
-                             0, 0, nullptr, 1, &barrier, 0, nullptr);
+        const VkDependencyInfo dependency{
+            .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers    = &barrier,
+        };
+        device.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
     }
 }
 
@@ -889,7 +902,7 @@ void Engine::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarr
     VulkanImageState src = imageAccessToVk(barrier.srcAccess);
     VulkanImageState dst = imageAccessToVk(barrier.dstAccess);
     ImageBarrier b;
-    b.call(commandBuffer, binding.image,
+    b.call(device, commandBuffer, binding.image,
            src.layout, dst.layout,
            src.access, dst.access,
            src.stage, dst.stage,

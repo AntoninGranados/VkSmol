@@ -70,48 +70,58 @@ QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevic
 
 void Queue::init(const LogicalDevice& device, uint32_t queueFamilyIndex) {
     vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &rawHandle());
+    queueSubmit2 = device.functions().queueSubmit2;
 }
 
 void Queue::submit(
     const std::vector<const CommandBuffer*>& commandBuffers,
     const Fence& fence,
-    const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+    const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags2>& waitStages,
     const std::vector<const Semaphore*>& signalSemaphores
 ) {
-    std::vector<VkSemaphore> waitVkSemaphore, signalVkSemaphore;
-    for (const Semaphore* waitSemaphore: waitSemaphores)
-        waitVkSemaphore.emplace_back(waitSemaphore->get());
+    std::vector<VkSemaphoreSubmitInfo> waits, signals;
+    for (size_t i = 0; i < waitSemaphores.size(); ++i)
+        waits.push_back({
+            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = waitSemaphores[i]->get(),
+            .stageMask = waitStages[i],
+        });
     for (const Semaphore* signalSemaphore: signalSemaphores)
-        signalVkSemaphore.emplace_back(signalSemaphore->get());
+        signals.push_back({
+            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = signalSemaphore->get(),
+            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        });
 
-    std::vector<VkCommandBuffer> vkCommandBuffers;
-    for (const CommandBuffer* commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer->get());
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitVkSemaphore.size());
-    submitInfo.pWaitSemaphores = waitVkSemaphore.data();
-    submitInfo.pWaitDstStageMask = waitStages.data();
-    submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
-    submitInfo.pCommandBuffers = vkCommandBuffers.data();
-    submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalVkSemaphore.size());
-    submitInfo.pSignalSemaphores = signalVkSemaphore.data();
-
-    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, fence.get()), "Failed to submit queue");
+    submit(commandBuffers, fence.get(), waits, signals);
 }
 
 void Queue::submit(const std::vector<const CommandBuffer*>& commandBuffers) {
-    std::vector<VkCommandBuffer> vkCommandBuffers;
+    submit(commandBuffers, VK_NULL_HANDLE, {}, {});
+}
+
+void Queue::submit(
+    const std::vector<const CommandBuffer*>& commandBuffers, VkFence fence,
+    const std::vector<VkSemaphoreSubmitInfo>& waits, const std::vector<VkSemaphoreSubmitInfo>& signals
+) {
+    std::vector<VkCommandBufferSubmitInfo> commandBufferInfos;
     for (const CommandBuffer* commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer->get());
+        commandBufferInfos.push_back({
+            .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = commandBuffer->get(),
+        });
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
-    submitInfo.pCommandBuffers = vkCommandBuffers.data();
+    const VkSubmitInfo2 submitInfo{
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount   = static_cast<uint32_t>(waits.size()),
+        .pWaitSemaphoreInfos      = waits.data(),
+        .commandBufferInfoCount   = static_cast<uint32_t>(commandBufferInfos.size()),
+        .pCommandBufferInfos      = commandBufferInfos.data(),
+        .signalSemaphoreInfoCount = static_cast<uint32_t>(signals.size()),
+        .pSignalSemaphoreInfos    = signals.data(),
+    };
 
-    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
+    vkCheck(queueSubmit2(rawHandle(), 1, &submitInfo, fence), "Failed to submit queue");
 }
 
 bool Queue::present(

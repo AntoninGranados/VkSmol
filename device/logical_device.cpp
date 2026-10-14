@@ -1,6 +1,8 @@
 #include "logical_device.hpp"
 
+#include <format>
 #include <set>
+#include <stdexcept>
 
 #include "./queue.hpp"
 #include "./physical_device.hpp"
@@ -39,6 +41,11 @@ void LogicalDevice::init(
     dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamicRenderingFeature.dynamicRendering = VK_TRUE;
 
+    VkPhysicalDeviceSynchronization2Features synchronization2Feature{};
+    synchronization2Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    synchronization2Feature.synchronization2 = VK_TRUE;
+    dynamicRenderingFeature.pNext = &synchronization2Feature;
+
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pNext = &dynamicRenderingFeature;
@@ -55,10 +62,29 @@ void LogicalDevice::init(
     #endif
 
     vkCheck(vkCreateDevice(physicalDevice.get(), &createInfo, nullptr, &rawHandle()), "Failed to create logical device");
+    loadFunctions();
+}
+
+template <typename T>
+static T loadFunction(VkDevice device, const char* name) {
+    T function = reinterpret_cast<T>(vkGetDeviceProcAddr(device, name));
+    if (!function) throw std::runtime_error(std::format("Missing device function {}", name));
+    return function;
+}
+
+void LogicalDevice::loadFunctions() {
+    deviceFunctions = {
+        .cmdBeginRendering   = loadFunction<PFN_vkCmdBeginRenderingKHR>(rawHandle(), "vkCmdBeginRenderingKHR"),
+        .cmdEndRendering     = loadFunction<PFN_vkCmdEndRenderingKHR>(rawHandle(), "vkCmdEndRenderingKHR"),
+        .cmdPipelineBarrier2 = loadFunction<PFN_vkCmdPipelineBarrier2KHR>(rawHandle(), "vkCmdPipelineBarrier2KHR"),
+        .cmdWriteTimestamp2  = loadFunction<PFN_vkCmdWriteTimestamp2KHR>(rawHandle(), "vkCmdWriteTimestamp2KHR"),
+        .queueSubmit2        = loadFunction<PFN_vkQueueSubmit2KHR>(rawHandle(), "vkQueueSubmit2KHR"),
+    };
 }
 
 void LogicalDevice::destroy() {
     vkDestroyDevice(rawHandle(), nullptr);
+    deviceFunctions = {};
 }
 
 void LogicalDevice::waitIdle() const {
