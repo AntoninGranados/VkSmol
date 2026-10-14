@@ -18,6 +18,8 @@ Engine::Engine(const std::string& appName, uint32_t appVersion, std::optional<Wi
     if (!window) return;
 
     swapchain.emplace(device, window->getExtent());
+    swapchainImage = importImage("Swapchain", VK_NULL_HANDLE, VK_NULL_HANDLE, swapchain->getImageFormat(),
+                                 swapchain->getExtent().width, swapchain->getExtent().height);
     imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
     for (Semaphore& semaphore : imageAvailableSemaphores)
         semaphore.init(logicalDevice);
@@ -28,11 +30,10 @@ Engine::~Engine() {
     device.waitIdle();
 
     for (PersistentImage& image : images) {
-        device.destroySampler(image.sampler);
-        device.destroyImageView(image.view);
-        device.destroyImage(image.image);
+        releaseImage(image);
+        device.destroySampler(image.ownedSampler);
     }
-    for (PersistentBuffer& buffer : buffers) device.destroyBuffer(buffer.buffer);
+    for (PersistentBuffer& buffer : buffers) releaseBuffer(buffer);
 
     if (window) {
         for (Semaphore& semaphore : imageAvailableSemaphores)
@@ -41,43 +42,57 @@ Engine::~Engine() {
     }
 }
 
-ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height) {
-    constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    Image image = device.createImage(width, height, format, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, name);
-    ImageView view = device.createImageView(image, name + "View");
-    Sampler sampler = device.createSampler(name + "Sampler");
+namespace {
 
-    PersistentImage entry = {
+constexpr VkBufferUsageFlags kBufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+    | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+constexpr size_t kStagingAlignment = 16;
+
+VkImageUsageFlags supportedImageUsage(const PhysicalDevice& physicalDevice, VkFormat format) {
+    VkFormatProperties properties;
+    vkGetPhysicalDeviceFormatProperties(physicalDevice.get(), format, &properties);
+    const VkFormatFeatureFlags features = properties.optimalTilingFeatures;
+
+    VkImageUsageFlags usage = 0;
+    if (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)    usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)    usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    if (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (features & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)     usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    if (features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT)     usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return usage;
+}
+
+size_t alignStaging(size_t offset) {
+    return (offset + kStagingAlignment - 1) & ~(kStagingAlignment - 1);
+}
+
+}
+
+// ——— Images ——————————————————————————————————————————————————————————————————
+
+ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height) {
+    PersistentImage image = { .name = std::move(name), .format = format, .width = width, .height = height };
+    allocateImage(image);
+    return insertImage(std::move(image));
+}
+
+ImageHandle Engine::importImage(std::string name, VkImage handle, VkImageView view, VkFormat format, uint32_t width, uint32_t height,
+                                ImageAccessInfo currentAccess) {
+    PersistentImage image = {
         .name       = std::move(name),
         .format     = format,
         .width      = width,
         .height     = height,
-        .image      = std::move(image),
-        .view       = std::move(view),
-        .sampler    = std::move(sampler),
-        .lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None },
+        .image      = handle,
+        .view       = view,
+        .lastAccess = currentAccess,
+        .imported   = true,
     };
-
-    if (freeImages.empty()) {
-        images.push_back(std::move(entry));
-        return { .id = static_cast<uint32_t>(images.size() - 1), .persistent = true };
-    }
-    const uint32_t id = freeImages.back();
-    freeImages.pop_back();
-    images[id] = std::move(entry);
-    return { .id = id, .persistent = true };
-}
-
-void Engine::destroyImage(ImageHandle handle) {
-    assert(handle.persistent);
-    PersistentImage& image = images[handle.id];
-    assert(image.image.get());
-    device.destroySampler(image.sampler);
-    device.destroyImageView(image.view);
-    device.destroyImage(image.image);
-    image = {};
-    freeImages.push_back(handle.id);
+    image.ownedSampler = device.createSampler(image.name + "Sampler");
+    image.sampler      = image.ownedSampler.get();
+    return insertImage(std::move(image));
 }
 
 ImageHandle Engine::loadImage(const std::string& path) {
@@ -91,26 +106,85 @@ ImageHandle Engine::loadImage(const std::string& path) {
     return handle;
 }
 
-void Engine::writeImage(ImageHandle handle, const void* data, size_t size) {
-    assert(handle.persistent);
+void Engine::destroyImage(ImageHandle handle) {
     PersistentImage& image = images[handle.id];
+    assert(image.image != VK_NULL_HANDLE);
+    dropPendingWrites(true, handle.id);
+    releaseImage(image);
+    device.destroySampler(image.ownedSampler);
+    image = {};
+    freeImages.push_back(handle.id);
+}
 
-    Buffer staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, BufferAllocMapped, const_cast<void*>(data), image.name + "Staging");
-    device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
-        transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferDst, .access = AccessType::Write });
-        image.image.fillFromBuffer(logicalDevice, commandBuffer, staging);
-    });
-    device.destroyBuffer(staging);
+void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
+    PersistentImage& image = images[handle.id];
+    if (image.imported)
+        throw std::runtime_error(std::format("Cannot resize the image [{}] as it is imported", image.name));
+    if (image.width == width && image.height == height) return;
+
+    dropPendingWrites(true, handle.id);
+    releaseImage(image);
+    image.width  = width;
+    image.height = height;
+    allocateImage(image);
+}
+
+void Engine::swapImages(ImageHandle a, ImageHandle b) {
+    PersistentImage& first  = images[a.id];
+    PersistentImage& second = images[b.id];
+    std::swap(first.name, second.name);
+    std::swap(first, second);
+
+    for (PendingWrite& write : pendingWrites) {
+        if (!write.image) continue;
+        if (write.id == a.id) write.id = b.id;
+        else if (write.id == b.id) write.id = a.id;
+    }
+}
+
+const std::string& Engine::getImageName(ImageHandle handle) const {
+    return images[handle.id].name;
+}
+
+VkExtent2D Engine::getImageExtent(ImageHandle handle) const {
+    return { images[handle.id].width, images[handle.id].height };
+}
+
+VkFormat Engine::getImageFormat(ImageHandle handle) const {
+    return images[handle.id].format;
+}
+
+VkImage Engine::getImage(ImageHandle handle) const {
+    return images[handle.id].image;
+}
+
+VkImageView Engine::getImageView(ImageHandle handle) const {
+    return images[handle.id].view;
+}
+
+VkSampler Engine::getSampler(ImageHandle handle) const {
+    return images[handle.id].sampler;
+}
+
+void Engine::writeImage(ImageHandle handle, const void* data, size_t size) {
+    if (size == 0) return;
+    const std::byte* bytes = static_cast<const std::byte*>(data);
+    pendingWrites.push_back({ .image = true, .id = handle.id, .offset = 0, .data = std::vector<std::byte>(bytes, bytes + size) });
 }
 
 void Engine::readImage(ImageHandle handle, void* out, size_t size) {
-    assert(handle.persistent);
+    if (size == 0) return;
     PersistentImage& image = images[handle.id];
 
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, image.name + "Readback");
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
+        flushWrites(commandBuffer);
         transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferSrc, .access = AccessType::Read });
-        image.image.copyToBuffer(commandBuffer, readback);
+        const VkBufferImageCopy region{
+            .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+            .imageExtent      = { image.width, image.height, 1 },
+        };
+        vkCmdCopyImageToBuffer(commandBuffer.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.get(), 1, &region);
         device.emitMemoryBarrier(commandBuffer,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
             VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
@@ -119,65 +193,77 @@ void Engine::readImage(ImageHandle handle, void* out, size_t size) {
     device.destroyBuffer(readback);
 }
 
-VkExtent2D Engine::getImageExtent(ImageHandle image) const {
-    assert(image.persistent);
-    return { images[image.id].width, images[image.id].height };
-}
+// ——— Buffers —————————————————————————————————————————————————————————————————
 
 BufferHandle Engine::createBuffer(std::string name, size_t size, const void* initialData) {
-    constexpr VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
-        | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    Buffer buffer = device.createBuffer(usage, size, 0, nullptr, name);
-    PersistentBuffer entry = { .name = std::move(name), .size = size, .buffer = std::move(buffer) };
-
-    uint32_t id;
-    if (freeBuffers.empty()) {
-        id = static_cast<uint32_t>(buffers.size());
-        buffers.push_back(std::move(entry));
-    } else {
-        id = freeBuffers.back();
-        freeBuffers.pop_back();
-        buffers[id] = std::move(entry);
-    }
-
-    const BufferHandle handle = { .id = id, .persistent = true };
+    PersistentBuffer buffer = { .name = std::move(name), .size = size };
+    allocateBuffer(buffer);
+    const BufferHandle handle = insertBuffer(std::move(buffer));
     if (initialData) writeBuffer(handle, initialData, size);
     return handle;
 }
 
+BufferHandle Engine::importBuffer(std::string name, VkBuffer handle, size_t size) {
+    return insertBuffer({ .name = std::move(name), .size = size, .buffer = handle, .imported = true });
+}
+
 void Engine::destroyBuffer(BufferHandle handle) {
-    assert(handle.persistent);
     PersistentBuffer& buffer = buffers[handle.id];
-    assert(buffer.buffer.get());
-    device.destroyBuffer(buffer.buffer);
+    assert(buffer.buffer != VK_NULL_HANDLE);
+    dropPendingWrites(false, handle.id);
+    releaseBuffer(buffer);
     buffer = {};
     freeBuffers.push_back(handle.id);
 }
 
+void Engine::resizeBuffer(BufferHandle handle, size_t size) {
+    PersistentBuffer& buffer = buffers[handle.id];
+    if (buffer.imported)
+        throw std::runtime_error(std::format("Cannot resize the buffer [{}] as it is imported", buffer.name));
+    if (buffer.size == size) return;
+
+    dropPendingWrites(false, handle.id);
+    releaseBuffer(buffer);
+    buffer.size = size;
+    allocateBuffer(buffer);
+}
+
+void Engine::swapBuffers(BufferHandle a, BufferHandle b) {
+    PersistentBuffer& first  = buffers[a.id];
+    PersistentBuffer& second = buffers[b.id];
+    std::swap(first.name, second.name);
+    std::swap(first, second);
+
+    for (PendingWrite& write : pendingWrites) {
+        if (write.image) continue;
+        if (write.id == a.id) write.id = b.id;
+        else if (write.id == b.id) write.id = a.id;
+    }
+}
+
+const std::string& Engine::getBufferName(BufferHandle handle) const {
+    return buffers[handle.id].name;
+}
+
 size_t Engine::getBufferSize(BufferHandle handle) const {
-    assert(handle.persistent);
     return buffers[handle.id].size;
 }
 
+VkBuffer Engine::getBuffer(BufferHandle handle) const {
+    return buffers[handle.id].buffer;
+}
+
 void Engine::writeBuffer(BufferHandle handle, const void* data, size_t size, size_t offset) {
-    assert(handle.persistent);
     if (size == 0) return;
-    PersistentBuffer& buffer = buffers[handle.id];
+    const PersistentBuffer& buffer = buffers[handle.id];
     if (offset + size > buffer.size)
         throw std::runtime_error(std::format("Writing {} bytes at offset {} overflows the buffer [{}] of {} bytes", size, offset, buffer.name, buffer.size));
 
-    Buffer staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, BufferAllocMapped, const_cast<void*>(data), buffer.name + "Staging");
-    device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
-        transitionBuffer(commandBuffer, buffer, { .usage = BufferUsageType::TransferDst, .access = AccessType::Write });
-        const VkBufferCopy region{ .srcOffset = 0, .dstOffset = offset, .size = size };
-        vkCmdCopyBuffer(commandBuffer.get(), staging.get(), buffer.buffer.get(), 1, &region);
-    });
-    device.destroyBuffer(staging);
+    const std::byte* bytes = static_cast<const std::byte*>(data);
+    pendingWrites.push_back({ .image = false, .id = handle.id, .offset = offset, .data = std::vector<std::byte>(bytes, bytes + size) });
 }
 
 void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offset) {
-    assert(handle.persistent);
     if (size == 0) return;
     PersistentBuffer& buffer = buffers[handle.id];
     if (offset + size > buffer.size)
@@ -185,9 +271,10 @@ void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offs
 
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, buffer.name + "Readback");
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
+        flushWrites(commandBuffer);
         transitionBuffer(commandBuffer, buffer, { .usage = BufferUsageType::TransferSrc, .access = AccessType::Read });
         const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
-        vkCmdCopyBuffer(commandBuffer.get(), buffer.buffer.get(), readback.get(), 1, &region);
+        vkCmdCopyBuffer(commandBuffer.get(), buffer.buffer, readback.get(), 1, &region);
         device.emitMemoryBarrier(commandBuffer,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
             VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
@@ -196,12 +283,111 @@ void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offs
     device.destroyBuffer(readback);
 }
 
+// ——— Transfers ———————————————————————————————————————————————————————————————
+
+void Engine::flush() {
+    if (pendingWrites.empty()) return;
+    device.immediateSubmit([&](const CommandBuffer& commandBuffer) { flushWrites(commandBuffer); });
+}
+
+void Engine::flushWrites(const CommandBuffer& commandBuffer) {
+    if (pendingWrites.empty()) return;
+
+    size_t stagingSize = 0;
+    for (const PendingWrite& write : pendingWrites) stagingSize = alignStaging(stagingSize) + write.data.size();
+    Buffer staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped, nullptr, "EngineStaging");
+
+    size_t stagingOffset = 0;
+    for (const PendingWrite& write : pendingWrites) {
+        stagingOffset = alignStaging(stagingOffset);
+        staging.write(logicalDevice, write.data.data(), write.data.size(), stagingOffset);
+
+        if (write.image) {
+            PersistentImage& image = images[write.id];
+            transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferDst, .access = AccessType::Write });
+            const VkBufferImageCopy region{
+                .bufferOffset     = stagingOffset,
+                .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+                .imageExtent      = { image.width, image.height, 1 },
+            };
+            vkCmdCopyBufferToImage(commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        } else {
+            PersistentBuffer& buffer = buffers[write.id];
+            transitionBuffer(commandBuffer, buffer, { .usage = BufferUsageType::TransferDst, .access = AccessType::Write });
+            const VkBufferCopy region{ .srcOffset = stagingOffset, .dstOffset = write.offset, .size = write.data.size() };
+            vkCmdCopyBuffer(commandBuffer.get(), staging.get(), buffer.buffer, 1, &region);
+        }
+        stagingOffset += write.data.size();
+    }
+
+    pendingWrites.clear();
+    device.destroyBuffer(staging);
+}
+
+void Engine::dropPendingWrites(bool image, uint32_t id) {
+    std::erase_if(pendingWrites, [&](const PendingWrite& write) { return write.image == image && write.id == id; });
+}
+
+// ——— Storage —————————————————————————————————————————————————————————————————
+
+ImageHandle Engine::insertImage(PersistentImage&& image) {
+    if (freeImages.empty()) {
+        images.push_back(std::move(image));
+        return { .id = static_cast<uint32_t>(images.size() - 1) };
+    }
+    const uint32_t id = freeImages.back();
+    freeImages.pop_back();
+    images[id] = std::move(image);
+    return { .id = id };
+}
+
+BufferHandle Engine::insertBuffer(PersistentBuffer&& buffer) {
+    if (freeBuffers.empty()) {
+        buffers.push_back(std::move(buffer));
+        return { .id = static_cast<uint32_t>(buffers.size() - 1) };
+    }
+    const uint32_t id = freeBuffers.back();
+    freeBuffers.pop_back();
+    buffers[id] = std::move(buffer);
+    return { .id = id };
+}
+
+void Engine::allocateImage(PersistentImage& image) {
+    const VkImageUsageFlags usage = supportedImageUsage(device.getPhysicalDevice(), image.format);
+    image.ownedImage = device.createImage(image.width, image.height, image.format, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image.name);
+    image.ownedView  = device.createImageView(image.ownedImage, image.name + "View");
+    if (!image.ownedSampler.isValid()) image.ownedSampler = device.createSampler(image.name + "Sampler");
+
+    image.image      = image.ownedImage.get();
+    image.view       = image.ownedView.get();
+    image.sampler    = image.ownedSampler.get();
+    image.lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None };
+}
+
+void Engine::releaseImage(PersistentImage& image) {
+    device.destroyImageView(image.ownedView);
+    device.destroyImage(image.ownedImage);
+    image.image = VK_NULL_HANDLE;
+    image.view  = VK_NULL_HANDLE;
+}
+
+void Engine::allocateBuffer(PersistentBuffer& buffer) {
+    buffer.ownedBuffer = device.createBuffer(kBufferUsage, buffer.size, 0, nullptr, buffer.name);
+    buffer.buffer      = buffer.ownedBuffer.get();
+    buffer.lastAccess  = std::nullopt;
+}
+
+void Engine::releaseBuffer(PersistentBuffer& buffer) {
+    device.destroyBuffer(buffer.ownedBuffer);
+    buffer.buffer = VK_NULL_HANDLE;
+}
+
 void Engine::transitionImage(const CommandBuffer& commandBuffer, PersistentImage& image, ImageAccessInfo access) {
     const VulkanImageState src = imageAccessToVk(image.lastAccess);
     const VulkanImageState dst = imageAccessToVk(access);
     ImageBarrier barrier;
     barrier.call(
-        logicalDevice, commandBuffer, image.image.get(),
+        logicalDevice, commandBuffer, image.image,
         src.layout, dst.layout,
         src.access, dst.access,
         src.stage, dst.stage,
@@ -223,7 +409,7 @@ void Engine::transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuff
         .dstAccessMask       = dst.access,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .buffer              = buffer.buffer.get(),
+        .buffer              = buffer.buffer,
         .offset              = 0,
         .size                = VK_WHOLE_SIZE,
     };
@@ -257,7 +443,17 @@ void Engine::unregisterFence(const Fence& fence) {
 std::optional<uint32_t> Engine::acquireImage() {
     assert(swapchain);
     const std::optional<uint32_t> imageIndex = swapchain->acquire(imageAvailableSemaphores[currentFrame]);
-    if (!imageIndex) recreateSwapchain();
+    if (!imageIndex) {
+        recreateSwapchain();
+        return imageIndex;
+    }
+
+    PersistentImage& image = images[swapchainImage.id];
+    image.image      = swapchain->getImage(*imageIndex).get();
+    image.view       = swapchain->getImageView(*imageIndex).get();
+    image.width      = swapchain->getExtent().width;
+    image.height     = swapchain->getExtent().height;
+    image.lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None };
     return imageIndex;
 }
 

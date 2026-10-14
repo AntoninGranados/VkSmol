@@ -6,6 +6,7 @@
 
 #include "compiled_resource.hpp"
 #include "builder_resource.hpp"
+#include "../engine.hpp"
 
 namespace VkSmol {
 
@@ -268,21 +269,6 @@ std::string passTypeToStr(PassType type) {
     return "";
 }
 
-std::string imageOwnershipToStr(ImageOwnership o) {
-    switch (o) {
-        case ImageOwnership::Transient: return "Transient";
-        case ImageOwnership::Managed:   return "Managed";
-        case ImageOwnership::Imported:  return "Imported";
-    }
-    return "";
-}
-
-std::string formatSize(size_t bytes) {
-    if (bytes < 1024)         return std::format("{} B", bytes);
-    if (bytes < 1024 * 1024)  return std::format("{:.1f} KB", bytes / 1024.0);
-    return                           std::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
-}
-
 std::string descriptorTypeToStr(VkDescriptorType type) {
     switch (type) {
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:         return "Uniform";
@@ -295,46 +281,15 @@ std::string descriptorTypeToStr(VkDescriptorType type) {
 
 } // namespace
 
-std::string dumpGraph(const CompiledRenderGraph& compiled) {
-    std::string out;
-    const auto& images  = compiled.images;
-    const auto& buffers = compiled.buffers;
+std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine) {
+    const auto imageName  = [&](uint32_t id) { return engine.getImageName({ .id = id }); };
+    const auto bufferName = [&](uint32_t id) { return engine.getBufferName({ .id = id }); };
 
-    // ——— Images ——————————————————————————————————————————————————————————————
-    out += std::format("Images ({}):\n", images.size());
-    for (size_t i = 0; i < images.size(); ++i) {
-        const ImageInfo& img = images[i];
-        out += std::format("  [{:2}] {:40}  {:9}  {}x{}  {}\n",
-            i, '"' + img.name + '"',
-            imageOwnershipToStr(img.ownership),
-            img.width, img.height,
-            imageFormatToStr(img.format));
-        if (img.initialAccess)
-            out += std::format("        initial: {}\n", imageAccessInfoToStr(*img.initialAccess));
-        if (img.finalAccess)
-            out += std::format("        final:   {}\n", imageAccessInfoToStr(*img.finalAccess));
-    }
-    out += '\n';
-
-    // ——— Buffers —————————————————————————————————————————————————————————————
-    out += std::format("Buffers ({}):\n", buffers.size());
-    for (size_t i = 0; i < buffers.size(); ++i) {
-        const BufferInfo& buf = buffers[i];
-        std::string flags;
-        if (buf.ownership == BufferOwnership::Imported) flags += "  imported";
-        if (!buf.initialData.empty()) flags += "  static";
-        out += std::format("  [{:2}] {:40}  {}{}\n",
-            i, '"' + buf.name + '"', formatSize(buf.size), flags);
-    }
-    out += '\n';
-
-    // ——— Passes ——————————————————————————————————————————————————————————————
-    out += std::format("Passes ({}):\n", compiled.compiledPasses.size());
+    std::string out = std::format("Passes ({}):\n", compiled.compiledPasses.size());
     for (const CompiledPass& pass : compiled.compiledPasses) {
         out += std::format("  [{}] {}  {}\n",
             pass.pass.id, pass.name, passTypeToStr(pass.type));
 
-        // Descriptor bindings sorted by slot
         if (!pass.descriptorBindings.empty()) {
             auto decls = pass.descriptorBindings;
             std::sort(decls.begin(), decls.end(),
@@ -343,9 +298,7 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
                 });
             out += "      Bindings:\n";
             for (const DescriptorBindingDecl& d : decls) {
-                const std::string& name = d.isImage
-                    ? images[d.handleId].name
-                    : buffers[d.handleId].name;
+                const std::string name = d.isImage ? imageName(d.handleId) : bufferName(d.handleId);
                 out += std::format("        {}.{:<2}  {:6}  {:36}  {}\n",
                     d.set, d.binding, d.isImage ? "image" : "buffer",
                     '"' + name + '"',
@@ -353,25 +306,23 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
             }
         }
 
-        // Fixed-function and attachment accesses
         for (const BufferAccess& a : pass.bufferAccesses) {
             if (a.info.usage == BufferUsageType::Vertex)
-                out += std::format("      Vertex:     \"{}\"\n", buffers[a.buffer.id].name);
+                out += std::format("      Vertex:     \"{}\"\n", bufferName(a.buffer.id));
             else if (a.info.usage == BufferUsageType::Index)
-                out += std::format("      Index:      \"{}\"\n", buffers[a.buffer.id].name);
+                out += std::format("      Index:      \"{}\"\n", bufferName(a.buffer.id));
         }
         for (const ImageAccess& a : pass.imageAccesses) {
             const ImageUsageType u = a.info.usage;
             if (u == ImageUsageType::ColorAttachment || u == ImageUsageType::DepthAttachment)
                 out += std::format("      Attachment: \"{}\"  {}  load:{}\n",
-                    images[a.image.id].name,
+                    imageName(a.image.id),
                     imageUsageToStr(u),
                     attachmentLoadToStr(a.info.attachmentLoad));
             else if (u == ImageUsageType::Present || u == ImageUsageType::TransferSrc || u == ImageUsageType::TransferDst)
-                out += std::format("      {}:  \"{}\"\n", imageUsageToStr(u), images[a.image.id].name);
+                out += std::format("      {}:  \"{}\"\n", imageUsageToStr(u), imageName(a.image.id));
         }
 
-        // Pipeline
         if (pass.pipelineId) {
             if (pass.type == PassType::Compute)
                 out += std::format("      Pipeline:   {}\n", compiled.computePipelines[*pass.pipelineId].name);
@@ -379,32 +330,7 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
                 out += std::format("      Pipeline:   {}\n", compiled.graphicsPipelines[*pass.pipelineId].name);
         }
 
-        // Barriers before this pass
-        if (!pass.barriersBefore.empty() || !pass.bufferBarriersBefore.empty()) {
-            out += "      Barriers:\n";
-            for (const PassImageBarrier& b : pass.barriersBefore)
-                out += std::format("        image  \"{}\"  {} -> {}\n",
-                    images[b.image.id].name,
-                    imageAccessInfoToStr(b.srcAccess),
-                    imageAccessInfoToStr(b.dstAccess));
-            for (const PassBufferBarrier& b : pass.bufferBarriersBefore)
-                out += std::format("        buffer \"{}\"  {}/{} -> {}/{}\n",
-                    buffers[b.buffer.id].name,
-                    bufferUsageToStr(b.srcAccess.usage), accessTypeToStr(b.srcAccess.access),
-                    bufferUsageToStr(b.dstAccess.usage), accessTypeToStr(b.dstAccess.access));
-        }
-
         out += '\n';
-    }
-
-    // ——— Output barriers —————————————————————————————————————————————————————
-    if (!compiled.outputBarriers.empty()) {
-        out += "Output Barriers:\n";
-        for (const PassImageBarrier& b : compiled.outputBarriers)
-            out += std::format("  image \"{}\"  {} -> {}\n",
-                images[b.image.id].name,
-                imageAccessInfoToStr(b.srcAccess),
-                imageAccessInfoToStr(b.dstAccess));
     }
 
     return out;

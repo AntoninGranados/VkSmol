@@ -3,14 +3,10 @@
 #include <vulkan/vulkan.h>
 
 #include <array>
-#include <cstddef>
+#include <cstdint>
 #include <optional>
-#include <ranges>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
-#include <variant>
 #include <vector>
 
 #include "builder_resource.hpp"
@@ -22,10 +18,6 @@
 #include "pass/transfer_pass_builder.hpp"
 
 #include "../command/command_buffer.hpp"
-#include "../image/image.hpp"
-#include "../image/image_view.hpp"
-#include "../image/sampler.hpp"
-#include "../memory/buffer.hpp"
 #include "../render/dynamic_renderer.hpp"
 #include "../render/descriptor/descriptor_set_layout.hpp"
 #include "../render/descriptor/descriptor_set_group.hpp"
@@ -43,13 +35,6 @@ class Engine;
 class Device;
 class LogicalDevice;
 
-struct ImageBinding {
-    VkImage     image;
-    VkImageView view;
-};
-
-// TODO: allow the use of a single buffer for better caching and use the offset parameters
-
 class RenderGraph {
 public:
     explicit RenderGraph(Engine& engine);
@@ -60,27 +45,8 @@ public:
     RenderGraph(RenderGraph&&) = delete;
     RenderGraph& operator=(RenderGraph&&) = delete;
 
-    ImageHandle createImage(
-        std::string name, VkFormat format,
-        uint32_t width, uint32_t height, uint32_t depth = 1,
-        ImageOwnership ownership = ImageOwnership::Transient,
-        VkImageUsageFlags extraUsageFlags = 0,
-        std::optional<ImageAccessInfo> initialAccess = {},
-        std::optional<ImageAccessInfo> finalAccess = {}
-    );
-    BufferHandle createBuffer(
-        std::string name, size_t size,
-        BufferOwnership ownership = BufferOwnership::Managed,
-        VkBufferUsageFlags extraUsageFlags = 0,
-        const void* initialData = nullptr
-    );
-
-    ImageHandle  importSwapchain();
-    ImageHandle  importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess);
-    BufferHandle importBuffer(std::string name, size_t size);
-    void bindImage(ImageHandle handle, VkImage image, VkImageView view, VkSampler sampler = VK_NULL_HANDLE);
-    void bindBuffer(BufferHandle handle, VkBuffer buffer);
-    void swapBindings(ImageHandle a, ImageHandle b);
+    ImageHandle  createImage(std::string name, VkFormat format, uint32_t width, uint32_t height);
+    BufferHandle createBuffer(std::string name, size_t size);
 
     ComputePassBuilder  addComputePass(std::string name);
     GraphicsPassBuilder addGraphicsPass(std::string name);
@@ -89,31 +55,6 @@ public:
 
     [[nodiscard]] std::vector<std::string> bake(std::string pipelineCachePath = {});
     void execute();
-
-    void resizeImage(ImageHandle handle, uint32_t width, uint32_t height);
-    bool resizeBuffer(BufferHandle handle, size_t newSize);
-
-    void writeBuffer(BufferHandle handle, const void* data, size_t size, size_t offset = 0);
-    template <typename T>
-        requires(std::is_trivially_copyable_v<T> && !std::ranges::range<T>)
-    void writeBuffer(BufferHandle handle, const T& value, size_t offset = 0) {
-        writeBuffer(handle, &value, sizeof(T), offset);
-    }
-    template <std::ranges::contiguous_range R>
-    void writeBuffer(BufferHandle handle, const R& values, size_t offset = 0) {
-        writeBuffer(handle, std::ranges::data(values), std::ranges::size(values) * sizeof(std::ranges::range_value_t<R>), offset);
-    }
-
-    void readBuffer(BufferHandle handle, void* out, size_t size, size_t offset = 0);
-    template <std::ranges::contiguous_range R>
-    void readBuffer(BufferHandle handle, R& out, size_t offset = 0) {
-        readBuffer(handle, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>), offset);
-    }
-
-    VkImage     getImage(ImageHandle handle) const;
-    VkImageView getView(ImageHandle handle) const;
-    VkSampler   getSampler(ImageHandle handle) const;
-    VkBuffer    getBuffer(BufferHandle handle) const;
 
     double getTimestampMs(const std::string& passName) const;
     std::string dump() const;
@@ -127,27 +68,9 @@ private:
     CompiledRenderGraph graph;
     bool baked = false;
 
-    struct PersistentImageImport {
-        uint32_t        localId;
-        uint32_t        persistentIndex;
-        uint32_t        firstPass = InvalidHandle;
-        ImageAccessInfo firstAccess;
-        ImageAccessInfo lastAccess;
-    };
-    struct PersistentBufferImport {
-        uint32_t         localId;
-        uint32_t         persistentIndex;
-        uint32_t         firstPass = InvalidHandle;
-        BufferAccessInfo firstAccess;
-        BufferAccessInfo lastAccess;
-    };
-    std::vector<PersistentImageImport>  persistentImages;
-    std::vector<PersistentBufferImport> persistentBuffers;
+    std::vector<ImageHandle>  ownedImages;
+    std::vector<BufferHandle> ownedBuffers;
 
-    std::unordered_map<uint32_t, VkSampler> externalSamplers;
-    Sampler defaultSampler;
-
-    std::optional<ImageHandle> swapchainImage;
     std::optional<ImageHandle> presentedImage;
     VkPipelineStageFlags2 acquireWaitStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
@@ -164,32 +87,6 @@ private:
     float                timestampPeriod  = 1.0f;
     std::vector<double>  cachedTimestamps;
 
-    std::unordered_map<uint32_t, ImageBinding> bindings;
-    std::unordered_map<uint32_t, Image>        ownedImages;
-    std::unordered_map<uint32_t, ImageView>    ownedViews;
-    std::unordered_map<uint32_t, Sampler>      ownedSamplers;
-
-    std::unordered_map<uint32_t, VkBuffer> bufferBindings;
-    std::unordered_map<uint32_t, Buffer>   ownedBuffers;
-
-    struct PendingBufferWrite {
-        VkBuffer dst;
-        size_t offset;
-        std::vector<std::byte> data;
-    };
-    struct PendingBufferReplace {
-        Buffer previous;
-        VkBuffer next;
-        size_t preservedSize;
-    };
-    std::vector<std::variant<PendingBufferWrite, PendingBufferReplace>> pendingBufferTransfers;
-
-    struct StagingArena {
-        Buffer buffer;
-        size_t used = 0;
-    };
-    std::array<StagingArena, MAX_FRAME_IN_FLIGHT> stagingArenas;
-
     std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
     std::unordered_map<uint32_t, uint32_t>         computePushConstantSizes;
@@ -199,37 +96,17 @@ private:
 
     std::unordered_map<uint32_t, std::vector<DescriptorSetLayout>> passDescriptorLayouts;
     std::unordered_map<uint32_t, std::vector<DescriptorSetGroup>>  passDescriptorGroups;
-    std::unordered_set<uint32_t>                                   dirtyDescriptors;
+    std::unordered_map<uint32_t, std::vector<uint64_t>>            writtenDescriptors;
 
-    void importPersistentResources();
     void resolveBindings(std::vector<std::string>& errors);
-    void trackPersistentResources();
-    void emitPersistentBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) const;
-    void updatePersistentStates();
-    const PersistentImageImport* findPersistentImage(uint32_t localId) const;
-    const PersistentBufferImport* findPersistentBuffer(uint32_t localId) const;
-    VkDeviceSize getBufferSize(uint32_t bufferId) const;
-
-    void initImages();
-    void destroyImages();
-    VkImageUsageFlags imageUsageFlags(const CompiledRenderGraph& compiled, uint32_t imageId) const;
-
-    void initBuffers();
-    void destroyBuffers();
-    VkBufferUsageFlags bufferUsageFlags(const CompiledRenderGraph& compiled, uint32_t bufferId) const;
-    void replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve);
-    size_t stage(const void* data, size_t size);
-    void flushBufferTransfers(const CommandBuffer& commandBuffer);
-    void discardBufferTransfers();
 
     void initDescriptorSets();
     void destroyDescriptorSets();
     DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
-    void updateDescriptors(const PassHandle& pass, uint32_t frameIndex);
-    void refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex);
-    void refreshDescriptorsForBuffer(uint32_t bufferId);
+    std::vector<uint64_t> resolveDescriptors(const CompiledPass& pass) const;
+    void updateDescriptors(const CompiledPass& pass, uint32_t frameIndex);
     void bindDescriptors(const CommandBuffer& commandBuffer, const CompiledPass& pass);
 
     std::vector<std::string> initPipelines();
@@ -242,11 +119,8 @@ private:
     void readTimestamps();
 
     void recordPass(const CommandBuffer& commandBuffer, const CompiledPass& pass);
-    void emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) const;
-    void emitOutputBarriers(const CommandBuffer& commandBuffer) const;
-    void emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarrier& barrier) const;
+    void emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass);
     std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass) const;
-    VkExtent2D getImageExtent(uint32_t imageId) const;
 
     friend class PassContext;
 };

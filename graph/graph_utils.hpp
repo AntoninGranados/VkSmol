@@ -18,6 +18,7 @@ struct VulkanImageState;
 struct VulkanBufferState;
 
 struct CompiledRenderGraph;
+class Engine;
 
 std::string accessTypeToStr(AccessType access);
 std::string imageUsageToStr(ImageUsageType usage);
@@ -33,7 +34,7 @@ VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage);
 VkDescriptorType   bufferUsageTypeToDescriptorType(BufferUsageType usage);
 VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
 
-std::string dumpGraph(const CompiledRenderGraph& compiled);
+std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine);
 
 void checkUsageValidForAccess(ImageUsageType usage, AccessType access);
 void checkImageAccessInfoValid(const ImageAccessInfo& info);

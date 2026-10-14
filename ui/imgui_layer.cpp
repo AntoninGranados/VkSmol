@@ -6,7 +6,6 @@
 #include "imgui/imgui_impl_vulkan.h"
 
 #include "../engine.hpp"
-#include "../graph/render_graph.hpp"
 #include "../graph/pass_context.hpp"
 #include "../present/window.hpp"
 
@@ -89,8 +88,8 @@ ImTextureID ImGuiLayer::addTexture(VkSampler sampler, VkImageView view, VkImageL
     return reinterpret_cast<ImTextureID>(ImGui_ImplVulkan_AddTexture(sampler, view, layout));
 }
 
-ImTextureID ImGuiLayer::addTexture(const RenderGraph& graph, ImageHandle image) {
-    return addTexture(graph.getSampler(image), graph.getView(image));
+ImTextureID ImGuiLayer::addTexture(ImageHandle image) {
+    return addTexture(engine.getSampler(image), engine.getImageView(image));
 }
 
 void ImGuiLayer::removeTexture(ImTextureID texture) {

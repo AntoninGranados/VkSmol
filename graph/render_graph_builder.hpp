@@ -19,34 +19,14 @@ struct CompiledRenderGraph;
 
 class RenderGraphBuilder {
 public:
-    // TODO: add support for 'ImageSubresourceRangeInfo'
-
-    ImageHandle createImage(
-        std::string name, VkFormat format,
-        uint32_t width, uint32_t height, uint32_t depth = 1,
-        ImageOwnership ownership = ImageOwnership::Transient,
-        VkImageUsageFlags extraUsageFlags = 0,
-        std::optional<ImageAccessInfo> initialAccess = {},
-        std::optional<ImageAccessInfo> finalAccess = {}
-    );
-
-    BufferHandle createBuffer(
-        std::string name, size_t size,
-        BufferOwnership ownership = BufferOwnership::Managed,
-        VkBufferUsageFlags extraUsageFlags = 0,
-        const void* initialData = nullptr
-    );
-
     GraphicsPassBuilder addGraphicsPass(std::string name);
     ComputePassBuilder  addComputePass(std::string name);
     TransferPassBuilder addTransferPass(std::string name);
     PassHandle          addPresentPass(ImageHandle image);
 
-    const std::vector<PassInfo>&  getPasses()  const { return passes; }
-    const std::vector<ImageInfo>& getImages()  const { return images; }
-    const std::vector<BufferInfo>& getBuffers() const { return buffers; }
+    const std::vector<PassInfo>& getPasses() const { return passes; }
 
-    CompiledRenderGraph compile();
+    CompiledRenderGraph compile() const;
 
 private:
     template <class TPassBuilder, PassType T>
@@ -57,8 +37,6 @@ private:
     }
 
     std::vector<PassInfo>             passes;
-    std::vector<ImageInfo>            images;
-    std::vector<BufferInfo>           buffers;
     std::vector<ComputePipelineInfo>  computePipelines;
     std::vector<GraphicsPipelineInfo> graphicsPipelines;
 

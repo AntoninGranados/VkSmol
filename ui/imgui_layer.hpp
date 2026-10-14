@@ -13,7 +13,6 @@ namespace VkSmol {
 
 class Engine;
 class Window;
-class RenderGraph;
 class PassContext;
 
 class ImGuiLayer {
@@ -30,7 +29,7 @@ public:
     void render(PassContext& context);
 
     ImTextureID addTexture(VkSampler sampler, VkImageView view, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ImTextureID addTexture(const RenderGraph& graph, ImageHandle image);
+    ImTextureID addTexture(ImageHandle image);
     void removeTexture(ImTextureID texture);
 
 private:

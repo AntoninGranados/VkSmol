@@ -14,10 +14,10 @@ class PassBuilder {
 public:
     PassHandle getHandle() const { return handle; }
 
-    Derived& read(std::string name, ImageHandle image)    { return bind(std::move(name), true, image.id, AccessType::Read, image.persistent); }
-    Derived& read(std::string name, BufferHandle buffer)  { return bind(std::move(name), false, buffer.id, AccessType::Read, buffer.persistent); }
-    Derived& write(std::string name, ImageHandle image)   { return bind(std::move(name), true, image.id, AccessType::Write, image.persistent); }
-    Derived& write(std::string name, BufferHandle buffer) { return bind(std::move(name), false, buffer.id, AccessType::Write, buffer.persistent); }
+    Derived& read(std::string name, ImageHandle image)    { return bind(std::move(name), true, image.id, AccessType::Read); }
+    Derived& read(std::string name, BufferHandle buffer)  { return bind(std::move(name), false, buffer.id, AccessType::Read); }
+    Derived& write(std::string name, ImageHandle image)   { return bind(std::move(name), true, image.id, AccessType::Write); }
+    Derived& write(std::string name, BufferHandle buffer) { return bind(std::move(name), false, buffer.id, AccessType::Write); }
 
     Derived& read(ImageHandle image, ImageUsageType usage)    { return access(image, usage, AccessType::Read); }
     Derived& read(BufferHandle buffer, BufferUsageType usage) { return access(buffer, usage, AccessType::Read); }
@@ -46,13 +46,12 @@ protected:
     }
 
 private:
-    Derived& bind(std::string name, bool isImage, uint32_t handleId, AccessType access, bool persistent) {
+    Derived& bind(std::string name, bool isImage, uint32_t handleId, AccessType access) {
         graph->passes[handle.id].namedBindings.push_back({
-            .name       = std::move(name),
-            .isImage    = isImage,
-            .handleId   = handleId,
-            .access     = access,
-            .persistent = persistent,
+            .name     = std::move(name),
+            .isImage  = isImage,
+            .handleId = handleId,
+            .access   = access,
         });
         return static_cast<Derived&>(*this);
     }

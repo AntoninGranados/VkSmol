@@ -20,8 +20,8 @@ namespace VkSmol {
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
 struct PassHandle   { uint32_t id = InvalidHandle; };
-struct ImageHandle  { uint32_t id = InvalidHandle; bool persistent = false; };
-struct BufferHandle { uint32_t id = InvalidHandle; bool persistent = false; };
+struct ImageHandle  { uint32_t id = InvalidHandle; };
+struct BufferHandle { uint32_t id = InvalidHandle; };
 
 class PassContext;
 
@@ -51,12 +51,6 @@ enum class ImageUsageType : uint16_t {
     Present,
     TransferSrc,
     TransferDst,
-};
-
-enum class ImageOwnership : uint16_t {
-    Transient,  // Executor creates it, starts UNDEFINED, first access must be a write
-    Managed,    // Executor creates it, starts in the declared initialAccess layout, can be read first
-    Imported,   // Caller provides the VkImage/VkImageView each frame via bindImage
 };
 
 enum class WriteMode : uint16_t {
@@ -91,24 +85,6 @@ struct ImageAccess {
     ImageAccessInfo info;
 };
 
-struct ImageInfo {
-    std::string name;
-
-    VkFormat format = VK_FORMAT_UNDEFINED;
-    uint32_t width = 1;
-    uint32_t height = 1;
-    uint32_t depth = 1;
-
-    ImageOwnership ownership = ImageOwnership::Transient;
-    std::optional<ImageAccessInfo> initialAccess = {};
-    std::optional<ImageAccessInfo> finalAccess = {};
-
-    // Additional VkImageUsageFlags ORed on top of the flags inferred from
-    // declared pass accesses (e.g. for ping-pong images that need usage flags
-    // their handle never directly declares).
-    VkImageUsageFlags extraUsageFlags = 0;
-};
-
 // ================
 // Buffer
 // ================
@@ -123,11 +99,6 @@ enum class BufferUsageType : uint16_t {
     Indirect,
 };
 
-enum class BufferOwnership : uint16_t {
-    Managed,
-    Imported,  // Caller provides the VkBuffer each frame via bindBuffer
-};
-
 struct BufferAccessInfo {
     BufferUsageType usage = BufferUsageType::Storage;
     AccessType access = AccessType::Read;
@@ -136,16 +107,6 @@ struct BufferAccessInfo {
 struct BufferAccess {
     BufferHandle buffer;
     BufferAccessInfo info;
-};
-
-struct BufferInfo {
-    std::string name;
-    size_t size = 0;
-    BufferOwnership ownership = BufferOwnership::Managed;
-    // Additional VkBufferUsageFlags ORed on top of the flags inferred from declared pass accesses
-    VkBufferUsageFlags extraUsageFlags = 0;
-    // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.
-    std::vector<uint8_t> initialData;
 };
 
 // ================
@@ -193,7 +154,6 @@ struct NamedBinding {
     bool        isImage;
     uint32_t    handleId;
     AccessType  access;
-    bool        persistent = false;
 };
 
 struct PassInfo {
