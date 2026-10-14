@@ -5,6 +5,8 @@
 #include "./descriptor_pool.hpp"
 #include "./descriptor_set.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 
 class DescriptorSetGroup {
@@ -27,3 +29,5 @@ public:
 
     bool isValid() const { return pool.get() != VK_NULL_HANDLE; }
 };
+
+}

@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+namespace VkSmol {
+
 class CommandBuffer;
 
 class ImageBarrier {
@@ -20,3 +22,5 @@ public:
 private:
     VkImageMemoryBarrier barrier;
 };
+
+}

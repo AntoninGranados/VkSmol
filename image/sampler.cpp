@@ -4,6 +4,8 @@
 #include "../device/physical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -38,4 +40,6 @@ void Sampler::destroy(const LogicalDevice& device) {
         vkDestroySampler(device.get(), rawHandle(), nullptr);
     }
     resetHandle();
+}
+
 }

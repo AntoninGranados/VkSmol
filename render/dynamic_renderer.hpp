@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+namespace VkSmol {
+
 class CommandBuffer;
 class Swapchain;
 class LogicalDevice;
@@ -22,3 +24,5 @@ private:
     PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
     PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
 };
+
+}

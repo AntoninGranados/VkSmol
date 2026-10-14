@@ -7,6 +7,8 @@
 
 #include "builder_resource.hpp"
 
+namespace VkSmol {
+
 class GraphicsPassBuilder;
 class ComputePassBuilder;
 class TransferPassBuilder;
@@ -74,3 +76,5 @@ private:
     friend TransferPassBuilder;
     friend PresentPassBuilder;
 };
+
+}

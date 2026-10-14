@@ -2,6 +2,8 @@
 
 #include "../builder_resource.hpp"
 
+namespace VkSmol {
+
 class RenderGraphBuilder;
 
 class PassBuilder {
@@ -18,3 +20,5 @@ protected:
         : handle(handle), graph(graph) {};
     friend RenderGraphBuilder;
 };
+
+}

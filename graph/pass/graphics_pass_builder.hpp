@@ -3,6 +3,8 @@
 #include "../builder_resource.hpp"
 #include "pass_builder.hpp"
 
+namespace VkSmol {
+
 class RenderGraphBuilder;
 
 class GraphicsPassBuilder: public PassBuilder {
@@ -24,3 +26,5 @@ private:
 
     friend class RenderGraphBuilder;
 };
+
+}

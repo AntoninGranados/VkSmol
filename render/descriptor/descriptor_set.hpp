@@ -6,6 +6,8 @@
 
 #include "../../base/tracked_resource.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class Buffer;
 class CommandBuffer;
@@ -38,3 +40,5 @@ private:
     std::vector<std::pair<VkDescriptorImageInfo, uint32_t> > storageImageInfos;
     std::vector<VkWriteDescriptorSet> descriptorWrites;
 };
+
+}

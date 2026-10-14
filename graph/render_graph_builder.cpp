@@ -12,6 +12,8 @@
 #include "pass/present_pass_builder.hpp"
 #include "pass/pass_builder.hpp"
 
+namespace VkSmol {
+
 void PassBuilder::setGroup(SubmissionGroupHandle group) {
     graph->passes[handle.id].group = group;
 }
@@ -408,4 +410,6 @@ CompiledRenderGraph RenderGraphBuilder::compile() {
             compiled.compiledPasses[graphicsPipelines[i].passId].pipelineId = i;
 
     return compiled;
+}
+
 }

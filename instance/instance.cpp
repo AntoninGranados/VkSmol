@@ -5,6 +5,8 @@
 #include "./debug_messenger.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Instance::init(
     VkApplicationInfo appInfo,
     std::vector<const char*> extensions,
@@ -86,4 +88,6 @@ void Instance::checkValidationLayerSupport(std::vector<const char*> validationLa
             throw std::runtime_error(buf);
         }
     }
+}
+
 }

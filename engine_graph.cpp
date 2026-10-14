@@ -15,15 +15,17 @@
 #include "./graph/compiled_resource.hpp"
 #include "./graph/render_graph_builder.hpp"
 
+namespace VkSmol {
+
 // ——— Graph setup —————————————————————————————————————————————————————————————
 
-void VkSmol::setGraph(RenderGraphBuilder& builder) {
+void Engine::setGraph(RenderGraphBuilder& builder) {
     graph = builder.compile();
 }
 
 // ——— Images ——————————————————————————————————————————————————————————————————
 
-void VkSmol::initImages() {
+void Engine::initImages() {
     for (uint32_t id = 0; id < graph.images.size(); ++id) {
         const ImageInfo& info = graph.images[id];
         if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED || ownedImages.contains(id)) continue;
@@ -40,7 +42,7 @@ void VkSmol::initImages() {
     }
 }
 
-void VkSmol::destroyImages() {
+void Engine::destroyImages() {
     for (auto& [id, img] : ownedImages) {
         destroySampler(ownedSamplers.at(id));
         destroyImageView(ownedViews.at(id));
@@ -52,7 +54,7 @@ void VkSmol::destroyImages() {
     ownedImages.clear();
 }
 
-VkImageUsageFlags VkSmol::imageUsageFlags(const CompiledRenderGraph& compiled, uint32_t imageId) const {
+VkImageUsageFlags Engine::imageUsageFlags(const CompiledRenderGraph& compiled, uint32_t imageId) const {
     VkImageUsageFlags usageFlags = compiled.images[imageId].extraUsageFlags;
     for (const CompiledPass& pass : compiled.compiledPasses)
         for (const ImageAccess& access : pass.imageAccesses)
@@ -63,7 +65,7 @@ VkImageUsageFlags VkSmol::imageUsageFlags(const CompiledRenderGraph& compiled, u
 
 // ——— Buffers —————————————————————————————————————————————————————————————————
 
-void VkSmol::initBuffers() {
+void Engine::initBuffers() {
     for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
         const BufferInfo& info = graph.buffers[id];
         if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || ownedBuffers.contains(id)) continue;
@@ -75,7 +77,7 @@ void VkSmol::initBuffers() {
     }
 }
 
-void VkSmol::destroyBuffers() {
+void Engine::destroyBuffers() {
     for (auto& [id, buf] : ownedBuffers) {
         destroyBuffer(buf);
         bufferBindings.erase(id);
@@ -83,7 +85,7 @@ void VkSmol::destroyBuffers() {
     ownedBuffers.clear();
 }
 
-VkBufferUsageFlags VkSmol::bufferUsageFlags(const CompiledRenderGraph& compiled, uint32_t bufferId) const {
+VkBufferUsageFlags Engine::bufferUsageFlags(const CompiledRenderGraph& compiled, uint32_t bufferId) const {
     VkBufferUsageFlags usageFlags = compiled.buffers[bufferId].extraUsageFlags
         | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     for (const CompiledPass& pass : compiled.compiledPasses)
@@ -93,7 +95,7 @@ VkBufferUsageFlags VkSmol::bufferUsageFlags(const CompiledRenderGraph& compiled,
     return usageFlags;
 }
 
-void VkSmol::replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve) {
+void Engine::replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve) {
     BufferInfo& info = graph.buffers[bufferId];
     Buffer next = createBuffer(bufferUsageFlags(graph, bufferId), newSize, 0, nullptr, info.name);
 
@@ -111,7 +113,7 @@ void VkSmol::replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve) {
     refreshDescriptorsForBuffer(bufferId);
 }
 
-size_t VkSmol::stage(const void* data, size_t size) {
+size_t Engine::stage(const void* data, size_t size) {
     StagingArena& arena = stagingArenas[currentFrame];
     size_t offset = (arena.used + 15) & ~size_t(15);
     if (offset + size > arena.buffer.getSize()) {
@@ -125,7 +127,7 @@ size_t VkSmol::stage(const void* data, size_t size) {
     return offset;
 }
 
-void VkSmol::flushBufferTransfers(const CommandBuffer& commandBuffer) {
+void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
     if (pendingBufferTransfers.empty()) return;
 
     constexpr VkAccessFlags transferAccess = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -173,14 +175,14 @@ void VkSmol::flushBufferTransfers(const CommandBuffer& commandBuffer) {
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
 }
 
-void VkSmol::discardBufferTransfers() {
+void Engine::discardBufferTransfers() {
     for (auto& transfer : pendingBufferTransfers)
         if (auto* replace = std::get_if<PendingBufferReplace>(&transfer))
             destroyBuffer(replace->previous);
     pendingBufferTransfers.clear();
 }
 
-void VkSmol::emitMemoryBarrier(
+void Engine::emitMemoryBarrier(
     const CommandBuffer& commandBuffer,
     VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
     VkPipelineStageFlags dstStage, VkAccessFlags dstAccess
@@ -195,7 +197,7 @@ void VkSmol::emitMemoryBarrier(
 
 // ——— Descriptor sets —————————————————————————————————————————————————————————
 
-void VkSmol::initDescriptorSets() {
+void Engine::initDescriptorSets() {
     for (const CompiledPass& pass : graph.compiledPasses) {
         if (pass.descriptorBindings.empty()) continue;
         uint32_t passId = pass.pass.id;
@@ -224,7 +226,7 @@ void VkSmol::initDescriptorSets() {
     }
 }
 
-void VkSmol::destroyDescriptorSets() {
+void Engine::destroyDescriptorSets() {
     for (auto& [id, groups] : passDescriptorGroups)
         for (DescriptorSetGroup& group : groups)
             if (group.isValid()) destroyDescriptorSetGroup(group);
@@ -237,7 +239,7 @@ void VkSmol::destroyDescriptorSets() {
 
 // ——— Pipelines ———————————————————————————————————————————————————————————————
 
-std::vector<std::string> VkSmol::initPipelines() {
+std::vector<std::string> Engine::initPipelines() {
     std::vector<std::string> errors;
     auto layoutsOf = [&](uint32_t passId) -> std::vector<const DescriptorSetLayout*> {
         auto it = passDescriptorLayouts.find(passId);
@@ -279,7 +281,7 @@ std::vector<std::string> VkSmol::initPipelines() {
     return errors;
 }
 
-void VkSmol::destroyPipelines() {
+void Engine::destroyPipelines() {
     for (auto& [id, pipeline] : ownedComputePipelines)
         destroyComputePipeline(pipeline);
     ownedComputePipelines.clear();
@@ -290,7 +292,7 @@ void VkSmol::destroyPipelines() {
 
 // ——— Sync ————————————————————————————————————————————————————————————————————
 
-void VkSmol::initSync() {
+void Engine::initSync() {
     const uint32_t numGroups = static_cast<uint32_t>(graph.submissionGroups.size());
 
     if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
@@ -313,7 +315,7 @@ void VkSmol::initSync() {
     }
 }
 
-void VkSmol::destroySync() {
+void Engine::destroySync() {
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
         if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores[f].destroy(device);
         for (uint32_t g = 0; g < groupSemaphores.size(); ++g) {
@@ -330,12 +332,12 @@ void VkSmol::destroySync() {
 
 // ——— Public lifecycle ————————————————————————————————————————————————————————
 
-std::vector<std::string> VkSmol::initGraph(std::string pipelineCachePath) {
-    assert(ownedImages.empty() && "VkSmol::initGraph() called without a prior destroyGraph() — bindings would be left dangling");
+std::vector<std::string> Engine::initGraph(std::string pipelineCachePath) {
+    assert(ownedImages.empty() && "Engine::initGraph() called without a prior destroyGraph() — bindings would be left dangling");
     return initGraphState(std::move(pipelineCachePath));
 }
 
-std::vector<std::string> VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath) {
+std::vector<std::string> Engine::rebuildGraph(RenderGraphBuilder& builder, std::string pipelineCachePath) {
     CompiledRenderGraph next = builder.compile();
     if (!graphInitialized) {
         graph = std::move(next);
@@ -368,7 +370,7 @@ std::vector<std::string> VkSmol::rebuildGraph(RenderGraphBuilder& builder, std::
     return initGraphState(std::move(pipelineCachePath));
 }
 
-VkSmol::ReusedResources VkSmol::takeReusableResources(CompiledRenderGraph& next) {
+Engine::ReusedResources Engine::takeReusableResources(CompiledRenderGraph& next) {
     auto sameAccess = [](const std::optional<ImageAccessInfo>& a, const std::optional<ImageAccessInfo>& b) {
         if (a.has_value() != b.has_value()) return false;
         return !a.has_value() || (a->usage == b->usage && a->access == b->access);
@@ -421,7 +423,7 @@ VkSmol::ReusedResources VkSmol::takeReusableResources(CompiledRenderGraph& next)
     return reused;
 }
 
-std::vector<std::string> VkSmol::initGraphState(std::string pipelineCachePath) {
+std::vector<std::string> Engine::initGraphState(std::string pipelineCachePath) {
     dirtyDescriptors.clear();
     pipelineCache.init(device, pipelineCachePath);
     initImages();
@@ -456,7 +458,7 @@ std::vector<std::string> VkSmol::initGraphState(std::string pipelineCachePath) {
     return errors;
 }
 
-void VkSmol::destroyGraph() {
+void Engine::destroyGraph() {
     graphInitialized = false;
     if (timestampPool != VK_NULL_HANDLE) {
         vkDestroyQueryPool(device.get(), timestampPool, nullptr);
@@ -473,7 +475,7 @@ void VkSmol::destroyGraph() {
     destroyImages();
 }
 
-void VkSmol::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
+void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
     uint32_t id = handle.id;
     ImageInfo& info = graph.images[id];
     if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) return;
@@ -510,7 +512,7 @@ void VkSmol::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
 
 // ——— Frame ———————————————————————————————————————————————————————————————————
 
-std::optional<FrameContext> VkSmol::beginFrame() {
+std::optional<FrameContext> Engine::beginFrame() {
     std::vector<const Fence*> fences;
     for (auto& groupFenceRow : groupFences)
         fences.push_back(&groupFenceRow[currentFrame]);
@@ -565,7 +567,7 @@ std::optional<FrameContext> VkSmol::beginFrame() {
     }
 }
 
-void VkSmol::present() {
+void Engine::present() {
     assert(!platform->isHeadless());
 
     uint32_t presentGroupId = 0;
@@ -579,13 +581,13 @@ void VkSmol::present() {
     }
 }
 
-void VkSmol::advanceFrame() {
+void Engine::advanceFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
 // ——— Recording ———————————————————————————————————————————————————————————————
 
-CommandBuffer& VkSmol::beginRecording(const SubmissionGroupHandle& group) {
+CommandBuffer& Engine::beginRecording(const SubmissionGroupHandle& group) {
     CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
     cmd.reset();
     cmd.beginRecording();
@@ -593,7 +595,7 @@ CommandBuffer& VkSmol::beginRecording(const SubmissionGroupHandle& group) {
     return cmd;
 }
 
-void VkSmol::endRecording(const SubmissionGroupHandle& group) {
+void Engine::endRecording(const SubmissionGroupHandle& group) {
     const CompiledSubmissionGroup& compiled = graph.submissionGroups[group.id];
     CommandBuffer& cmd = groupCommandBuffers[group.id][currentFrame];
 
@@ -615,7 +617,7 @@ void VkSmol::endRecording(const SubmissionGroupHandle& group) {
 
 // ——— Images (runtime) ————————————————————————————————————————————————————————
 
-void VkSmol::swapBindings(const ImageHandle& a, const ImageHandle& b) {
+void Engine::swapBindings(const ImageHandle& a, const ImageHandle& b) {
     std::swap(bindings[a.id],      bindings[b.id]);
     std::swap(ownedImages[a.id],   ownedImages[b.id]);
     std::swap(ownedViews[a.id],    ownedViews[b.id]);
@@ -632,44 +634,44 @@ void VkSmol::swapBindings(const ImageHandle& a, const ImageHandle& b) {
     }
 }
 
-void VkSmol::bindImage(const ImageHandle& handle, VkImage image, VkImageView view) {
+void Engine::bindImage(const ImageHandle& handle, VkImage image, VkImageView view) {
     bindings[handle.id] = { .image = image, .view = view };
 }
 
-const ImageBinding& VkSmol::getBinding(const ImageHandle& handle) const {
+const ImageBinding& Engine::getBinding(const ImageHandle& handle) const {
     return bindings.at(handle.id);
 }
 
-Image& VkSmol::getImage(const ImageHandle& handle) {
+Image& Engine::getImage(const ImageHandle& handle) {
     return ownedImages.at(handle.id);
 }
 
-const ImageView& VkSmol::getView(const ImageHandle& handle) const {
+const ImageView& Engine::getView(const ImageHandle& handle) const {
     return ownedViews.at(handle.id);
 }
 
-const Sampler& VkSmol::getSampler(const ImageHandle& handle) const {
+const Sampler& Engine::getSampler(const ImageHandle& handle) const {
     return ownedSamplers.at(handle.id);
 }
 
 // ——— Buffers (runtime) ———————————————————————————————————————————————————————
 
-void VkSmol::bindBuffer(const BufferHandle& handle, VkBuffer buffer) {
+void Engine::bindBuffer(const BufferHandle& handle, VkBuffer buffer) {
     bufferBindings[handle.id] = buffer;
 }
 
-Buffer& VkSmol::getBuffer(const BufferHandle& handle) {
+Buffer& Engine::getBuffer(const BufferHandle& handle) {
     return ownedBuffers.at(handle.id);
 }
 
-bool VkSmol::resizeBuffer(const BufferHandle& handle, size_t newSize) {
+bool Engine::resizeBuffer(const BufferHandle& handle, size_t newSize) {
     const BufferInfo& info = graph.buffers[handle.id];
     if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || info.size >= newSize) return false;
     replaceBuffer(handle.id, newSize, false);
     return true;
 }
 
-void VkSmol::writeBuffer(const BufferHandle& handle, const void* data, size_t size, size_t offset) {
+void Engine::writeBuffer(const BufferHandle& handle, const void* data, size_t size, size_t offset) {
     if (size == 0) return;
     const BufferInfo& info = graph.buffers[handle.id];
     if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED)
@@ -685,7 +687,7 @@ void VkSmol::writeBuffer(const BufferHandle& handle, const void* data, size_t si
     });
 }
 
-void VkSmol::readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset) {
+void Engine::readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset) {
     if (size == 0) return;
     Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr,
                                    graph.buffers[handle.id].name + "Readback");
@@ -709,15 +711,15 @@ void VkSmol::readBuffer(const BufferHandle& handle, void* out, size_t size, size
 
 // ——— Pipelines (runtime) —————————————————————————————————————————————————————
 
-ComputePipeline& VkSmol::getComputePipeline(ComputePipelineHandle handle) {
+ComputePipeline& Engine::getComputePipeline(ComputePipelineHandle handle) {
     return ownedComputePipelines.at(handle.id);
 }
 
-GraphicsPipeline& VkSmol::getGraphicsPipeline(GraphicsPipelineHandle handle) {
+GraphicsPipeline& Engine::getGraphicsPipeline(GraphicsPipelineHandle handle) {
     return ownedGraphicsPipelines.at(handle.id);
 }
 
-void VkSmol::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y) {
+void Engine::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, uint32_t x, uint32_t y) {
     flushBufferTransfers(cmd);
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
@@ -736,7 +738,7 @@ void VkSmol::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
     }
 }
 
-void VkSmol::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandle, const float clearColor[4]) {
+void Engine::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandle, const float clearColor[4]) {
     flushBufferTransfers(cmd);
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
@@ -752,7 +754,7 @@ void VkSmol::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandl
     beginDynamicRenderer(cmd, attachments[0].view, attachments[0].layout, attachments[0].loadOp, VK_ATTACHMENT_STORE_OP_STORE, vkClear);
 }
 
-void VkSmol::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle) {
+void Engine::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle) {
     endDynamicRenderer(cmd);
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
@@ -761,14 +763,14 @@ void VkSmol::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle)
     }
 }
 
-double VkSmol::getTimestampMs(TimestampHandle handle) const {
+double Engine::getTimestampMs(TimestampHandle handle) const {
     if (handle.id >= cachedTimestamps.size()) return -1.0;
     return cachedTimestamps[handle.id];
 }
 
 // ——— Descriptor management ———————————————————————————————————————————————————
 
-void VkSmol::refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex) {
+void Engine::refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex) {
     for (const CompiledPass& pass : graph.compiledPasses) {
         if (!passDescriptorGroups.count(pass.pass.id)) continue;
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
@@ -780,7 +782,7 @@ void VkSmol::refreshDescriptorsForImage(uint32_t imageId, uint32_t frameIndex) {
     }
 }
 
-void VkSmol::refreshDescriptorsForBuffer(uint32_t bufferId) {
+void Engine::refreshDescriptorsForBuffer(uint32_t bufferId) {
     for (const CompiledPass& pass : graph.compiledPasses) {
         if (!passDescriptorGroups.count(pass.pass.id)) continue;
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
@@ -793,7 +795,7 @@ void VkSmol::refreshDescriptorsForBuffer(uint32_t bufferId) {
     }
 }
 
-void VkSmol::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
+void Engine::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
     uint32_t passId = pass.id;
     auto groupIt = passDescriptorGroups.find(passId);
     if (groupIt == passDescriptorGroups.end()) return;
@@ -824,7 +826,7 @@ void VkSmol::updateDescriptors(const PassHandle& pass, uint32_t frameIndex) {
     }
 }
 
-void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHandle) {
+void Engine::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHandle) {
     uint32_t passId = passHandle.id;
     auto groupIt = passDescriptorGroups.find(passId);
     if (groupIt == passDescriptorGroups.end()) return;
@@ -854,7 +856,7 @@ void VkSmol::bindDescriptors(const CommandBuffer& cmd, const PassHandle& passHan
 
 // ——— Barriers ————————————————————————————————————————————————————————————————
 
-void VkSmol::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const {
+void Engine::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& passHandle) const {
     for (const PassImageBarrier& barrier : graph.compiledPasses[passHandle.id].barriersBefore)
         emitBarrier(commandBuffer, barrier);
 
@@ -877,12 +879,12 @@ void VkSmol::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
     }
 }
 
-void VkSmol::emitOutputBarriers(const CommandBuffer& commandBuffer) const {
+void Engine::emitOutputBarriers(const CommandBuffer& commandBuffer) const {
     for (const PassImageBarrier& barrier : graph.outputBarriers)
         emitBarrier(commandBuffer, barrier);
 }
 
-void VkSmol::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarrier& barrier) const {
+void Engine::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarrier& barrier) const {
     ImageBinding binding = bindings.at(barrier.image.id);
     VulkanImageState src = imageAccessToVk(barrier.srcAccess);
     VulkanImageState dst = imageAccessToVk(barrier.dstAccess);
@@ -896,7 +898,7 @@ void VkSmol::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarr
 
 // ——— Attachment / Transfer queries ———————————————————————————————————————————
 
-std::vector<AttachmentInfo> VkSmol::getColorAttachment(const PassHandle& passHandle) const {
+std::vector<AttachmentInfo> Engine::getColorAttachment(const PassHandle& passHandle) const {
     std::vector<AttachmentInfo> attachments;
     for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses) {
         if (access.info.usage == ImageUsageType::ColorAttachment) {
@@ -913,20 +915,22 @@ std::vector<AttachmentInfo> VkSmol::getColorAttachment(const PassHandle& passHan
     return attachments;
 }
 
-ImageBinding VkSmol::getTransferSrc(const PassHandle& passHandle) const {
+ImageBinding Engine::getTransferSrc(const PassHandle& passHandle) const {
     for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses)
         if (access.info.usage == ImageUsageType::TransferSrc)
             return bindings.at(access.image.id);
     throw std::runtime_error("No transfer src image found in pass");
 }
 
-ImageBinding VkSmol::getTransferDst(const PassHandle& passHandle) const {
+ImageBinding Engine::getTransferDst(const PassHandle& passHandle) const {
     for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses)
         if (access.info.usage == ImageUsageType::TransferDst)
             return bindings.at(access.image.id);
     throw std::runtime_error("No transfer dst image found in pass");
 }
 
-std::string VkSmol::dumpGraph() const {
-    return ::dumpGraph(graph);
+std::string Engine::dumpGraph() const {
+    return VkSmol::dumpGraph(graph);
+}
+
 }

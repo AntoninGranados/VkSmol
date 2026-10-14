@@ -4,6 +4,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void ImageView::init(const LogicalDevice& device, const Image& image) {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -24,4 +26,6 @@ void ImageView::destroy(const LogicalDevice& device) {
         vkDestroyImageView(device.get(), rawHandle(), nullptr);
     }
     resetHandle();
+}
+
 }

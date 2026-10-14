@@ -3,6 +3,8 @@
 #include <sstream>
 #include <stdexcept>
 
+namespace VkSmol {
+
 namespace {
 
 const char* descriptorTypeName(VkDescriptorType type) {
@@ -159,4 +161,6 @@ const VkDescriptorSetLayoutBinding* DescriptorWriter::findBinding(uint32_t bindi
         message << " (available bindings: " << availableBindings.str() << ")";
     }
     throw std::runtime_error(message.str());
+}
+
 }

@@ -7,6 +7,8 @@
 
 #include "builder_resource.hpp"
 
+namespace VkSmol {
+
 struct PassImageBarrier {
     ImageHandle image;
     ImageAccessInfo srcAccess;
@@ -63,3 +65,5 @@ struct CompiledRenderGraph {
     std::vector<GraphicsPipelineInfo>    graphicsPipelines = {};
     std::vector<CompiledSubmissionGroup> submissionGroups = {};
 };
+
+}

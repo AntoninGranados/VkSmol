@@ -4,6 +4,8 @@
 #include "../builder_resource.hpp"
 #include "../render_graph_builder.hpp"
 
+namespace VkSmol {
+
 void TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferSrc,
@@ -32,4 +34,6 @@ void TransferPassBuilder::copyTo(ImageHandle imageHandle) {
             .access = AccessType::Write,
         },
     });
+}
+
 }

@@ -2,6 +2,8 @@
 
 #include "pass_builder.hpp"
 
+namespace VkSmol {
+
 class PresentPassBuilder: public PassBuilder {
 public:
     void setPresentationImage(ImageHandle imageHandle);
@@ -12,3 +14,5 @@ private:
 
       friend class RenderGraphBuilder;
 };
+
+}

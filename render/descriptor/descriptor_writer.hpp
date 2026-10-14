@@ -13,6 +13,8 @@
 #include "./descriptor_set.hpp"
 #include "./descriptor_set_layout.hpp"
 
+namespace VkSmol {
+
 struct UniformBufferPayload {
     const Buffer* buffer = nullptr;
     VkDeviceSize offset = 0;              //! Ignored for now
@@ -67,3 +69,5 @@ private:
     std::vector<DescriptorWrite> writes;
     const DescriptorSetLayout* layout = nullptr;
 };
+
+}

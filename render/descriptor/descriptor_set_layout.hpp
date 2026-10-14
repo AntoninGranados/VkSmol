@@ -7,6 +7,8 @@
 
 #include "../../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 
 class DescriptorSetLayout: public UniqueHandle<VkDescriptorSetLayout, VK_NULL_HANDLE> {
@@ -21,3 +23,5 @@ public:
 private:
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 };
+
+}

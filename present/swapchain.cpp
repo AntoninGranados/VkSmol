@@ -10,6 +10,8 @@
 #include "../sync/semaphore.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 SwapChainSupportDetails querySwapChainSupport(const PhysicalDevice& device, const Surface& surface) {
     SwapChainSupportDetails details;
 
@@ -195,4 +197,6 @@ VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
     );
 
     return extent;
+}
+
 }

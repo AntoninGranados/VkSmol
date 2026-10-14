@@ -3,6 +3,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Fence::init(const LogicalDevice& device, bool signaled) {
     VkFenceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -35,4 +37,6 @@ void Fence::reset(const std::vector<const Fence*>& fences, const LogicalDevice& 
 
 void Fence::reset(const LogicalDevice& device) {
     vkResetFences(device.get(), 1, &rawHandle());
+}
+
 }

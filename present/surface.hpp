@@ -4,6 +4,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class Window;
 class Instance;
 
@@ -13,3 +15,5 @@ public:
     void initFromRaw(VkSurfaceKHR handle) { rawHandle() = handle; }
     void destroy(const Instance& instance);
 };
+
+}

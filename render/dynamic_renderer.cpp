@@ -4,6 +4,8 @@
 #include "../present/swapchain.hpp"
 #include "../device/logical_device.hpp"
 
+namespace VkSmol {
+
 void DynamicRenderer::init(const LogicalDevice& device) {
     vkCmdBeginRenderingKHR = (PFN_vkCmdBeginRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdBeginRenderingKHR");
     vkCmdEndRenderingKHR = ((PFN_vkCmdEndRenderingKHR) vkGetDeviceProcAddr(device.get(), "vkCmdEndRenderingKHR"));
@@ -35,4 +37,6 @@ void DynamicRenderer::begin(
 
 void DynamicRenderer::end(const CommandBuffer& commandBuffer) {
     vkCmdEndRenderingKHR(commandBuffer.get());
+}
+
 }

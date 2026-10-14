@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace VkSmol {
+
 class LogicalDevice;
 
 class DescriptorPool {
@@ -27,3 +29,5 @@ private:
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorPoolSize> poolSizes;
 };
+
+}

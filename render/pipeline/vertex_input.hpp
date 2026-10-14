@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace VkSmol {
+
 // TODO: Only support one binding now
 template <typename T>
 class VertexInput {
@@ -61,4 +63,6 @@ VkPipelineVertexInputStateCreateInfo VertexInput<T>::get(uint32_t binding) {
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     return vertexInputInfo;
+}
+
 }

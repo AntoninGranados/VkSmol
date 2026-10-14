@@ -4,6 +4,8 @@
 #include "../builder_resource.hpp"
 #include "../render_graph_builder.hpp"
 
+namespace VkSmol {
+
 static constexpr VkShaderStageFlags kGraphicsStage = VK_SHADER_STAGE_ALL_GRAPHICS;
 
 void GraphicsPassBuilder::readImage(ShaderLocation location, ImageHandle imageHandle, ImageUsageType usage) {
@@ -87,4 +89,6 @@ GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputSta
         info.attributeDescriptions.push_back(vi.pVertexAttributeDescriptions[i]);
     graph->graphicsPipelines.push_back(std::move(info));
     return h;
+}
+
 }

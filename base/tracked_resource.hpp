@@ -2,6 +2,8 @@
 #include <string>
 #include <utility>
 
+namespace VkSmol {
+
 // Lightweight base for named Vulkan resource wrappers.
 class TrackedResource {
 public:
@@ -20,3 +22,5 @@ public:
 private:
     std::string name;
 };
+
+}

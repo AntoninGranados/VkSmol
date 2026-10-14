@@ -10,6 +10,8 @@
 
 #include "../render/shader.hpp"
 
+namespace VkSmol {
+
 // ================
 // Handles
 // ================
@@ -197,3 +199,5 @@ struct PassInfo {
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
     std::optional<uint32_t>            timestampIndex;
 };
+
+}

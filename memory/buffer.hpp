@@ -5,6 +5,8 @@
 
 #include "../base/tracked_resource.hpp"
 
+namespace VkSmol {
+
 class PhysicalDevice;
 class LogicalDevice;
 class CommandBuffer;
@@ -67,3 +69,5 @@ private:
 
     void* bufferMapped = nullptr;
 };
+
+}

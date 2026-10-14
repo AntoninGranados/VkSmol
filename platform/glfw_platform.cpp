@@ -4,6 +4,8 @@
 
 #include <stdexcept>
 
+namespace VkSmol {
+
 GLFWPlatform::GLFWPlatform(const std::string& title, uint32_t width, uint32_t height) {
     if (!glfwInit()) throw std::runtime_error("Failed to initialize GLFW");
 
@@ -134,4 +136,6 @@ void GLFWPlatform::cursorPosBridge(GLFWwindow* w, double x, double y) {
 void GLFWPlatform::scrollBridge(GLFWwindow* w, double xoff, double yoff) {
     auto* self = static_cast<GLFWPlatform*>(glfwGetWindowUserPointer(w));
     if (self && self->scrollCallback) self->scrollCallback(xoff, yoff);
+}
+
 }

@@ -61,6 +61,8 @@
 #include "./frame_context.hpp"
 #include "./graph/compiled_resource.hpp"
 
+namespace VkSmol {
+
 // TODO: allow the use of a single buffer for better caching and use the offset parameters
 
 struct ImageBinding {
@@ -76,7 +78,7 @@ struct AttachmentInfo {
 
 class RenderGraphBuilder;
 
-class VkSmol {
+class Engine {
 public:
     void init(std::string appName, uint32_t appVersion, Platform& platform);
 
@@ -371,3 +373,5 @@ private:
     std::vector<const char*> getRequiredDeviceExtensions();
     int scoreDevice(const PhysicalDevice& device);
 };
+
+}

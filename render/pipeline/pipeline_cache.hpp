@@ -7,6 +7,8 @@
 
 #include "../../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 
 class PipelineCache: public UniqueHandle<VkPipelineCache, VK_NULL_HANDLE> {
@@ -17,3 +19,5 @@ public:
 private:
     std::string filePath;
 };
+
+}

@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace VkSmol {
+
 class LogicalDevice;
 class Shader;
 class CommandBuffer;
@@ -40,3 +42,5 @@ private:
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 };
+
+}

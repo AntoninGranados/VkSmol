@@ -6,6 +6,8 @@
 
 #include "../base/tracked_resource.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class PhysicalDevice;
 
@@ -58,3 +60,5 @@ private:
     uint32_t width = 0, height = 0;
     bool owned = true;
 };
+
+}

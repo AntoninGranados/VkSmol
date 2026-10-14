@@ -1,5 +1,7 @@
 #include "window.hpp"
 
+namespace VkSmol {
+
 Window::Window(Window&& other) noexcept
     : UniqueHandle(std::move(other)),
       onFramebufferResize(std::move(other.onFramebufferResize)),
@@ -62,4 +64,6 @@ if (self && self->onCursorPos) self->onCursorPos(x, y);
 void Window::scrollBridge(GLFWwindow* glfwWindow, double xoffset, double yoffset) {
     auto* self = static_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
     if (self && self->onScroll) self->onScroll(xoffset, yoffset);
+}
+
 }

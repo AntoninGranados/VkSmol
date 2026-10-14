@@ -6,6 +6,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class PhysicalDevice;
 
 class LogicalDevice: public UniqueHandle<VkDevice, VK_NULL_HANDLE> {
@@ -20,3 +22,5 @@ public:
 
     void waitIdle() const;
 };
+
+}

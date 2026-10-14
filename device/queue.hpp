@@ -8,6 +8,8 @@
 
 #include "../base/borrowed_handle.hpp"
 
+namespace VkSmol {
+
 class Surface;
 class PhysicalDevice;
 class LogicalDevice;
@@ -63,3 +65,5 @@ public:
 
     void wait();
 };
+
+}

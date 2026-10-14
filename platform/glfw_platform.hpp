@@ -8,6 +8,8 @@
 #include <string>
 #include <functional>
 
+namespace VkSmol {
+
 class GLFWPlatform : public Platform {
 public:
     GLFWPlatform(const std::string& title, uint32_t width, uint32_t height);
@@ -54,3 +56,5 @@ private:
     static void cursorPosBridge(GLFWwindow* w, double x, double y);
     static void scrollBridge(GLFWwindow* w, double xoff, double yoff);
 };
+
+}

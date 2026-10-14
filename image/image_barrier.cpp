@@ -2,6 +2,8 @@
 
 #include "../command/command_buffer.hpp"
 
+namespace VkSmol {
+
 void ImageBarrier::call(
     const CommandBuffer& commandBuffer,
     VkImage image,
@@ -33,4 +35,6 @@ void ImageBarrier::call(
         0, nullptr,
         1, &barrier
     );
+}
+
 }

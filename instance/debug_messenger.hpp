@@ -4,6 +4,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class Instance;
 
 class DebugMessenger: public UniqueHandle<VkDebugUtilsMessengerEXT, VK_NULL_HANDLE> {
@@ -34,3 +36,5 @@ private:
         VkAllocationCallbacks* pAllocator
     );
 };
+
+}

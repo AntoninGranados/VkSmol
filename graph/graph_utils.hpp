@@ -5,6 +5,8 @@
 #include <string>
 #include <cstdint>
 
+namespace VkSmol {
+
 enum class AccessType : uint16_t;
 enum class ImageUsageType : uint16_t;
 enum class BufferUsageType : uint16_t;
@@ -35,3 +37,5 @@ std::string dumpGraph(const CompiledRenderGraph& compiled);
 
 void checkUsageValidForAccess(ImageUsageType usage, AccessType access);
 void checkImageAccessInfoValid(const ImageAccessInfo& info);
+
+}

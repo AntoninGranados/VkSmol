@@ -7,6 +7,8 @@
 #include "compiled_resource.hpp"
 #include "builder_resource.hpp"
 
+namespace VkSmol {
+
 namespace {
 
 bool isAttachmentWrite(const ImageAccessInfo& info) {
@@ -492,4 +494,6 @@ void checkImageAccessInfoValid(const ImageAccessInfo& info) {
             imageAccessInfoToStr(info)
         ));
     }
+}
+
 }

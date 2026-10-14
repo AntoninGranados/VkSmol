@@ -4,6 +4,8 @@
 #include <functional>
 #include <vector>
 
+namespace VkSmol {
+
 class Platform {
 public:
     virtual ~Platform() = default;
@@ -41,3 +43,5 @@ public:
 
     virtual double getTime() const = 0;
 };
+
+}

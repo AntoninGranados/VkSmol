@@ -11,6 +11,8 @@
 #include "../../image/sampler.hpp"
 #include "../../utils.hpp"
 
+namespace VkSmol {
+
 void DescriptorSet::alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
 
@@ -139,4 +141,6 @@ void DescriptorSet::clear() {
     imageInfos.clear();
     storageImageInfos.clear();
     descriptorWrites.clear();
+}
+
 }

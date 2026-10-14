@@ -7,6 +7,8 @@
 #include "../../utils.hpp"
 #include "./pipeline_cache.hpp"
 
+namespace VkSmol {
+
 void ComputePipeline::init(
     const LogicalDevice& device,
     const Shader& shader,
@@ -49,4 +51,6 @@ void ComputePipeline::bind(const CommandBuffer& commandBuffer) const {
 
 void ComputePipeline::dispatch(const CommandBuffer& commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) const {
     vkCmdDispatch(commandBuffer.get(), groupCountX, groupCountY, groupCountZ);
+}
+
 }

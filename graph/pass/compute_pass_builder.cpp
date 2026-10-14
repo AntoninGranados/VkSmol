@@ -4,6 +4,8 @@
 #include "../builder_resource.hpp"
 #include "../render_graph_builder.hpp"
 
+namespace VkSmol {
+
 static constexpr VkShaderStageFlags kComputeStage = VK_SHADER_STAGE_COMPUTE_BIT;
 
 void ComputePassBuilder::readImage(ShaderLocation location, ImageHandle imageHandle, ImageUsageType usage) {
@@ -57,4 +59,6 @@ ComputePipelineHandle ComputePassBuilder::setPipeline(std::string shaderPath, Sh
         .passId     = handle.id,
     });
     return h;
+}
+
 }

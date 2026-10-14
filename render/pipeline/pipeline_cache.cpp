@@ -7,6 +7,8 @@
 #include "../../device/logical_device.hpp"
 #include "../../utils.hpp"
 
+namespace VkSmol {
+
 void PipelineCache::init(const LogicalDevice& device, std::string filePath_) {
     filePath = std::move(filePath_);
 
@@ -50,4 +52,6 @@ void PipelineCache::destroy(const LogicalDevice& device) {
     }
 
     vkDestroyPipelineCache(device.get(), rawHandle(), nullptr);
+}
+
 }

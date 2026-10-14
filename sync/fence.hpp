@@ -6,6 +6,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 
 class Fence: public UniqueHandle<VkFence, VK_NULL_HANDLE> {
@@ -19,3 +21,5 @@ public:
     static void reset(const std::vector<const Fence*>& fences, const LogicalDevice& device);
     void reset(const LogicalDevice& device);
 };
+
+}

@@ -5,6 +5,8 @@
 #include "../base/unique_handle.hpp"
 #include "../base/tracked_resource.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class PhysicalDevice;
 
@@ -13,3 +15,5 @@ public:
     void init(const LogicalDevice& device, PhysicalDevice physicalDevice);
     void destroy(const LogicalDevice& device);
 };
+
+}

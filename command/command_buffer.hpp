@@ -5,6 +5,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class CommandPool;
 class Queue;
@@ -21,3 +23,5 @@ public:
     static CommandBuffer beginSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool);
     static void endSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool, Queue queue, CommandBuffer& commandBuffer);
 };
+
+}

@@ -1,5 +1,7 @@
 #pragma once
 
+namespace VkSmol {
+
 template<typename HandleT, HandleT NullHandle>
 class BorrowedHandle {
 public:
@@ -16,3 +18,5 @@ protected:
 private:
     HandleT handle = NullHandle;
 };
+
+}

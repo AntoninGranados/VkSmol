@@ -2,6 +2,8 @@
 
 #include "./instance.hpp"
 
+namespace VkSmol {
+
 void DebugMessenger::init(const Instance& instance) {
     // Only init the debug messenger if we are in debug mode
 #ifndef NDEBUG
@@ -71,4 +73,6 @@ void DebugMessenger::DestroyDebugUtilsMessengerEXT(
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance.get(), "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr)
         func(instance.get(), debugMessenger, pAllocator);
+}
+
 }

@@ -6,6 +6,8 @@
 #include "./physical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void LogicalDevice::init(
     PhysicalDevice physicalDevice,
     std::vector<uint32_t> queueFamilyIndices,
@@ -61,4 +63,6 @@ void LogicalDevice::destroy() {
 
 void LogicalDevice::waitIdle() const {
     vkDeviceWaitIdle(rawHandle());
+}
+
 }

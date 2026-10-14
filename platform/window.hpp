@@ -8,6 +8,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class Window: public UniqueHandle<GLFWwindow*, nullptr> {
 public:
     using FramebufferResizeFn = std::function<void(int, int)>;
@@ -37,3 +39,5 @@ private:
     CursorPosFn onCursorPos;
     ScrollFn onScroll;
 };
+
+}

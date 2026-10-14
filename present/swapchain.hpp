@@ -9,6 +9,9 @@
 #include "../image/image_view.hpp"
 
 struct GLFWwindow;   // forward-declare to avoid pulling GLFW into the header
+
+namespace VkSmol {
+
 class PhysicalDevice;
 class LogicalDevice;
 class Surface;
@@ -65,3 +68,5 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
 };
+
+}

@@ -9,6 +9,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class ShaderFileSystem;
 
@@ -57,3 +59,5 @@ private:
 
     VkShaderStageFlagBits stage;
 };
+
+}

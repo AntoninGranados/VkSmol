@@ -3,6 +3,8 @@
 #include "pass_builder.hpp"
 #include "../builder_resource.hpp"
 
+namespace VkSmol {
+
 class TransferPassBuilder: public PassBuilder {
 public:
     void copyFrom(ImageHandle imageHandle);
@@ -13,3 +15,5 @@ private:
 
     friend class RenderGraphBuilder;
 };
+
+}

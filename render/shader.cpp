@@ -13,6 +13,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Shader::init(const LogicalDevice& device, VkShaderStageFlagBits stage_, const std::vector<uint32_t>& spirv) {
     stage = stage_;
 
@@ -214,4 +216,6 @@ std::vector<uint32_t> Shader::optimize(const uint32_t* words, size_t wordCount, 
     }
 
     return optimized;
+}
+
 }

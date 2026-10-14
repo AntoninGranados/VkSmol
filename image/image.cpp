@@ -12,6 +12,8 @@
 #include "../memory/buffer.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 Image::Image(Image&& other)
     : TrackedResource(std::move(other)),
       image(other.image),
@@ -251,4 +253,6 @@ void Image::destroy(const LogicalDevice& device) {
     width = 0;
     height = 0;
     owned = true;
+}
+
 }

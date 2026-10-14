@@ -7,6 +7,8 @@
 #include "../device/queue.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 Buffer::Buffer(Buffer&& other)
     : TrackedResource(std::move(other)),
       persistentMapping(other.persistentMapping),
@@ -213,4 +215,6 @@ uint32_t Buffer::findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilt
     }
 
     throw std::runtime_error("Failed to find suitable memory type");
+}
+
 }

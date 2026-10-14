@@ -2,6 +2,8 @@
 
 #include "platform.hpp"
 
+namespace VkSmol {
+
 class HeadlessPlatform : public Platform {
 public:
     HeadlessPlatform(uint32_t width, uint32_t height) : extent{ width, height } {}
@@ -33,3 +35,5 @@ public:
 private:
     VkExtent2D extent;
 };
+
+}

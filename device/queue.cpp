@@ -9,6 +9,8 @@
 #include "../sync/fence.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {
     QueueFamilyIndices indices;
 
@@ -144,4 +146,6 @@ uint32_t Queue::present(
 
 void Queue::wait() {
     vkQueueWaitIdle(rawHandle());
+}
+
 }

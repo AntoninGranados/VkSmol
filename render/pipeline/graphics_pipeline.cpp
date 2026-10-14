@@ -7,6 +7,8 @@
 #include "../../utils.hpp"
 #include "./pipeline_cache.hpp"
 
+namespace VkSmol {
+
 void GraphicsPipeline::init(
     const LogicalDevice& device,
     VkPipelineRenderingCreateInfoKHR pipelineCreate,
@@ -137,4 +139,6 @@ void GraphicsPipeline::draw(const CommandBuffer& commandBuffer, size_t vertexCou
 
 void GraphicsPipeline::drawIndexed(const CommandBuffer& commandBuffer, size_t indexCount) {
     vkCmdDrawIndexed(commandBuffer.get(), indexCount, 1, 0, 0, 0);
+}
+
 }

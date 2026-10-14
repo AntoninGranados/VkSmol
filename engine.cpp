@@ -14,6 +14,8 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_vulkan.h"
 
+namespace VkSmol {
+
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -36,7 +38,7 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
 };
 
-void VkSmol::init(std::string appName, uint32_t appVersion, Platform& p) {
+void Engine::init(std::string appName, uint32_t appVersion, Platform& p) {
     platform = &p;
 
     VkApplicationInfo appInfo{};
@@ -101,17 +103,17 @@ void VkSmol::init(std::string appName, uint32_t appVersion, Platform& p) {
 }
 
 
-CommandBuffer VkSmol::allocCommandBuffer() {
+CommandBuffer Engine::allocCommandBuffer() {
     CommandBuffer cb;
     cb.alloc(device, graphicsCommandPool);
     return cb;
 }
 
-void VkSmol::freeCommandBuffer(CommandBuffer& cb) {
+void Engine::freeCommandBuffer(CommandBuffer& cb) {
     cb.free(device, graphicsCommandPool);
 }
 
-void VkSmol::submit(
+void Engine::submit(
     CommandBuffer& commandBuffer,
     Fence& fence,
     const std::vector<const Semaphore*>& waitSemaphores,
@@ -122,19 +124,19 @@ void VkSmol::submit(
     graphicsQueue.submit({ &commandBuffer }, fence, waitSemaphores, waitStages, signalSemaphores);
 }
 
-void VkSmol::flushAll() {
+void Engine::flushAll() {
     for (auto& queue : retirementQueue) {
         for (auto& payload : queue) payload(device);
         queue.clear();
     }
 }
 
-void VkSmol::waitIdle() {
+void Engine::waitIdle() {
     device.waitIdle();
     flushAll();
 }
 
-void VkSmol::terminate() {
+void Engine::terminate() {
     device.waitIdle();
 
     if (!platform->isHeadless()) {
@@ -166,7 +168,7 @@ void VkSmol::terminate() {
     instance.destroy();
 }
 
-GraphicsPipeline VkSmol::initGraphicsPipeline(
+GraphicsPipeline Engine::initGraphicsPipeline(
     VkPipelineVertexInputStateCreateInfo vertexInputInfo,
     const std::vector<const Shader*>& shaders,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
@@ -198,11 +200,11 @@ GraphicsPipeline VkSmol::initGraphicsPipeline(
     return pipeline;
 }
 
-void VkSmol::destroyGraphicsPipeline(GraphicsPipeline& pipeline) {
+void Engine::destroyGraphicsPipeline(GraphicsPipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-ComputePipeline VkSmol::initComputePipeline(
+ComputePipeline Engine::initComputePipeline(
     const Shader& shader,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
     ComputePipeline other
@@ -212,11 +214,11 @@ ComputePipeline VkSmol::initComputePipeline(
     return pipeline;
 }
 
-void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
+void Engine::destroyComputePipeline(ComputePipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, const ShaderDefines& defines) {
+const Engine::CompiledShader& Engine::compileShader(const std::string& path, const ShaderDefines& defines) {
     CompiledShader& compiled = compiledShaders[{path, defines}];
     if (compiled.checked)
         return compiled;
@@ -235,7 +237,7 @@ const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, con
     return compiled;
 }
 
-const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors) {
+const std::vector<uint32_t>& Engine::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors) {
     const CompiledShader& compiled = compileShader(path, defines);
     if (!compiled.error.empty())
         errors.push_back(compiled.error);
@@ -260,7 +262,7 @@ const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass,
     return compiled.compilation.spirv;
 }
 
-ShaderLocation VkSmol::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines) {
+ShaderLocation Engine::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines) {
     for (const ShaderParameter& parameter : compileShader(shaderPath, defines).compilation.parameters)
         if (parameter.name == parameterName) return parameter.location;
 
@@ -269,15 +271,15 @@ ShaderLocation VkSmol::getShaderLocation(const std::string& shaderPath, const st
 
 // ——— Descriptor sets ————————————————————————————————————————————————————————
 
-void VkSmol::initDescriptorSetLayout(DescriptorSetLayout& layout) {
+void Engine::initDescriptorSetLayout(DescriptorSetLayout& layout) {
     layout.init(device);
 }
 
-void VkSmol::destroyDescriptorSetLayout(DescriptorSetLayout& layout) {
+void Engine::destroyDescriptorSetLayout(DescriptorSetLayout& layout) {
     layout.destroy(device);
 }
 
-DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
+DescriptorSetGroup Engine::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
     const std::string baseName = name.empty() ? "DescriptorSet" : std::move(name);
 
     DescriptorPool pool;
@@ -293,7 +295,7 @@ DescriptorSetGroup VkSmol::createDescriptorSetGroup(DescriptorSetLayout& layout,
     return DescriptorSetGroup(std::move(pool), std::move(sets));
 }
 
-void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
+void Engine::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
     DescriptorSet& set = group.at(frameIndex);
     set.clear();
     for (const DescriptorWrite& write : writer.getWrites()) {
@@ -317,7 +319,7 @@ void VkSmol::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameI
     set.update(device);
 }
 
-void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
+void Engine::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
     if (!group.isValid()) return;
     auto retired = std::make_shared<DescriptorSetGroup>(std::move(group));
     retirementQueue[currentRetirementFrame].push_back(
@@ -328,7 +330,7 @@ void VkSmol::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
 
 // ——— Buffers ————————————————————————————————————————————————————————————————
 
-Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferAllocFlags flags, void* data, std::string name) {
+Buffer Engine::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferAllocFlags flags, void* data, std::string name) {
     Buffer buf;
     buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
 
@@ -346,7 +348,7 @@ Buffer VkSmol::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferA
     return buf;
 }
 
-void VkSmol::fillImage(Image& image, const void* data, size_t size) {
+void Engine::fillImage(Image& image, const void* data, size_t size) {
     Buffer staging;
     staging.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
     staging.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -360,7 +362,7 @@ void VkSmol::fillImage(Image& image, const void* data, size_t size) {
     staging.destroy(device);
 }
 
-void VkSmol::readImage(Image& image, void* out, size_t size) {
+void Engine::readImage(Image& image, void* out, size_t size) {
     Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, "ImageReadback");
 
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
@@ -378,7 +380,7 @@ void VkSmol::readImage(Image& image, void* out, size_t size) {
     readback.destroy(device);
 }
 
-void VkSmol::destroyBuffer(Buffer& buffer) {
+void Engine::destroyBuffer(Buffer& buffer) {
     if (!buffer.get()) return;
     auto retired = std::make_shared<Buffer>(std::move(buffer));
     retirementQueue[currentRetirementFrame].push_back(
@@ -389,7 +391,7 @@ void VkSmol::destroyBuffer(Buffer& buffer) {
 
 // ——— Images —————————————————————————————————————————————————————————————————
 
-Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
+Image Engine::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
     Image img;
     img.setResourceName(name.empty() ? "Image" : std::move(name));
     img.init(device, width, height, format, usage);
@@ -397,14 +399,14 @@ Image VkSmol::createImage(uint32_t width, uint32_t height, VkFormat format, VkIm
     return img;
 }
 
-Image VkSmol::createImageFromPath(std::string path, std::string name) {
+Image Engine::createImageFromPath(std::string path, std::string name) {
     Image img;
     img.setResourceName(name.empty() ? "Image" : std::move(name));
     img.initFromPath(device, physicalDevice, transferCommandPool, transferQueue, path);
     return img;
 }
 
-Image VkSmol::createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name) {
+Image Engine::createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name) {
     Buffer staging;
     staging.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
     staging.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -425,7 +427,7 @@ Image VkSmol::createImageFromData(const void* data, size_t size, VkFormat format
     return img;
 }
 
-Image VkSmol::createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name) {
+Image Engine::createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name) {
     Image img;
     img.setResourceName(name.empty() ? "Image" : std::move(name));
     img.init(device, width, height, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -433,7 +435,7 @@ Image VkSmol::createEmptyImage(VkFormat format, uint32_t width, uint32_t height,
     return img;
 }
 
-void VkSmol::copyImage(Image& src, Image& dst) {
+void Engine::copyImage(Image& src, Image& dst) {
     CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
 
     ImageBarrier barrier;
@@ -456,7 +458,7 @@ void VkSmol::copyImage(Image& src, Image& dst) {
     CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, cmd);
 }
 
-void VkSmol::destroyImage(Image& image) {
+void Engine::destroyImage(Image& image) {
     if (!image.get()) return;
     auto retired = std::make_shared<Image>(std::move(image));
     retirementQueue[currentRetirementFrame].push_back(
@@ -465,7 +467,7 @@ void VkSmol::destroyImage(Image& image) {
     image = Image{};
 }
 
-ImageView VkSmol::createImageView(Image& image, std::string name) {
+ImageView Engine::createImageView(Image& image, std::string name) {
     if (name.empty() && !image.getResourceName().empty())
         name = image.getResourceName() + "View";
     ImageView view;
@@ -474,7 +476,7 @@ ImageView VkSmol::createImageView(Image& image, std::string name) {
     return view;
 }
 
-void VkSmol::destroyImageView(ImageView& view) {
+void Engine::destroyImageView(ImageView& view) {
     if (!view.get()) return;
     auto retired = std::make_shared<ImageView>(std::move(view));
     retirementQueue[currentRetirementFrame].push_back(
@@ -483,14 +485,14 @@ void VkSmol::destroyImageView(ImageView& view) {
     view = ImageView{};
 }
 
-Sampler VkSmol::createSampler(std::string name) {
+Sampler Engine::createSampler(std::string name) {
     Sampler smp;
     smp.setResourceName(name.empty() ? "Sampler" : std::move(name));
     smp.init(device, physicalDevice);
     return smp;
 }
 
-void VkSmol::destroySampler(Sampler& sampler) {
+void Engine::destroySampler(Sampler& sampler) {
     if (!sampler.get()) return;
     auto retired = std::make_shared<Sampler>(std::move(sampler));
     retirementQueue[currentRetirementFrame].push_back(
@@ -499,7 +501,7 @@ void VkSmol::destroySampler(Sampler& sampler) {
     sampler = Sampler{};
 }
 
-void VkSmol::beginDynamicRenderer(
+void Engine::beginDynamicRenderer(
     const CommandBuffer& commandBuffer,
     VkImageView imageView, VkImageLayout imageLayout,
     VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
@@ -513,26 +515,26 @@ void VkSmol::beginDynamicRenderer(
     );
 }
 
-void VkSmol::endDynamicRenderer(const CommandBuffer& commandBuffer) {
+void Engine::endDynamicRenderer(const CommandBuffer& commandBuffer) {
     dynamicRenderer.end(commandBuffer);
 }
 
 
-bool VkSmol::shouldTerminate() {
+bool Engine::shouldTerminate() {
     return platform->shouldClose();
 }
 
-Image& VkSmol::getSwapchainImage(size_t imageIndex) {
+Image& Engine::getSwapchainImage(size_t imageIndex) {
     assert(!platform->isHeadless());
     return std::get<WindowedState>(displayState).swapchain.getImage(imageIndex);
 }
 
-ImageView& VkSmol::getSwapchainImageView(size_t imageIndex) {
+ImageView& Engine::getSwapchainImageView(size_t imageIndex) {
     assert(!platform->isHeadless());
     return std::get<WindowedState>(displayState).swapchain.getImageView(imageIndex);
 }
 
-void VkSmol::initImgui() {
+void Engine::initImgui() {
     assert(!platform->isHeadless());
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, std::get<WindowedState>(displayState).surface);
@@ -586,7 +588,7 @@ void VkSmol::initImgui() {
     ImGui_ImplVulkan_Init(&initInfo);
 }
 
-void VkSmol::recreateSwapchain() {
+void Engine::recreateSwapchain() {
     assert(!platform->isHeadless());
 
     platform->pauseWhileMinimized();
@@ -609,7 +611,7 @@ void VkSmol::recreateSwapchain() {
     framebufferResized = false;
 }
 
-std::vector<const char*> VkSmol::getRequiredInstanceExtensions() {
+std::vector<const char*> Engine::getRequiredInstanceExtensions() {
     std::vector<const char*> requiredExtensions;
 
     for (const char* ext : platform->getRequiredInstanceExtensions())
@@ -620,7 +622,7 @@ std::vector<const char*> VkSmol::getRequiredInstanceExtensions() {
     return requiredExtensions;
 }
 
-std::vector<const char*> VkSmol::getRequiredDeviceExtensions() {
+std::vector<const char*> Engine::getRequiredDeviceExtensions() {
     std::vector<const char*> requiredExtensions;
 
     for (const char* ext : platform->getRequiredDeviceExtensions())
@@ -631,7 +633,7 @@ std::vector<const char*> VkSmol::getRequiredDeviceExtensions() {
     return requiredExtensions;
 }
 
-int VkSmol::scoreDevice(const PhysicalDevice& device) {
+int Engine::scoreDevice(const PhysicalDevice& device) {
     QueueFamilyIndices indices = platform->isHeadless() ?
         findQueueFamiliesHeadless(device) :
         findQueueFamilies(device, std::get<WindowedState>(displayState).surface);
@@ -665,4 +667,6 @@ int VkSmol::scoreDevice(const PhysicalDevice& device) {
     }
 
     return 1;
+}
+
 }

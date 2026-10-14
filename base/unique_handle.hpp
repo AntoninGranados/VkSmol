@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <utility>
 
+namespace VkSmol {
+
 template<typename HandleT, HandleT NullHandle>
 class UniqueHandle {
 public:
@@ -35,3 +37,5 @@ protected:
 private:
     HandleT handle = NullHandle;
 };
+
+}

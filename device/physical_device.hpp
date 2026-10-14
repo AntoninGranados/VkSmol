@@ -6,6 +6,8 @@
 
 #include "../base/borrowed_handle.hpp"
 
+namespace VkSmol {
+
 class Instance;
 
 class PhysicalDevice: public BorrowedHandle<VkPhysicalDevice, VK_NULL_HANDLE> {
@@ -19,3 +21,5 @@ public:
 private:
     static int scoreDeviceDefault(const PhysicalDevice& device);
 };
+
+}
