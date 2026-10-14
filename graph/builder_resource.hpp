@@ -20,8 +20,8 @@ namespace VkSmol {
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
 struct PassHandle   { uint32_t id = InvalidHandle; };
-struct ImageHandle  { uint32_t id = InvalidHandle; };
-struct BufferHandle { uint32_t id = InvalidHandle; };
+struct ImageHandle  { uint32_t id = InvalidHandle; bool operator==(const ImageHandle&) const = default; };
+struct BufferHandle { uint32_t id = InvalidHandle; bool operator==(const BufferHandle&) const = default; };
 
 class PassContext;
 
