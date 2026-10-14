@@ -16,6 +16,7 @@ void GraphicsPipeline::init(
     const std::vector<const Shader*>& shaders,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
     uint32_t pushConstantSize,
+    VkShaderStageFlags pushConstantStages,
     const PipelineCache& pipelineCache,
     GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
@@ -84,7 +85,7 @@ void GraphicsPipeline::init(
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
     pipelineLayoutInfo.pSetLayouts = vkSetLayouts.data();
     const VkPushConstantRange pushConstantRange{
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .stageFlags = pushConstantStages,
         .offset     = 0,
         .size       = pushConstantSize,
     };

@@ -23,6 +23,7 @@ public:
         const std::vector<const Shader*>& shaders,
         const std::vector<const DescriptorSetLayout*>& setLayouts,
         uint32_t pushConstantSize,
+        VkShaderStageFlags pushConstantStages,
         const PipelineCache& pipelineCache,
         GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,

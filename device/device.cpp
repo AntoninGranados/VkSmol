@@ -182,7 +182,7 @@ Image Device::createImageFromData(const void* data, size_t size, VkFormat format
     img.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(logicalDevice, transferCommandPool);
-    img.fillFromBuffer(logicalDevice, cmd, staging);
+    uploadImage(cmd, img, staging);
     CommandBuffer::endSingleTimeCommands(logicalDevice, transferCommandPool, transferQueue, cmd);
 
     staging.free(logicalDevice);
@@ -206,11 +206,28 @@ void Device::fillImage(Image& image, const void* data, size_t size) {
     staging.fill(logicalDevice, const_cast<void*>(data));
 
     CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(logicalDevice, transferCommandPool);
-    image.fillFromBuffer(logicalDevice, cmd, staging);
+    uploadImage(cmd, image, staging);
     CommandBuffer::endSingleTimeCommands(logicalDevice, transferCommandPool, transferQueue, cmd);
 
     staging.free(logicalDevice);
     staging.destroy(logicalDevice);
+}
+
+void Device::uploadImage(const CommandBuffer& commandBuffer, Image& image, const Buffer& staging) {
+    ImageBarrier barrier;
+    barrier.call(
+        logicalDevice, commandBuffer, image.get(),
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT
+    );
+    image.fillFromBuffer(logicalDevice, commandBuffer, staging);
+    barrier.call(
+        logicalDevice, commandBuffer, image.get(),
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+    );
 }
 
 void Device::readImage(Image& image, void* out, size_t size) {

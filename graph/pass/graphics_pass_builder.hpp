@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <utility>
+#include <vector>
 
 #include "../builder_resource.hpp"
 #include "pass_builder.hpp"
@@ -12,6 +14,10 @@ class RenderGraphBuilder;
 class GraphicsPassBuilder: public PassBuilder<GraphicsPassBuilder> {
 public:
     GraphicsPassBuilder& pipeline(std::string vertexShaderPath, std::string fragmentShaderPath, ShaderDefines shaderDefines = {});
+    GraphicsPassBuilder& pipeline(std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines = {});
+    GraphicsPassBuilder& vertexInput(const VkPipelineVertexInputStateCreateInfo& vertexInput);
+    GraphicsPassBuilder& vertexBuffer(BufferHandle buffer);
+    GraphicsPassBuilder& indexBuffer(BufferHandle buffer, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
     GraphicsPassBuilder& colorAttachment(ImageHandle image, AttachmentLoad load, std::array<float, 4> clearColor = { 0.0f, 0.0f, 0.0f, 1.0f });
 
 private:

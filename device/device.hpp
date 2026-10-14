@@ -114,6 +114,7 @@ private:
     std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
 
     void flushRetired();
+    void uploadImage(const CommandBuffer& commandBuffer, Image& image, const Buffer& staging);
 
     std::vector<const char*> getRequiredInstanceExtensions(std::optional<const Window&> window) const;
     std::vector<const char*> getRequiredDeviceExtensions() const;

@@ -3,15 +3,43 @@
 #include "../graph_utils.hpp"
 #include "../render_graph_builder.hpp"
 
+#include <stdexcept>
+
 namespace VkSmol {
 
 GraphicsPassBuilder& GraphicsPassBuilder::pipeline(std::string vertexShaderPath, std::string fragmentShaderPath, ShaderDefines shaderDefines) {
+    return pipeline({ { VK_SHADER_STAGE_VERTEX_BIT, std::move(vertexShaderPath) }, { VK_SHADER_STAGE_FRAGMENT_BIT, std::move(fragmentShaderPath) } }, std::move(shaderDefines));
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::pipeline(std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines) {
     GraphicsPipelineInfo info;
     info.name          = graph->passes[handle.id].name + "Pipeline";
-    info.shaderPaths   = { { VK_SHADER_STAGE_VERTEX_BIT, std::move(vertexShaderPath) }, { VK_SHADER_STAGE_FRAGMENT_BIT, std::move(fragmentShaderPath) } };
+    info.shaderPaths   = std::move(shaderPaths);
     info.shaderDefines = std::move(shaderDefines);
     info.passId        = handle.id;
     graph->graphicsPipelines.push_back(std::move(info));
+    return *this;
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::vertexInput(const VkPipelineVertexInputStateCreateInfo& vertexInput) {
+    for (GraphicsPipelineInfo& info : graph->graphicsPipelines) {
+        if (info.passId != handle.id) continue;
+        if (vertexInput.pVertexBindingDescriptions)
+            info.bindingDescription = *vertexInput.pVertexBindingDescriptions;
+        info.attributeDescriptions.assign(vertexInput.pVertexAttributeDescriptions, vertexInput.pVertexAttributeDescriptions + vertexInput.vertexAttributeDescriptionCount);
+        return *this;
+    }
+    throw std::runtime_error("vertexInput() must be called after pipeline()");
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::vertexBuffer(BufferHandle buffer) {
+    graph->passes[handle.id].bufferAccesses.push_back({ .buffer = buffer, .info = { .usage = BufferUsageType::Vertex, .access = AccessType::Read } });
+    return *this;
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::indexBuffer(BufferHandle buffer, VkIndexType indexType) {
+    graph->passes[handle.id].bufferAccesses.push_back({ .buffer = buffer, .info = { .usage = BufferUsageType::Index, .access = AccessType::Read } });
+    graph->passes[handle.id].indexType = indexType;
     return *this;
 }
 

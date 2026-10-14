@@ -20,8 +20,8 @@ namespace VkSmol {
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
 struct PassHandle   { uint32_t id = InvalidHandle; };
-struct ImageHandle  { uint32_t id = InvalidHandle; };
-struct BufferHandle { uint32_t id = InvalidHandle; };
+struct ImageHandle  { uint32_t id = InvalidHandle; bool persistent = false; };
+struct BufferHandle { uint32_t id = InvalidHandle; bool persistent = false; };
 
 class PassContext;
 
@@ -193,6 +193,7 @@ struct NamedBinding {
     bool        isImage;
     uint32_t    handleId;
     AccessType  access;
+    bool        persistent = false;
 };
 
 struct PassInfo {
@@ -203,6 +204,7 @@ struct PassInfo {
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
     std::vector<NamedBinding>          namedBindings      = {};
     std::array<float, 4>               clearColor         = { 0.0f, 0.0f, 0.0f, 1.0f };
+    VkIndexType                        indexType          = VK_INDEX_TYPE_UINT32;
     std::function<void(PassContext&)>  execute;
 };
 

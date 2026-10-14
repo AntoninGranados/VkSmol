@@ -60,9 +60,27 @@ public:
     RenderGraph(RenderGraph&&) = delete;
     RenderGraph& operator=(RenderGraph&&) = delete;
 
-    ImageHandle  createImage(std::string name, VkFormat format, uint32_t width, uint32_t height);
-    BufferHandle createBuffer(std::string name, size_t size, const void* initialData = nullptr);
+    ImageHandle createImage(
+        std::string name, VkFormat format,
+        uint32_t width, uint32_t height, uint32_t depth = 1,
+        ImageOwnership ownership = ImageOwnership::Transient,
+        VkImageUsageFlags extraUsageFlags = 0,
+        std::optional<ImageAccessInfo> initialAccess = {},
+        std::optional<ImageAccessInfo> finalAccess = {}
+    );
+    BufferHandle createBuffer(
+        std::string name, size_t size,
+        BufferOwnership ownership = BufferOwnership::Managed,
+        VkBufferUsageFlags extraUsageFlags = 0,
+        const void* initialData = nullptr
+    );
+
     ImageHandle  importSwapchain();
+    ImageHandle  importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess);
+    BufferHandle importBuffer(std::string name, size_t size);
+    void bindImage(ImageHandle handle, VkImage image, VkImageView view, VkSampler sampler = VK_NULL_HANDLE);
+    void bindBuffer(BufferHandle handle, VkBuffer buffer);
+    void swapBindings(ImageHandle a, ImageHandle b);
 
     ComputePassBuilder  addComputePass(std::string name);
     GraphicsPassBuilder addGraphicsPass(std::string name);
@@ -92,8 +110,10 @@ public:
         readBuffer(handle, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>), offset);
     }
 
-    const ImageView& getView(ImageHandle handle) const;
-    const Sampler& getSampler(ImageHandle handle) const;
+    VkImage     getImage(ImageHandle handle) const;
+    VkImageView getView(ImageHandle handle) const;
+    VkSampler   getSampler(ImageHandle handle) const;
+    VkBuffer    getBuffer(BufferHandle handle) const;
 
     double getTimestampMs(const std::string& passName) const;
     std::string dump() const;
@@ -106,6 +126,26 @@ private:
     RenderGraphBuilder builder;
     CompiledRenderGraph graph;
     bool baked = false;
+
+    struct PersistentImageImport {
+        uint32_t        localId;
+        uint32_t        persistentIndex;
+        uint32_t        firstPass = InvalidHandle;
+        ImageAccessInfo firstAccess;
+        ImageAccessInfo lastAccess;
+    };
+    struct PersistentBufferImport {
+        uint32_t         localId;
+        uint32_t         persistentIndex;
+        uint32_t         firstPass = InvalidHandle;
+        BufferAccessInfo firstAccess;
+        BufferAccessInfo lastAccess;
+    };
+    std::vector<PersistentImageImport>  persistentImages;
+    std::vector<PersistentBufferImport> persistentBuffers;
+
+    std::unordered_map<uint32_t, VkSampler> externalSamplers;
+    Sampler defaultSampler;
 
     std::optional<ImageHandle> swapchainImage;
     std::optional<ImageHandle> presentedImage;
@@ -154,13 +194,21 @@ private:
     std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
     std::unordered_map<uint32_t, uint32_t>         computePushConstantSizes;
     std::unordered_map<uint32_t, uint32_t>         graphicsPushConstantSizes;
+    std::unordered_map<uint32_t, VkShaderStageFlags> graphicsPushConstantStages;
     PipelineCache pipelineCache;
 
     std::unordered_map<uint32_t, std::vector<DescriptorSetLayout>> passDescriptorLayouts;
     std::unordered_map<uint32_t, std::vector<DescriptorSetGroup>>  passDescriptorGroups;
     std::unordered_set<uint32_t>                                   dirtyDescriptors;
 
+    void importPersistentResources();
     void resolveBindings(std::vector<std::string>& errors);
+    void trackPersistentResources();
+    void emitPersistentBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) const;
+    void updatePersistentStates();
+    const PersistentImageImport* findPersistentImage(uint32_t localId) const;
+    const PersistentBufferImport* findPersistentBuffer(uint32_t localId) const;
+    VkDeviceSize getBufferSize(uint32_t bufferId) const;
 
     void initImages();
     void destroyImages();

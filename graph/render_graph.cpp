@@ -21,6 +21,7 @@ RenderGraph::RenderGraph(Engine& engine)
 
 RenderGraph::~RenderGraph() {
     device.waitIdle();
+    for (const Fence& fence : fences) engine.unregisterFence(fence);
     if (timestampPool != VK_NULL_HANDLE)
         vkDestroyQueryPool(logicalDevice.get(), timestampPool, nullptr);
     if (baked) {
@@ -34,19 +35,66 @@ RenderGraph::~RenderGraph() {
     destroyBuffers();
     destroyImages();
     for (StagingArena& arena : stagingArenas) device.destroyBuffer(arena.buffer);
+    device.destroySampler(defaultSampler);
     device.waitIdle();
 }
 
 // ——— Declaration —————————————————————————————————————————————————————————————
 
-ImageHandle RenderGraph::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height) {
+ImageHandle RenderGraph::createImage(
+    std::string name, VkFormat format,
+    uint32_t width, uint32_t height, uint32_t depth,
+    ImageOwnership ownership,
+    VkImageUsageFlags extraUsageFlags,
+    std::optional<ImageAccessInfo> initialAccess,
+    std::optional<ImageAccessInfo> finalAccess
+) {
     assert(!baked);
-    return builder.createImage(std::move(name), format, width, height);
+    return builder.createImage(std::move(name), format, width, height, depth, ownership, extraUsageFlags, initialAccess, finalAccess);
 }
 
-BufferHandle RenderGraph::createBuffer(std::string name, size_t size, const void* initialData) {
+BufferHandle RenderGraph::createBuffer(
+    std::string name, size_t size,
+    BufferOwnership ownership,
+    VkBufferUsageFlags extraUsageFlags,
+    const void* initialData
+) {
     assert(!baked);
-    return builder.createBuffer(std::move(name), size, BufferOwnership::Managed, 0, initialData);
+    return builder.createBuffer(std::move(name), size, ownership, extraUsageFlags, initialData);
+}
+
+ImageHandle RenderGraph::importImage(std::string name, VkFormat format, uint32_t width, uint32_t height, ImageAccessInfo initialAccess, ImageAccessInfo finalAccess) {
+    return createImage(std::move(name), format, width, height, 1, ImageOwnership::Imported, 0, initialAccess, finalAccess);
+}
+
+BufferHandle RenderGraph::importBuffer(std::string name, size_t size) {
+    return createBuffer(std::move(name), size, BufferOwnership::Imported);
+}
+
+void RenderGraph::bindImage(ImageHandle handle, VkImage image, VkImageView view, VkSampler sampler) {
+    assert(!handle.persistent);
+    bindings[handle.id] = { .image = image, .view = view };
+    externalSamplers[handle.id] = sampler;
+    for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f)
+        refreshDescriptorsForImage(handle.id, f);
+}
+
+void RenderGraph::bindBuffer(BufferHandle handle, VkBuffer buffer) {
+    assert(!handle.persistent);
+    bufferBindings[handle.id] = buffer;
+    refreshDescriptorsForBuffer(handle.id);
+}
+
+void RenderGraph::swapBindings(ImageHandle a, ImageHandle b) {
+    assert(!a.persistent && !b.persistent);
+    std::swap(bindings[a.id],      bindings[b.id]);
+    std::swap(ownedImages[a.id],   ownedImages[b.id]);
+    std::swap(ownedViews[a.id],    ownedViews[b.id]);
+    std::swap(ownedSamplers[a.id], ownedSamplers[b.id]);
+    for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
+        refreshDescriptorsForImage(a.id, f);
+        refreshDescriptorsForImage(b.id, f);
+    }
 }
 
 ImageHandle RenderGraph::importSwapchain() {
@@ -89,8 +137,10 @@ std::vector<std::string> RenderGraph::bake(std::string pipelineCachePath) {
     assert(!baked);
     std::vector<std::string> errors;
 
+    importPersistentResources();
     resolveBindings(errors);
     if (!errors.empty()) return errors;
+    trackPersistentResources();
 
     try {
         graph = builder.compile();
@@ -109,6 +159,7 @@ std::vector<std::string> RenderGraph::bake(std::string pipelineCachePath) {
     }
 
     pipelineCache.init(logicalDevice, pipelineCachePath);
+    defaultSampler = device.createSampler("DefaultSampler");
     initImages();
     initBuffers();
     initDescriptorSets();
@@ -128,6 +179,133 @@ std::vector<std::string> RenderGraph::bake(std::string pipelineCachePath) {
 
     baked = true;
     return errors;
+}
+
+void RenderGraph::importPersistentResources() {
+    const auto localImage = [&](uint32_t persistentIndex) -> uint32_t {
+        for (const PersistentImageImport& import : persistentImages)
+            if (import.persistentIndex == persistentIndex) return import.localId;
+
+        const Engine::PersistentImage& image = engine.images[persistentIndex];
+        const ImageHandle handle = builder.createImage(
+            image.name, image.format, image.width, image.height, 1, ImageOwnership::Imported, 0,
+            ImageAccessInfo{ .usage = ImageUsageType::Undefined, .access = AccessType::None }
+        );
+        bindings[handle.id] = { .image = image.image.get(), .view = image.view.get() };
+        externalSamplers[handle.id] = image.sampler.get();
+        persistentImages.push_back({ .localId = handle.id, .persistentIndex = persistentIndex });
+        return handle.id;
+    };
+    const auto localBuffer = [&](uint32_t persistentIndex) -> uint32_t {
+        for (const PersistentBufferImport& import : persistentBuffers)
+            if (import.persistentIndex == persistentIndex) return import.localId;
+
+        const Engine::PersistentBuffer& buffer = engine.buffers[persistentIndex];
+        const BufferHandle handle = builder.createBuffer(buffer.name, buffer.size, BufferOwnership::Imported);
+        bufferBindings[handle.id] = buffer.buffer.get();
+        persistentBuffers.push_back({ .localId = handle.id, .persistentIndex = persistentIndex });
+        return handle.id;
+    };
+
+    for (PassInfo& pass : builder.passes) {
+        for (ImageAccess& access : pass.imageAccesses)
+            if (access.image.persistent) access.image = { .id = localImage(access.image.id) };
+        for (BufferAccess& access : pass.bufferAccesses)
+            if (access.buffer.persistent) access.buffer = { .id = localBuffer(access.buffer.id) };
+        for (NamedBinding& binding : pass.namedBindings) {
+            if (!binding.persistent) continue;
+            binding.handleId = binding.isImage ? localImage(binding.handleId) : localBuffer(binding.handleId);
+            binding.persistent = false;
+        }
+    }
+}
+
+void RenderGraph::trackPersistentResources() {
+    for (PersistentImageImport& import : persistentImages) {
+        for (uint32_t passId = 0; passId < builder.passes.size(); ++passId)
+            for (const ImageAccess& access : builder.passes[passId].imageAccesses) {
+                if (access.image.id != import.localId) continue;
+                if (import.firstPass == InvalidHandle) {
+                    import.firstPass = passId;
+                    import.firstAccess = access.info;
+                }
+                import.lastAccess = access.info;
+            }
+        builder.images[import.localId].initialAccess = import.firstAccess;
+    }
+
+    for (PersistentBufferImport& import : persistentBuffers)
+        for (uint32_t passId = 0; passId < builder.passes.size(); ++passId)
+            for (const BufferAccess& access : builder.passes[passId].bufferAccesses) {
+                if (access.buffer.id != import.localId) continue;
+                if (import.firstPass == InvalidHandle) {
+                    import.firstPass = passId;
+                    import.firstAccess = access.info;
+                }
+                import.lastAccess = access.info;
+            }
+}
+
+void RenderGraph::emitPersistentBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) const {
+    for (const PersistentImageImport& import : persistentImages) {
+        if (import.firstPass != pass.pass.id) continue;
+        const ImageAccessInfo& current = engine.images[import.persistentIndex].lastAccess;
+        if (current.usage == import.firstAccess.usage && current.access != AccessType::Write && import.firstAccess.access != AccessType::Write)
+            continue;
+        emitBarrier(commandBuffer, { .image = { .id = import.localId }, .srcAccess = current, .dstAccess = import.firstAccess });
+    }
+
+    for (const PersistentBufferImport& import : persistentBuffers) {
+        if (import.firstPass != pass.pass.id) continue;
+        const std::optional<BufferAccessInfo>& current = engine.buffers[import.persistentIndex].lastAccess;
+        if (!current || (current->access == AccessType::Read && import.firstAccess.access == AccessType::Read)) continue;
+
+        const VulkanBufferState src = bufferAccessToVk(*current);
+        const VulkanBufferState dst = bufferAccessToVk(import.firstAccess);
+        const VkBufferMemoryBarrier2 barrier{
+            .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask        = src.stage,
+            .srcAccessMask       = src.access,
+            .dstStageMask        = dst.stage,
+            .dstAccessMask       = dst.access,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer              = bufferBindings.at(import.localId),
+            .offset              = 0,
+            .size                = VK_WHOLE_SIZE,
+        };
+        const VkDependencyInfo dependency{
+            .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers    = &barrier,
+        };
+        logicalDevice.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
+    }
+}
+
+void RenderGraph::updatePersistentStates() {
+    for (const PersistentImageImport& import : persistentImages)
+        engine.images[import.persistentIndex].lastAccess = import.lastAccess;
+    for (const PersistentBufferImport& import : persistentBuffers)
+        engine.buffers[import.persistentIndex].lastAccess = import.lastAccess;
+}
+
+const RenderGraph::PersistentImageImport* RenderGraph::findPersistentImage(uint32_t localId) const {
+    for (const PersistentImageImport& import : persistentImages)
+        if (import.localId == localId) return &import;
+    return nullptr;
+}
+
+const RenderGraph::PersistentBufferImport* RenderGraph::findPersistentBuffer(uint32_t localId) const {
+    for (const PersistentBufferImport& import : persistentBuffers)
+        if (import.localId == localId) return &import;
+    return nullptr;
+}
+
+VkDeviceSize RenderGraph::getBufferSize(uint32_t bufferId) const {
+    if (const auto owned = ownedBuffers.find(bufferId); owned != ownedBuffers.end()) return owned->second.getSize();
+    if (const PersistentBufferImport* import = findPersistentBuffer(bufferId)) return engine.buffers[import->persistentIndex].size;
+    return graph.buffers[bufferId].size;
 }
 
 void RenderGraph::resolveBindings(std::vector<std::string>& errors) {
@@ -428,16 +606,16 @@ void RenderGraph::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t f
             using T = std::decay_t<decltype(payload)>;
             if constexpr (std::is_same_v<T, UniformBufferPayload>) {
                 assert(payload.buffer);
-                set.linkUniformBuffer(*payload.buffer, write.binding);
+                set.linkUniformBuffer(payload.buffer, payload.size, write.binding);
             } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
                 assert(payload.buffer);
-                set.linkStorageBuffer(*payload.buffer, write.binding);
+                set.linkStorageBuffer(payload.buffer, payload.size, write.binding);
             } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
                 assert(payload.view && payload.sampler);
-                set.linkCombinedImageSampler(*payload.view, *payload.sampler, write.binding);
+                set.linkCombinedImageSampler(payload.view, payload.sampler, write.binding);
             } else if constexpr (std::is_same_v<T, StorageImagePayload>) {
                 assert(payload.view);
-                set.linkStorageImage(*payload.view, write.binding);
+                set.linkStorageImage(payload.view, write.binding);
             }
         }, write.payload);
     }
@@ -483,15 +661,22 @@ std::vector<std::string> RenderGraph::initPipelines() {
         if (!attachment)
             throw std::runtime_error(std::format("The graphics pass [{}] has a pipeline but no color attachment", pass.name));
 
+        const bool hasVertexInput = !info.attributeDescriptions.empty();
         const VkPipelineVertexInputStateCreateInfo vertexInput{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount   = hasVertexInput ? 1u : 0u,
+            .pVertexBindingDescriptions      = hasVertexInput ? &info.bindingDescription : nullptr,
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
+            .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
         };
 
         std::vector<Shader> shaders(info.shaderPaths.size());
         std::vector<const Shader*> shaderPointers;
         uint32_t pushConstantSize = 0;
+        VkShaderStageFlags pushConstantStages = 0;
         for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
             const auto& [stage, path] = info.shaderPaths[i];
+            pushConstantStages |= stage;
             shaders[i].init(logicalDevice, stage, compilePassShader(pass, stage, path, info.shaderDefines, errors));
             shaderPointers.push_back(&shaders[i]);
             pushConstantSize = std::max(pushConstantSize, device.compileShader(path, info.shaderDefines).compilation.pushConstantSize);
@@ -504,9 +689,10 @@ std::vector<std::string> RenderGraph::initPipelines() {
         rendering.pColorAttachmentFormats = &format;
 
         GraphicsPipeline pipeline;
-        pipeline.init(logicalDevice, rendering, vertexInput, shaderPointers, layoutsOf(info.passId), pushConstantSize, pipelineCache);
+        pipeline.init(logicalDevice, rendering, vertexInput, shaderPointers, layoutsOf(info.passId), pushConstantSize, pushConstantStages, pipelineCache);
         ownedGraphicsPipelines[id] = std::move(pipeline);
         graphicsPushConstantSizes[id] = pushConstantSize;
+        graphicsPushConstantStages[id] = pushConstantStages;
         for (Shader& shader : shaders) shader.destroy(logicalDevice);
     }
 
@@ -583,15 +769,31 @@ void RenderGraph::resizeImage(ImageHandle handle, uint32_t width, uint32_t heigh
 }
 
 
-const ImageView& RenderGraph::getView(ImageHandle handle) const {
-    return ownedViews.at(handle.id);
+VkImage RenderGraph::getImage(ImageHandle handle) const {
+    if (handle.persistent) return engine.images[handle.id].image.get();
+    return bindings.at(handle.id).image;
 }
 
-const Sampler& RenderGraph::getSampler(ImageHandle handle) const {
-    return ownedSamplers.at(handle.id);
+VkImageView RenderGraph::getView(ImageHandle handle) const {
+    if (handle.persistent) return engine.images[handle.id].view.get();
+    return bindings.at(handle.id).view;
+}
+
+VkSampler RenderGraph::getSampler(ImageHandle handle) const {
+    if (handle.persistent) return engine.images[handle.id].sampler.get();
+    if (const auto owned = ownedSamplers.find(handle.id); owned != ownedSamplers.end()) return owned->second.get();
+    if (const auto external = externalSamplers.find(handle.id); external != externalSamplers.end() && external->second != VK_NULL_HANDLE)
+        return external->second;
+    return defaultSampler.get();
+}
+
+VkBuffer RenderGraph::getBuffer(BufferHandle handle) const {
+    if (handle.persistent) return engine.buffers[handle.id].buffer.get();
+    return bufferBindings.at(handle.id);
 }
 
 bool RenderGraph::resizeBuffer(BufferHandle handle, size_t newSize) {
+    if (handle.persistent) return false;
     const BufferInfo& info = graph.buffers[handle.id];
     if (info.ownership == BufferOwnership::Imported || info.size >= newSize) return false;
     replaceBuffer(handle.id, newSize, false);
@@ -599,6 +801,7 @@ bool RenderGraph::resizeBuffer(BufferHandle handle, size_t newSize) {
 }
 
 void RenderGraph::writeBuffer(BufferHandle handle, const void* data, size_t size, size_t offset) {
+    if (handle.persistent) return engine.writeBuffer(handle, data, size, offset);
     if (size == 0) return;
     const BufferInfo& info = graph.buffers[handle.id];
     if (info.ownership == BufferOwnership::Imported)
@@ -615,6 +818,7 @@ void RenderGraph::writeBuffer(BufferHandle handle, const void* data, size_t size
 }
 
 void RenderGraph::readBuffer(BufferHandle handle, void* out, size_t size, size_t offset) {
+    if (handle.persistent) return engine.readBuffer(handle, out, size, offset);
     if (size == 0) return;
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr,
                                    graph.buffers[handle.id].name + "Readback");
@@ -677,17 +881,17 @@ void RenderGraph::updateDescriptors(const PassHandle& pass, uint32_t frameIndex)
         for (const DescriptorBindingDecl& decl : compiled.descriptorBindings) {
             if (decl.set != set) continue;
             if (decl.isImage) {
-                ImageHandle h = { .id = decl.handleId };
+                const ImageHandle h = { .id = decl.handleId };
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     writer.combinedImageSampler(decl.binding, getView(h), getSampler(h));
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                     writer.storageImage(decl.binding, getView(h));
             } else {
-                BufferHandle h = { .id = decl.handleId };
+                const BufferHandle h = { .id = decl.handleId };
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    writer.uniform(decl.binding, ownedBuffers.at(h.id));
+                    writer.uniform(decl.binding, getBuffer(h), getBufferSize(h.id));
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    writer.storage(decl.binding, ownedBuffers.at(h.id));
+                    writer.storage(decl.binding, getBuffer(h), getBufferSize(h.id));
             }
         }
         updateDescriptorSetGroup(groupIt->second[set], frameIndex, writer);
@@ -807,12 +1011,12 @@ void RenderGraph::execute() {
     if (!baked) throw std::runtime_error("RenderGraph::execute() called before a successful bake()");
 
     frame = engine.currentFrame;
+    engine.beginSlot();
     Fence::wait({ &fences[frame] }, logicalDevice);
     readTimestamps();
 
     std::optional<uint32_t> imageIndex;
     if (presentedImage) {
-        device.collectRetired(frame);
         imageIndex = engine.acquireImage();
         if (!imageIndex) return;
         bindings[swapchainImage->id] = {
@@ -832,6 +1036,7 @@ void RenderGraph::execute() {
         recordPass(commandBuffer, pass);
     emitOutputBarriers(commandBuffer);
     commandBuffer.endRecording();
+    updatePersistentStates();
     recordedSlots[frame] = true;
 
     std::vector<const Semaphore*> waitSemaphores, signalSemaphores;
@@ -842,6 +1047,7 @@ void RenderGraph::execute() {
         signalSemaphores.push_back(&renderFinishedSemaphores[frame]);
     }
     device.getGraphicsQueue().submit({ &commandBuffer }, fences[frame], waitSemaphores, waitStages, signalSemaphores);
+    engine.registerFence(frame, fences[frame]);
 
     if (presentedImage) engine.presentImage(*imageIndex, renderFinishedSemaphores[frame]);
 }
@@ -852,6 +1058,7 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
 
     vkCmdResetQueryPool(commandBuffer.get(), timestampPool, base, 2);
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
+    emitPersistentBarriers(commandBuffer, pass);
     emitBarriers(commandBuffer, pass);
 
     switch (pass.type) {
@@ -885,6 +1092,16 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
                 pipeline.setViewport(commandBuffer, VkViewport{ 0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f });
                 pipeline.setScissor(commandBuffer, VkRect2D{ {}, extent });
                 bindDescriptors(commandBuffer, pass);
+
+                std::vector<VkBuffer> vertexBuffers;
+                for (const BufferAccess& access : pass.bufferAccesses) {
+                    if (access.info.usage == BufferUsageType::Vertex) vertexBuffers.push_back(bufferBindings.at(access.buffer.id));
+                    if (access.info.usage == BufferUsageType::Index) vkCmdBindIndexBuffer(commandBuffer.get(), bufferBindings.at(access.buffer.id), 0, info.indexType);
+                }
+                if (!vertexBuffers.empty()) {
+                    const std::vector<VkDeviceSize> offsets(vertexBuffers.size(), 0);
+                    vkCmdBindVertexBuffers(commandBuffer.get(), 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
+                }
             }
             PassContext context(*this, commandBuffer, pass, extent);
             if (info.execute) info.execute(context);
@@ -957,10 +1174,16 @@ void PassContext::dispatch(uint32_t x, uint32_t y, uint32_t z) {
     graph.ownedComputePipelines.at(*pass.pipelineId).dispatch(commandBuffer, x, y, z);
 }
 
-void PassContext::draw(uint32_t vertexCount, uint32_t instanceCount) {
+void PassContext::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
     if (pass.type != PassType::Graphics || !pass.pipelineId)
         throw std::runtime_error(std::format("The pass [{}] has no graphics pipeline to draw with", pass.name));
-    vkCmdDraw(commandBuffer.get(), vertexCount, instanceCount, 0, 0);
+    vkCmdDraw(commandBuffer.get(), vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void PassContext::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    if (pass.type != PassType::Graphics || !pass.pipelineId)
+        throw std::runtime_error(std::format("The pass [{}] has no graphics pipeline to draw with", pass.name));
+    vkCmdDrawIndexed(commandBuffer.get(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void PassContext::pushConstants(const void* data, uint32_t size) {
@@ -977,7 +1200,7 @@ void PassContext::pushConstants(const void* data, uint32_t size) {
     const VkPipelineLayout layout = compute
         ? graph.ownedComputePipelines.at(*pass.pipelineId).getLayout()
         : graph.ownedGraphicsPipelines.at(*pass.pipelineId).getLayout();
-    const VkShaderStageFlags stages = compute ? VK_SHADER_STAGE_COMPUTE_BIT : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    const VkShaderStageFlags stages = compute ? VK_SHADER_STAGE_COMPUTE_BIT : graph.graphicsPushConstantStages.at(*pass.pipelineId);
     vkCmdPushConstants(commandBuffer.get(), layout, stages, 0, size, data);
 }
 

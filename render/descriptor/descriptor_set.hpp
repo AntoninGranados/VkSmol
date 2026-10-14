@@ -24,9 +24,13 @@ public:
     VkDescriptorSet get() { return descriptorSet; };
 
     void linkUniformBuffer(const Buffer& buffer, uint32_t binding);
+    void linkUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding);
     void linkStorageBuffer(const Buffer& buffer, uint32_t binding);
+    void linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding);
     void linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding);
+    void linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding);
     void linkStorageImage(const ImageView& view, uint32_t binding);
+    void linkStorageImage(VkImageView view, uint32_t binding);
     void update(const LogicalDevice& device);
     void bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, uint32_t setIndex = 0);
     void clear();

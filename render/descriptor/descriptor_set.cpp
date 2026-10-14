@@ -45,33 +45,45 @@ void DescriptorSet::free(const LogicalDevice& device, DescriptorSetGroup& alloca
 }
 
 void DescriptorSet::linkUniformBuffer(const Buffer& buffer, uint32_t binding) {
+    linkUniformBuffer(buffer.get(), buffer.getSize(), binding);
+}
+void DescriptorSet::linkUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding) {
     VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = buffer.get();
+    bufferInfo.buffer = buffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = buffer.getSize();
+    bufferInfo.range = size;
     bufferInfos.push_back({ bufferInfo, binding });
 }
 
 void DescriptorSet::linkStorageBuffer(const Buffer& buffer, uint32_t binding) {
+    linkStorageBuffer(buffer.get(), buffer.getSize(), binding);
+}
+void DescriptorSet::linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding) {
     VkDescriptorBufferInfo storageInfo{};
-    storageInfo.buffer = buffer.get();
+    storageInfo.buffer = buffer;
     storageInfo.offset = 0;
-    storageInfo.range = buffer.getSize();
+    storageInfo.range = size;
     storageInfos.push_back({ storageInfo, binding });
 }
 
 void DescriptorSet::linkStorageImage(const ImageView& view, uint32_t binding) {
+    linkStorageImage(view.get(), binding);
+}
+void DescriptorSet::linkStorageImage(VkImageView view, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = VK_NULL_HANDLE;
-    imageInfo.imageView = view.get();
+    imageInfo.imageView = view;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     storageImageInfos.push_back({ imageInfo, binding });
 }
 
 void DescriptorSet::linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding) {
+    linkCombinedImageSampler(view.get(), sampler.get(), binding);
+}
+void DescriptorSet::linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
-    imageInfo.sampler = sampler.get();
-    imageInfo.imageView = view.get();
+    imageInfo.sampler = sampler;
+    imageInfo.imageView = view;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     imageInfos.push_back({ imageInfo, binding });
 }

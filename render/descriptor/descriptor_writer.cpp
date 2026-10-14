@@ -54,6 +54,10 @@ std::runtime_error descriptorTypeMismatchError(uint32_t binding, VkDescriptorTyp
 
 // Public
 DescriptorWriter& DescriptorWriter::uniform(uint32_t binding, const Buffer& buffer) {
+    return uniform(binding, buffer.get(), buffer.getSize());
+}
+
+DescriptorWriter& DescriptorWriter::uniform(uint32_t binding, VkBuffer buffer, VkDeviceSize size) {
     if (filledBinding.contains(binding)) {
         throw duplicateBindingError(binding);
     }
@@ -66,7 +70,8 @@ DescriptorWriter& DescriptorWriter::uniform(uint32_t binding, const Buffer& buff
     writes.push_back({
         .binding = binding,
         .payload = UniformBufferPayload{
-            .buffer = &buffer,
+            .buffer = buffer,
+            .size   = size,
         }
     });
     
@@ -74,6 +79,10 @@ DescriptorWriter& DescriptorWriter::uniform(uint32_t binding, const Buffer& buff
 }
 
 DescriptorWriter& DescriptorWriter::storage(uint32_t binding, const Buffer& buffer) {
+    return storage(binding, buffer.get(), buffer.getSize());
+}
+
+DescriptorWriter& DescriptorWriter::storage(uint32_t binding, VkBuffer buffer, VkDeviceSize size) {
     if (filledBinding.contains(binding)) {
         throw duplicateBindingError(binding);
     }
@@ -86,7 +95,8 @@ DescriptorWriter& DescriptorWriter::storage(uint32_t binding, const Buffer& buff
     writes.push_back({
         .binding = binding,
         .payload = StorageBufferPayload{
-            .buffer = &buffer,
+            .buffer = buffer,
+            .size   = size,
         }
     });
     
@@ -94,6 +104,10 @@ DescriptorWriter& DescriptorWriter::storage(uint32_t binding, const Buffer& buff
 }
 
 DescriptorWriter& DescriptorWriter::combinedImageSampler(uint32_t binding, const ImageView& view, const Sampler& sampler) {
+    return combinedImageSampler(binding, view.get(), sampler.get());
+}
+
+DescriptorWriter& DescriptorWriter::combinedImageSampler(uint32_t binding, VkImageView view, VkSampler sampler) {
     if (filledBinding.contains(binding)) {
         throw duplicateBindingError(binding);
     }
@@ -106,8 +120,8 @@ DescriptorWriter& DescriptorWriter::combinedImageSampler(uint32_t binding, const
     writes.push_back({
         .binding = binding,
         .payload = CombinedImageSamplerPayload{
-            .view = &view,
-            .sampler = &sampler,
+            .view = view,
+            .sampler = sampler,
         }
     });
 
@@ -115,6 +129,10 @@ DescriptorWriter& DescriptorWriter::combinedImageSampler(uint32_t binding, const
 }
 
 DescriptorWriter& DescriptorWriter::storageImage(uint32_t binding, const ImageView& view) {
+    return storageImage(binding, view.get());
+}
+
+DescriptorWriter& DescriptorWriter::storageImage(uint32_t binding, VkImageView view) {
     if (filledBinding.contains(binding)) {
         throw duplicateBindingError(binding);
     }
@@ -127,7 +145,7 @@ DescriptorWriter& DescriptorWriter::storageImage(uint32_t binding, const ImageVi
     writes.push_back({
         .binding = binding,
         .payload = StorageImagePayload{
-            .view = &view,
+            .view = view,
         }
     });
 
