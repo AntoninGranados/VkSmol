@@ -48,7 +48,7 @@ ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t widt
     ImageView view = device.createImageView(image, name + "View");
     Sampler sampler = device.createSampler(name + "Sampler");
 
-    images.push_back({
+    PersistentImage entry = {
         .name       = std::move(name),
         .format     = format,
         .width      = width,
@@ -57,8 +57,27 @@ ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t widt
         .view       = std::move(view),
         .sampler    = std::move(sampler),
         .lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None },
-    });
-    return { .id = static_cast<uint32_t>(images.size() - 1), .persistent = true };
+    };
+
+    if (freeImages.empty()) {
+        images.push_back(std::move(entry));
+        return { .id = static_cast<uint32_t>(images.size() - 1), .persistent = true };
+    }
+    const uint32_t id = freeImages.back();
+    freeImages.pop_back();
+    images[id] = std::move(entry);
+    return { .id = id, .persistent = true };
+}
+
+void Engine::destroyImage(ImageHandle handle) {
+    assert(handle.persistent);
+    PersistentImage& image = images[handle.id];
+    assert(image.image.get());
+    device.destroySampler(image.sampler);
+    device.destroyImageView(image.view);
+    device.destroyImage(image.image);
+    image = {};
+    freeImages.push_back(handle.id);
 }
 
 ImageHandle Engine::loadImage(const std::string& path) {
@@ -110,11 +129,30 @@ BufferHandle Engine::createBuffer(std::string name, size_t size, const void* ini
         | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
         | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     Buffer buffer = device.createBuffer(usage, size, 0, nullptr, name);
-    buffers.push_back({ .name = std::move(name), .size = size, .buffer = std::move(buffer) });
+    PersistentBuffer entry = { .name = std::move(name), .size = size, .buffer = std::move(buffer) };
 
-    const BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size() - 1), .persistent = true };
+    uint32_t id;
+    if (freeBuffers.empty()) {
+        id = static_cast<uint32_t>(buffers.size());
+        buffers.push_back(std::move(entry));
+    } else {
+        id = freeBuffers.back();
+        freeBuffers.pop_back();
+        buffers[id] = std::move(entry);
+    }
+
+    const BufferHandle handle = { .id = id, .persistent = true };
     if (initialData) writeBuffer(handle, initialData, size);
     return handle;
+}
+
+void Engine::destroyBuffer(BufferHandle handle) {
+    assert(handle.persistent);
+    PersistentBuffer& buffer = buffers[handle.id];
+    assert(buffer.buffer.get());
+    device.destroyBuffer(buffer.buffer);
+    buffer = {};
+    freeBuffers.push_back(handle.id);
 }
 
 size_t Engine::getBufferSize(BufferHandle handle) const {

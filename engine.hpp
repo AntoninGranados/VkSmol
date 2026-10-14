@@ -56,11 +56,13 @@ public:
 
     ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height);
     ImageHandle loadImage(const std::string& path);
+    void destroyImage(ImageHandle image);
     VkExtent2D getImageExtent(ImageHandle image) const;
     void writeImage(ImageHandle image, const void* data, size_t size);
     void readImage(ImageHandle image, void* out, size_t size);
 
     BufferHandle createBuffer(std::string name, size_t size, const void* initialData = nullptr);
+    void destroyBuffer(BufferHandle buffer);
     size_t getBufferSize(BufferHandle buffer) const;
 
     void writeBuffer(BufferHandle buffer, const void* data, size_t size, size_t offset = 0);
@@ -109,6 +111,8 @@ private:
 
     std::vector<PersistentImage>  images;
     std::vector<PersistentBuffer> buffers;
+    std::vector<uint32_t>         freeImages;
+    std::vector<uint32_t>         freeBuffers;
 
     bool slotStarted = false;
     std::array<std::vector<const Fence*>, MAX_FRAME_IN_FLIGHT> slotFences;
