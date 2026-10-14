@@ -4,18 +4,18 @@
 #include <cassert>
 #include <cstring>
 #include <format>
-#include <memory>
-#include <print>
 #include <stdexcept>
 #include <utility>
 
-#include "graph_utils.hpp"
 #include "../engine.hpp"
+#include "graph_utils.hpp"
+#include "graph_validation.hpp"
 
 namespace VkSmol {
 
 RenderGraph::RenderGraph(Engine& engine)
-    : engine(engine), device(engine.getDevice()), logicalDevice(engine.getDevice().getLogicalDevice()) {
+    : engine(engine), device(engine.getDevice()), logicalDevice(engine.getDevice().getLogicalDevice()),
+      descriptors(device, engine.getResources()), pipelines(device, engine.getResources()) {
     dynamicRenderer.init(logicalDevice);
 }
 
@@ -26,10 +26,9 @@ RenderGraph::~RenderGraph() {
         vkDestroyQueryPool(logicalDevice.get(), timestampPool, nullptr);
     if (baked) {
         destroySync();
-        destroyPipelines();
-        pipelineCache.destroy(logicalDevice);
+        pipelines.destroy();
     }
-    destroyDescriptorSets();
+    descriptors.destroy();
     for (ImageHandle image : ownedImages) engine.destroyImage(image);
     for (BufferHandle buffer : ownedBuffers) engine.destroyBuffer(buffer);
 }
@@ -75,8 +74,10 @@ void RenderGraph::bake(std::string pipelineCachePath) {
     assert(!baked);
     std::vector<std::string> errors;
 
-    resolveBindings(errors);
-    checkImageAccesses(errors);
+    resolveBindings(
+        builder.passes, builder.computePipelines, builder.graphicsPipelines, device, engine.getResources(), errors
+    );
+    checkImageAccesses(builder.passes, engine.getResources(), errors);
     if (!errors.empty()) {
         std::string message = errors.front();
         for (size_t i = 1; i < errors.size(); ++i) message += "\n" + errors[i];
@@ -93,454 +94,12 @@ void RenderGraph::bake(std::string pipelineCachePath) {
         }
     }
 
-    pipelineCache.init(logicalDevice, pipelineCachePath);
-    initDescriptorSets();
-    try {
-        initPipelines();
-    } catch (...) {
-        device.markShadersStale();
-        destroyPipelines();
-        pipelineCache.destroy(logicalDevice);
-        throw;
-    }
-    device.markShadersStale();
+    descriptors.init(graph);
+    pipelines.init(graph, descriptors, pipelineCachePath);
     initSync();
     initTimestamps();
 
     baked = true;
-}
-
-void RenderGraph::resolveBindings(std::vector<std::string>& errors) {
-    for (uint32_t passId = 0; passId < builder.passes.size(); ++passId) {
-        PassInfo& pass = builder.passes[passId];
-        if (pass.namedBindings.empty()) continue;
-
-        std::vector<std::pair<std::string, ShaderDefines>> shaders;
-        VkShaderStageFlags stageFlags = 0;
-        for (const ComputePipelineInfo& info : builder.computePipelines)
-            if (info.passId == passId) {
-                shaders.emplace_back(info.shaderPath, info.shaderDefines);
-                stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-            }
-        for (const GraphicsPipelineInfo& info : builder.graphicsPipelines)
-            if (info.passId == passId) {
-                for (const auto& [stage, path] : info.shaderPaths) shaders.emplace_back(path, info.shaderDefines);
-                stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
-            }
-        if (shaders.empty()) {
-            errors.push_back(std::format("The pass [{}] binds shader parameters but has no pipeline", pass.name));
-            continue;
-        }
-
-        std::vector<const ShaderParameter*> parameters;
-        try {
-            for (const auto& [path, defines] : shaders)
-                for (const ShaderParameter& parameter : device.compileShader(path, defines).compilation.parameters)
-                    parameters.push_back(&parameter);
-        } catch (const std::exception& e) {
-            errors.push_back(e.what());
-            continue;
-        }
-
-        for (const NamedBinding& binding : pass.namedBindings) {
-            const auto found = std::ranges::find_if(parameters, [&](const ShaderParameter* p) { return p->name == binding.name; });
-            if (found == parameters.end()) {
-                errors.push_back(std::format("The shaders of the pass [{}] have no parameter named [{}{}{}]", pass.name, MSG_RED_B, binding.name, MSG_RESET));
-                continue;
-            }
-            const ShaderParameter& parameter = **found;
-            if (binding.access == AccessType::Write && !parameter.writable) {
-                errors.push_back(std::format("The pass [{}] writes [{}{}{}] but the shader declares it read-only", pass.name, MSG_RED_B, binding.name, MSG_RESET));
-                continue;
-            }
-
-            if (binding.isImage) {
-                std::optional<ImageUsageType> usage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) usage = ImageUsageType::Storage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) usage = ImageUsageType::Sampled;
-                if (!usage) {
-                    errors.push_back(std::format("The parameter [{}{}{}] of the pass [{}] is not an image the graph can bind", MSG_RED_B, binding.name, MSG_RESET, pass.name));
-                    continue;
-                }
-                if (const std::optional<std::string> error = checkImageBinding(binding, parameter, *usage)) {
-                    errors.push_back(
-                        std::format(
-                            "The pass [{}] binds [{}{}{}]: {}", pass.name, MSG_RED_B, binding.name, MSG_RESET, *error
-                        )
-                    );
-                    continue;
-                }
-                pass.imageAccesses.push_back({
-                    .image = {.id = binding.handleId},
-                    .subresources = binding.subresources,
-                    .info = {.usage = *usage, .access = binding.access},
-                });
-            } else {
-                std::optional<BufferUsageType> usage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) usage = BufferUsageType::Storage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) usage = BufferUsageType::Uniform;
-                if (!usage) {
-                    errors.push_back(std::format("The parameter [{}{}{}] of the pass [{}] is not a buffer the graph can bind", MSG_RED_B, binding.name, MSG_RESET, pass.name));
-                    continue;
-                }
-                pass.bufferAccesses.push_back({ .buffer = { .id = binding.handleId }, .info = { .usage = *usage, .access = binding.access } });
-            }
-
-            pass.descriptorBindings.push_back({
-                .set = parameter.location.set,
-                .binding = parameter.location.binding,
-                .isImage = binding.isImage,
-                .handleId = binding.handleId,
-                .subresources = binding.subresources,
-                .viewType = parameter.viewType,
-                .descriptorType = parameter.descriptorType,
-                .stageFlags = stageFlags,
-            });
-        }
-    }
-}
-
-std::optional<std::string> RenderGraph::checkImageBinding(
-    const NamedBinding& binding, const ShaderParameter& parameter, ImageUsageType usage
-) const {
-    ImageSubresourceRange range;
-    try {
-        range = engine.resolveImageRange(ImageRange({.id = binding.handleId}, binding.subresources));
-    } catch (const std::exception& e) { return e.what(); }
-    if (parameter.viewType != VK_IMAGE_VIEW_TYPE_2D && parameter.viewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY)
-        return "the shader declares a texture shape the graph cannot bind (only 2D and 2D arrays)";
-    if (parameter.viewType == VK_IMAGE_VIEW_TYPE_2D && range.layerCount != 1)
-        return std::format(
-            "the shader declares a 2D texture but [{}] spans {} layers", range.toString(), range.layerCount
-        );
-    if (usage == ImageUsageType::Storage && range.mipCount != 1)
-        return std::format(
-            "a storage image must be a single mip but [{}] spans {} mips", range.toString(), range.mipCount
-        );
-    return std::nullopt;
-}
-
-void RenderGraph::checkImageAccesses(std::vector<std::string>& errors) const {
-    for (const PassInfo& pass : builder.passes) {
-        std::vector<std::optional<ImageSubresourceRange>> ranges;
-        for (const ImageAccess& access : pass.imageAccesses) {
-            try {
-                ranges.push_back(engine.resolveImageRange(ImageRange(access.image, access.subresources)));
-            } catch (const std::exception& e) {
-                errors.push_back(std::format("The pass [{}] accesses an invalid range: {}", pass.name, e.what()));
-                ranges.push_back(std::nullopt);
-                continue;
-            }
-            const bool attachment = access.info.usage == ImageUsageType::ColorAttachment ||
-                                    access.info.usage == ImageUsageType::DepthAttachment;
-            if (attachment && (ranges.back()->mipCount != 1 || ranges.back()->layerCount != 1))
-                errors.push_back(
-                    std::format(
-                        "The pass [{}] attaches [{}] of the image [{}] but attachments must be a single mip and layer",
-                        pass.name, ranges.back()->toString(), engine.getImageName(access.image)
-                    )
-                );
-        }
-
-        for (size_t i = 0; i < ranges.size(); ++i) {
-            for (size_t j = i + 1; j < ranges.size(); ++j) {
-                const ImageAccess& a = pass.imageAccesses[i];
-                const ImageAccess& b = pass.imageAccesses[j];
-                if (!ranges[i] || !ranges[j] || a.image != b.image || a.info.usage == b.info.usage) continue;
-                if (!ranges[i]->overlaps(*ranges[j])) continue;
-                errors.push_back(
-                    std::format(
-                        "The pass [{}] uses [{}] of the image [{}] as {} and [{}] as {}", pass.name,
-                        ranges[i]->toString(), engine.getImageName(a.image), imageUsageToStr(a.info.usage),
-                        ranges[j]->toString(), imageUsageToStr(b.info.usage)
-                    )
-                );
-            }
-        }
-    }
-}
-
-// ——— Descriptor sets —————————————————————————————————————————————————————————
-
-void RenderGraph::initDescriptorSets() {
-    for (const CompiledPass& pass : graph.compiledPasses) {
-        if (pass.descriptorBindings.empty()) continue;
-        uint32_t passId = pass.pass.id;
-
-        auto decls = pass.descriptorBindings;
-        std::sort(decls.begin(), decls.end(), [](const DescriptorBindingDecl& a, const DescriptorBindingDecl& b) {
-            return a.binding < b.binding;
-        });
-
-        uint32_t setCount = 0;
-        for (const DescriptorBindingDecl& decl : decls)
-            setCount = std::max(setCount, decl.set + 1);
-
-        std::vector<DescriptorSetLayout>& layouts = passDescriptorLayouts[passId];
-        layouts = std::vector<DescriptorSetLayout>(setCount);
-        for (const DescriptorBindingDecl& decl : decls)
-            layouts[decl.set].addBinding(decl.binding, decl.stageFlags, decl.descriptorType);
-
-        std::vector<DescriptorSetGroup>& groups = passDescriptorGroups[passId];
-        groups = std::vector<DescriptorSetGroup>(setCount);
-        for (uint32_t set = 0; set < setCount; ++set) {
-            layouts[set].init(logicalDevice);
-            if (!layouts[set].getBindings().empty())
-                groups[set] = createDescriptorSetGroup(layouts[set], std::format("{}Descriptors{}", pass.name, set));
-        }
-    }
-}
-
-void RenderGraph::destroyDescriptorSets() {
-    for (auto& [id, groups] : passDescriptorGroups)
-        for (DescriptorSetGroup& group : groups)
-            if (group.isValid()) destroyDescriptorSetGroup(group);
-    passDescriptorGroups.clear();
-    for (auto& [id, layouts] : passDescriptorLayouts)
-        for (DescriptorSetLayout& layout : layouts)
-            layout.destroy(logicalDevice);
-    passDescriptorLayouts.clear();
-    writtenDescriptors.clear();
-}
-
-DescriptorSetGroup RenderGraph::createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name) {
-    const std::string baseName = name.empty() ? "DescriptorSet" : std::move(name);
-
-    DescriptorPool pool;
-    for (const auto& b : layout.getBindings())
-        pool.addPoolSize(b.descriptorType, MAX_FRAME_IN_FLIGHT);
-    pool.init(logicalDevice, MAX_FRAME_IN_FLIGHT);
-
-    std::vector<DescriptorSet> sets(MAX_FRAME_IN_FLIGHT);
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; ++i) {
-        sets[i].alloc(logicalDevice, pool, layout);
-        sets[i].setResourceName(baseName + '[' + std::to_string(i) + ']');
-    }
-    return DescriptorSetGroup(std::move(pool), std::move(sets));
-}
-
-void RenderGraph::updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer) {
-    DescriptorSet& set = group.at(frameIndex);
-    set.clear();
-    for (const DescriptorWrite& write : writer.getWrites()) {
-        std::visit([&](const auto& payload) {
-            using T = std::decay_t<decltype(payload)>;
-            if constexpr (std::is_same_v<T, UniformBufferPayload>) {
-                assert(payload.buffer);
-                set.linkUniformBuffer(payload.buffer, payload.size, write.binding);
-            } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
-                assert(payload.buffer);
-                set.linkStorageBuffer(payload.buffer, payload.size, write.binding);
-            } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
-                assert(payload.view && payload.sampler);
-                set.linkCombinedImageSampler(payload.view, payload.sampler, write.binding);
-            } else if constexpr (std::is_same_v<T, StorageImagePayload>) {
-                assert(payload.view);
-                set.linkStorageImage(payload.view, write.binding);
-            }
-        }, write.payload);
-    }
-    set.update(logicalDevice);
-}
-
-void RenderGraph::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
-    if (!group.isValid()) return;
-    auto retired = std::make_shared<DescriptorSetGroup>(std::move(group));
-    device.retire([retired](const LogicalDevice& d) { retired->destroy(d); });
-    group = {};
-}
-
-std::vector<uint64_t> RenderGraph::resolveDescriptors(const CompiledPass& pass) const {
-    std::vector<uint64_t> resolved;
-    for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
-        if (decl.isImage) {
-            const ImageHandle image = { .id = decl.handleId };
-            resolved.push_back(
-                reinterpret_cast<uint64_t>(engine.getImageView({image, decl.subresources}, decl.viewType))
-            );
-            resolved.push_back(reinterpret_cast<uint64_t>(engine.getSampler(image)));
-        } else {
-            const BufferHandle buffer = { .id = decl.handleId };
-            resolved.push_back(reinterpret_cast<uint64_t>(engine.getBuffer(buffer)));
-            resolved.push_back(engine.getBufferSize(buffer));
-        }
-    }
-    return resolved;
-}
-
-void RenderGraph::updateDescriptors(const CompiledPass& pass, uint32_t frameIndex) {
-    auto groupIt = passDescriptorGroups.find(pass.pass.id);
-    if (groupIt == passDescriptorGroups.end()) return;
-
-    const std::vector<DescriptorSetLayout>& layouts = passDescriptorLayouts.at(pass.pass.id);
-    for (uint32_t set = 0; set < layouts.size(); ++set) {
-        if (!groupIt->second[set].isValid()) continue;
-
-        DescriptorWriter writer(layouts[set]);
-        for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
-            if (decl.set != set) continue;
-            if (decl.isImage) {
-                const ImageHandle image = { .id = decl.handleId };
-                const VkImageView view = engine.getImageView({image, decl.subresources}, decl.viewType);
-                if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    writer.combinedImageSampler(decl.binding, view, engine.getSampler(image));
-                else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                    writer.storageImage(decl.binding, view);
-            } else {
-                const BufferHandle buffer = { .id = decl.handleId };
-                if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    writer.uniform(decl.binding, engine.getBuffer(buffer), engine.getBufferSize(buffer));
-                else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    writer.storage(decl.binding, engine.getBuffer(buffer), engine.getBufferSize(buffer));
-            }
-        }
-        updateDescriptorSetGroup(groupIt->second[set], frameIndex, writer);
-    }
-}
-
-void RenderGraph::bindDescriptors(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
-    const uint32_t passId = pass.pass.id;
-    auto groupIt = passDescriptorGroups.find(passId);
-    if (groupIt == passDescriptorGroups.end()) return;
-
-    std::vector<uint64_t> resolved = resolveDescriptors(pass);
-    std::vector<uint64_t>& written = writtenDescriptors[passId * MAX_FRAME_IN_FLIGHT + frame];
-    if (written != resolved) {
-        updateDescriptors(pass, frame);
-        written = std::move(resolved);
-    }
-
-    VkPipelineLayout layout;
-    VkPipelineBindPoint bindPoint;
-    if (pass.type == PassType::Compute) {
-        layout    = ownedComputePipelines.at(*pass.pipelineId).getLayout();
-        bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
-    } else {
-        layout    = ownedGraphicsPipelines.at(*pass.pipelineId).getLayout();
-        bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    }
-
-    for (uint32_t set = 0; set < groupIt->second.size(); ++set)
-        if (groupIt->second[set].isValid()) groupIt->second[set].at(frame).bind(commandBuffer, layout, bindPoint, set);
-}
-
-// ——— Pipelines ———————————————————————————————————————————————————————————————
-
-void RenderGraph::initPipelines() {
-    auto layoutsOf = [&](uint32_t passId) -> std::vector<const DescriptorSetLayout*> {
-        auto it = passDescriptorLayouts.find(passId);
-        if (it == passDescriptorLayouts.end()) return {};
-        std::vector<const DescriptorSetLayout*> layouts;
-        for (const DescriptorSetLayout& layout : it->second) layouts.push_back(&layout);
-        return layouts;
-    };
-
-    for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
-        const ComputePipelineInfo& info = graph.computePipelines[id];
-        Shader shader;
-        shader.init(logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines));
-        const ShaderCompilation& compilation = device.compileShader(info.shaderPath, info.shaderDefines).compilation;
-
-        ComputePipeline pipeline;
-        pipeline.init(logicalDevice, shader, layoutsOf(info.passId), compilation.pushConstantSize, pipelineCache);
-        ownedComputePipelines[id] = std::move(pipeline);
-        computePushConstantSizes[id] = compilation.pushConstantSize;
-        computeThreadGroupSizes[id] = compilation.threadGroupSize;
-        shader.destroy(logicalDevice);
-    }
-
-    for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
-        const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
-        const CompiledPass& pass = graph.compiledPasses[info.passId];
-        const std::optional<ImageAccess> attachment = findColorAttachment(pass);
-        if (!attachment)
-            throw std::runtime_error(std::format("The graphics pass [{}] has a pipeline but no color attachment", pass.name));
-
-        const bool hasVertexInput = !info.attributeDescriptions.empty();
-        const VkPipelineVertexInputStateCreateInfo vertexInput{
-            .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            .vertexBindingDescriptionCount   = hasVertexInput ? 1u : 0u,
-            .pVertexBindingDescriptions      = hasVertexInput ? &info.bindingDescription : nullptr,
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(info.attributeDescriptions.size()),
-            .pVertexAttributeDescriptions    = info.attributeDescriptions.data(),
-        };
-
-        std::vector<Shader> shaders(info.shaderPaths.size());
-        std::vector<const Shader*> shaderPointers;
-        uint32_t pushConstantSize = 0;
-        VkShaderStageFlags pushConstantStages = 0;
-        for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
-            const auto& [stage, path] = info.shaderPaths[i];
-            pushConstantStages |= stage;
-            shaders[i].init(logicalDevice, stage, compilePassShader(pass, stage, path, info.shaderDefines));
-            shaderPointers.push_back(&shaders[i]);
-            pushConstantSize = std::max(pushConstantSize, device.compileShader(path, info.shaderDefines).compilation.pushConstantSize);
-        }
-
-        const VkFormat format = engine.getImageFormat(attachment->image);
-        VkPipelineRenderingCreateInfoKHR rendering{};
-        rendering.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        rendering.colorAttachmentCount    = 1;
-        rendering.pColorAttachmentFormats = &format;
-
-        GraphicsPipeline pipeline;
-        pipeline.init(logicalDevice, rendering, vertexInput, shaderPointers, layoutsOf(info.passId), pushConstantSize, pushConstantStages, pipelineCache);
-        ownedGraphicsPipelines[id] = std::move(pipeline);
-        graphicsPushConstantSizes[id] = pushConstantSize;
-        graphicsPushConstantStages[id] = pushConstantStages;
-        for (Shader& shader : shaders) shader.destroy(logicalDevice);
-    }
-}
-
-void RenderGraph::destroyPipelines() {
-    for (auto& [id, pipeline] : ownedComputePipelines)
-        pipeline.destroy(logicalDevice);
-    ownedComputePipelines.clear();
-    for (auto& [id, pipeline] : ownedGraphicsPipelines)
-        pipeline.destroy(logicalDevice);
-    ownedGraphicsPipelines.clear();
-}
-
-const std::vector<uint32_t>& RenderGraph::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines) {
-    const Device::CompiledShader& compiled = device.compileShader(path, defines);
-    if (!compiled.error.empty())
-        std::println(stderr, "{}", compiled.error);
-
-    if (compiled.compilation.stage != stage) {
-        throw std::runtime_error(std::format("The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, path, MSG_RESET, pass.name));
-    }
-
-    for (const ShaderParameter& parameter : compiled.compilation.parameters) {
-        if (!parameter.used) continue;
-
-        const bool bound = std::ranges::any_of(pass.descriptorBindings, [&](const DescriptorBindingDecl& decl) {
-            return decl.set == parameter.location.set && decl.binding == parameter.location.binding;
-        });
-        if (!bound) {
-            throw std::runtime_error(std::format(
-                "The pass [{}] does not bind the parameter [{}{}{}] (set {}, binding {}) used by the shader [{}]",
-                pass.name, MSG_RED_B, parameter.name, MSG_RESET, parameter.location.set, parameter.location.binding, path
-            ));
-        }
-    }
-    return compiled.compilation.spirv;
-}
-
-// ——— Barriers ————————————————————————————————————————————————————————————————
-
-void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
-    for (const ImageAccess& access : pass.imageAccesses)
-        engine.transitionImage(commandBuffer, engine.images[access.image.id], access.subresources, access.info);
-
-    for (const BufferAccess& access : pass.bufferAccesses) {
-        Engine::PersistentBuffer& buffer = engine.buffers[access.buffer.id];
-        const std::optional<BufferAccessInfo>& current = buffer.lastAccess;
-        if (!current || (current->access == AccessType::Read && access.info.access == AccessType::Read)) {
-            buffer.lastAccess = access.info;
-            continue;
-        }
-        engine.transitionBuffer(commandBuffer, buffer, access.info);
-    }
 }
 
 // ——— Sync ————————————————————————————————————————————————————————————————————
@@ -621,7 +180,7 @@ void RenderGraph::execute() {
     CommandBuffer& commandBuffer = commandBuffers[frame];
     commandBuffer.reset();
     commandBuffer.beginRecording();
-    engine.flushTransfers(commandBuffer);
+    engine.pendingTransfers.flush(commandBuffer);
     for (const CompiledPass& pass : graph.compiledPasses)
         recordPass(commandBuffer, pass);
     commandBuffer.endRecording();
@@ -651,52 +210,16 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
     switch (pass.type) {
         case PassType::Compute: {
             if (pass.pipelineId) {
-                ownedComputePipelines.at(*pass.pipelineId).bind(commandBuffer);
-                bindDescriptors(commandBuffer, pass);
+                pipelines.bind(commandBuffer, pass);
+                descriptors.bind(commandBuffer, pass, frame, pipelines.getLayout(pass));
             }
             PassContext context(*this, commandBuffer, pass, {});
             if (info.execute) info.execute(context);
             break;
         }
-        case PassType::Graphics: {
-            const std::optional<ImageAccess> attachment = findColorAttachment(pass);
-            if (!attachment)
-                throw std::runtime_error(std::format("The graphics pass [{}] has no color attachment", pass.name));
-
-            const ImageRange target(attachment->image, attachment->subresources);
-            const VkExtent2D extent =
-                engine.getImageExtent(attachment->image, engine.resolveImageRange(target).baseMip);
-            VkClearColorValue clearColor = {};
-            std::memcpy(clearColor.float32, info.clearColor.data(), sizeof(clearColor.float32));
-            dynamicRenderer.begin(
-                commandBuffer, engine.getImageView(target, VK_IMAGE_VIEW_TYPE_2D),
-                imageAccessToVk(attachment->info).layout, attachmentLoadToVk(attachment->info.attachmentLoad),
-                VK_ATTACHMENT_STORE_OP_STORE, clearColor, VkRect2D{{}, extent}
-            );
-
-            if (pass.pipelineId) {
-                GraphicsPipeline& pipeline = ownedGraphicsPipelines.at(*pass.pipelineId);
-                pipeline.bind(commandBuffer);
-                pipeline.setViewport(commandBuffer, VkViewport{ 0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f });
-                pipeline.setScissor(commandBuffer, VkRect2D{ {}, extent });
-                bindDescriptors(commandBuffer, pass);
-
-                std::vector<VkBuffer> vertexBuffers;
-                for (const BufferAccess& access : pass.bufferAccesses) {
-                    if (access.info.usage == BufferUsageType::Vertex) vertexBuffers.push_back(engine.getBuffer(access.buffer));
-                    if (access.info.usage == BufferUsageType::Index) vkCmdBindIndexBuffer(commandBuffer.get(), engine.getBuffer(access.buffer), 0, info.indexType);
-                }
-                if (!vertexBuffers.empty()) {
-                    const std::vector<VkDeviceSize> offsets(vertexBuffers.size(), 0);
-                    vkCmdBindVertexBuffers(commandBuffer.get(), 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
-                }
-            }
-            PassContext context(*this, commandBuffer, pass, extent);
-            if (info.execute) info.execute(context);
-
-            dynamicRenderer.end(commandBuffer);
+        case PassType::Graphics:
+            recordGraphicsPass(commandBuffer, pass, info);
             break;
-        }
         case PassType::Transfer: {
             PassContext context(*this, commandBuffer, pass, {});
             if (info.execute) info.execute(context);
@@ -709,75 +232,56 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
 }
 
-std::optional<ImageAccess> RenderGraph::findColorAttachment(const CompiledPass& pass) const {
+void RenderGraph::recordGraphicsPass(
+    const CommandBuffer& commandBuffer, const CompiledPass& pass, const PassInfo& info
+) {
+    const std::optional<ImageAccess> attachment = findColorAttachment(pass);
+    if (!attachment) throw std::runtime_error(std::format("The graphics pass [{}] has no color attachment", pass.name));
+
+    ResourceRegistry& resources = engine.getResources();
+    const ImageRange target(attachment->image, attachment->subresources);
+    const VkExtent2D extent = engine.getImageExtent(attachment->image, resources.resolve(target).baseMip);
+    VkClearColorValue clearColor = {};
+    std::memcpy(clearColor.float32, info.clearColor.data(), sizeof(clearColor.float32));
+    dynamicRenderer.begin(
+        commandBuffer, resources.getImageView(target, VK_IMAGE_VIEW_TYPE_2D), imageAccessToVk(attachment->info).layout,
+        attachmentLoadToVk(attachment->info.attachmentLoad), VK_ATTACHMENT_STORE_OP_STORE, clearColor,
+        VkRect2D{{}, extent}
+    );
+
+    if (pass.pipelineId) {
+        pipelines.bind(commandBuffer, pass);
+        pipelines.setRenderArea(commandBuffer, pass, extent);
+        descriptors.bind(commandBuffer, pass, frame, pipelines.getLayout(pass));
+
+        std::vector<VkBuffer> vertexBuffers;
+        for (const BufferAccess& access : pass.bufferAccesses) {
+            const VkBuffer buffer = resources.getBuffer(access.buffer).buffer;
+            if (access.info.usage == BufferUsageType::Vertex) vertexBuffers.push_back(buffer);
+            if (access.info.usage == BufferUsageType::Index)
+                vkCmdBindIndexBuffer(commandBuffer.get(), buffer, 0, info.indexType);
+        }
+        if (!vertexBuffers.empty()) {
+            const std::vector<VkDeviceSize> offsets(vertexBuffers.size(), 0);
+            vkCmdBindVertexBuffers(
+                commandBuffer.get(), 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(),
+                offsets.data()
+            );
+        }
+    }
+    PassContext context(*this, commandBuffer, pass, extent);
+    if (info.execute) info.execute(context);
+
+    dynamicRenderer.end(commandBuffer);
+}
+
+void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
+    ResourceRegistry& resources = engine.getResources();
     for (const ImageAccess& access : pass.imageAccesses)
-        if (access.info.usage == ImageUsageType::ColorAttachment) return access;
-    return std::nullopt;
+        resources.transitionImage(commandBuffer, ImageRange(access.image, access.subresources), access.info);
+    for (const BufferAccess& access : pass.bufferAccesses)
+        resources.transitionBuffer(commandBuffer, access.buffer, access.info);
 }
 
-std::string RenderGraph::dump() const {
-    return dumpGraph(graph, engine);
-}
-
-// ——— Pass context ————————————————————————————————————————————————————————————
-
-VkCommandBuffer PassContext::cmd() const {
-    return commandBuffer.get();
-}
-
-void PassContext::dispatch(uint32_t x, uint32_t y, uint32_t z) {
-    if (pass.type != PassType::Compute || !pass.pipelineId)
-        throw std::runtime_error(std::format("The pass [{}] has no compute pipeline to dispatch", pass.name));
-    graph.ownedComputePipelines.at(*pass.pipelineId).dispatch(commandBuffer, x, y, z);
-}
-
-void PassContext::dispatchThreads(uint32_t x, uint32_t y, uint32_t z) {
-    if (pass.type != PassType::Compute || !pass.pipelineId)
-        throw std::runtime_error(std::format("The pass [{}] has no compute pipeline to dispatch", pass.name));
-    const VkExtent3D groupSize = graph.computeThreadGroupSizes.at(*pass.pipelineId);
-    dispatch((x + groupSize.width - 1) / groupSize.width, (y + groupSize.height - 1) / groupSize.height, (z + groupSize.depth - 1) / groupSize.depth);
-}
-
-void PassContext::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
-    if (pass.type != PassType::Graphics || !pass.pipelineId)
-        throw std::runtime_error(std::format("The pass [{}] has no graphics pipeline to draw with", pass.name));
-    vkCmdDraw(commandBuffer.get(), vertexCount, instanceCount, firstVertex, firstInstance);
-}
-
-void PassContext::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-    if (pass.type != PassType::Graphics || !pass.pipelineId)
-        throw std::runtime_error(std::format("The pass [{}] has no graphics pipeline to draw with", pass.name));
-    vkCmdDrawIndexed(commandBuffer.get(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-}
-
-void PassContext::pushConstants(const void* data, uint32_t size) {
-    if (!pass.pipelineId)
-        throw std::runtime_error(std::format("The pass [{}] has no pipeline to push constants to", pass.name));
-
-    const bool compute = pass.type == PassType::Compute;
-    const uint32_t capacity = compute
-        ? graph.computePushConstantSizes.at(*pass.pipelineId)
-        : graph.graphicsPushConstantSizes.at(*pass.pipelineId);
-    if (size > capacity)
-        throw std::runtime_error(std::format("The pass [{}] pushes {} bytes of constants but its shaders declare {}", pass.name, size, capacity));
-
-    const VkPipelineLayout layout = compute
-        ? graph.ownedComputePipelines.at(*pass.pipelineId).getLayout()
-        : graph.ownedGraphicsPipelines.at(*pass.pipelineId).getLayout();
-    const VkShaderStageFlags stages = compute ? VK_SHADER_STAGE_COMPUTE_BIT : graph.graphicsPushConstantStages.at(*pass.pipelineId);
-    vkCmdPushConstants(commandBuffer.get(), layout, stages, 0, size, data);
-}
-
-VkImage PassContext::getImage(ImageHandle handle) const {
-    return graph.engine.getImage(handle);
-}
-
-VkImageView PassContext::getImageView(ImageRange image, std::optional<VkImageViewType> type) const {
-    return graph.engine.getImageView(image, type);
-}
-
-VkBuffer PassContext::getBuffer(BufferHandle handle) const {
-    return graph.engine.getBuffer(handle);
-}
-
+std::string RenderGraph::dump() const { return dumpGraph(graph, engine); }
 }

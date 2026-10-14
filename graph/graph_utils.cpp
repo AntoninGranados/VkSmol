@@ -248,6 +248,12 @@ VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage) {
     }
 }
 
+std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass) {
+    for (const ImageAccess& access : pass.imageAccesses)
+        if (access.info.usage == ImageUsageType::ColorAttachment) return access;
+    return std::nullopt;
+}
+
 VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad) {
     switch (attachmentLoad) {
         case AttachmentLoad::Load: return VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_LOAD;

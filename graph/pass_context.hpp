@@ -12,6 +12,7 @@ namespace VkSmol {
 
 class RenderGraph;
 class CommandBuffer;
+class ResourceRegistry;
 struct CompiledPass;
 
 class PassContext {
@@ -22,8 +23,19 @@ public:
 
     void dispatch(uint32_t x, uint32_t y = 1, uint32_t z = 1);
     void dispatchThreads(uint32_t x, uint32_t y = 1, uint32_t z = 1);
+    void dispatchIndirect(BufferHandle buffer, size_t offset = 0);
     void draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0);
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0);
+    void drawIndirect(BufferHandle buffer, size_t offset, uint32_t drawCount, uint32_t stride);
+    void drawIndexedIndirect(BufferHandle buffer, size_t offset, uint32_t drawCount, uint32_t stride);
+
+    void fillBuffer(BufferHandle buffer, uint32_t value, size_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    void clearImage(ImageRange image, VkClearColorValue color);
+    void copyBuffer(
+        BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset = 0,
+        size_t destinationOffset = 0
+    );
+    void copyImage(ImageRange source, ImageRange destination);
 
     void pushConstants(const void* data, uint32_t size);
     template <typename T>
@@ -39,6 +51,12 @@ public:
 private:
     PassContext(RenderGraph& graph, const CommandBuffer& commandBuffer, const CompiledPass& pass, VkExtent2D extent)
         : graph(graph), commandBuffer(commandBuffer), pass(pass), extent(extent) {}
+
+    ResourceRegistry& resources() const;
+    void requirePipeline(PassType type, const char* command) const;
+    void requireOutsideRendering(const char* command) const;
+    void requireBufferAccess(BufferHandle buffer, BufferUsageType usage, const char* command) const;
+    void requireImageAccess(ImageRange image, ImageUsageType usage, const char* command) const;
 
     RenderGraph& graph;
     const CommandBuffer& commandBuffer;

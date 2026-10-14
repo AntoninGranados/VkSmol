@@ -23,6 +23,14 @@ TransferPassBuilder& TransferPassBuilder::copyFrom(ImageRange image) {
     return *this;
 }
 
+TransferPassBuilder& TransferPassBuilder::copyFrom(BufferHandle buffer) {
+    return access(buffer, BufferUsageType::TransferSrc, AccessType::Read);
+}
+
+TransferPassBuilder& TransferPassBuilder::copyTo(BufferHandle buffer) {
+    return access(buffer, BufferUsageType::TransferDst, AccessType::Write);
+}
+
 TransferPassBuilder& TransferPassBuilder::copyTo(ImageRange image) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferDst,

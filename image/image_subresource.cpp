@@ -12,6 +12,12 @@ bool ImageSubresourceRange::overlaps(const ImageSubresourceRange& other) const {
     return mips && layers;
 }
 
+bool ImageSubresourceRange::contains(const ImageSubresourceRange& other) const {
+    const bool mips = other.baseMip >= baseMip && other.baseMip + other.mipCount <= baseMip + mipCount;
+    const bool layers = other.baseLayer >= baseLayer && other.baseLayer + other.layerCount <= baseLayer + layerCount;
+    return mips && layers;
+}
+
 VkImageSubresourceRange ImageSubresourceRange::toVk() const {
     return {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

@@ -6,7 +6,6 @@
 #include <format>
 #include <stdexcept>
 
-#include "../image/image_barrier.hpp"
 #include "../present/swapchain.hpp"
 #include "../present/window.hpp"
 
@@ -101,13 +100,6 @@ void Device::markShadersStale() {
         compiled.checked = false;
 }
 
-ShaderLocation Device::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines) {
-    for (const ShaderParameter& parameter : compileShader(shaderPath, defines).compilation.parameters)
-        if (parameter.name == parameterName) return parameter.location;
-
-    throw std::runtime_error(std::format("The shader [{}{}{}] has no parameter named [{}]", MSG_RED_B, shaderPath, MSG_RESET, parameterName));
-}
-
 // ——— Command buffers ————————————————————————————————————————————————————————
 
 CommandBuffer Device::allocCommandBuffer() {
@@ -128,16 +120,13 @@ void Device::immediateSubmit(const std::function<void(const CommandBuffer&)>& re
 
 // ——— Buffers ————————————————————————————————————————————————————————————————
 
-Buffer Device::createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags, void* data, std::string name) {
+Buffer Device::createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags, std::string name) {
     Buffer buf;
     buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
 
     if (flags & BufferAllocMapped) {
         buf.init(logicalDevice, usage, size, true);
         buf.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        if (data) buf.fill(logicalDevice, data);
-    } else if (data) {
-        buf.initFilled(logicalDevice, physicalDevice, usage, transferCommandPool, transferQueue, size, data);
     } else {
         buf.init(logicalDevice, usage, size);
         buf.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -155,10 +144,6 @@ void Device::destroyBuffer(Buffer& buffer) {
 
 // ——— Images —————————————————————————————————————————————————————————————————
 
-Image Device::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
-    return createImage(width, height, 1, 1, format, usage, properties, std::move(name));
-}
-
 Image Device::createImage(
     uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format, VkImageUsageFlags usage,
     VkMemoryPropertyFlags properties, std::string name
@@ -170,128 +155,11 @@ Image Device::createImage(
     return img;
 }
 
-Image Device::createImageFromPath(std::string path, std::string name) {
-    Image img;
-    img.setResourceName(name.empty() ? "Image" : std::move(name));
-    img.initFromPath(logicalDevice, physicalDevice, transferCommandPool, transferQueue, path);
-    return img;
-}
-
-Image Device::createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name) {
-    Buffer staging;
-    staging.init(logicalDevice, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
-    staging.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    staging.fill(logicalDevice, const_cast<void*>(data));
-
-    Image img;
-    img.setResourceName(name.empty() ? "Image" : std::move(name));
-    img.init(logicalDevice, width, height, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    img.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(logicalDevice, transferCommandPool);
-    uploadImage(cmd, img, staging);
-    CommandBuffer::endSingleTimeCommands(logicalDevice, transferCommandPool, transferQueue, cmd);
-
-    staging.free(logicalDevice);
-    staging.destroy(logicalDevice);
-
-    return img;
-}
-
-Image Device::createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name) {
-    Image img;
-    img.setResourceName(name.empty() ? "Image" : std::move(name));
-    img.init(logicalDevice, width, height, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    img.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    return img;
-}
-
-void Device::fillImage(Image& image, const void* data, size_t size) {
-    Buffer staging;
-    staging.init(logicalDevice, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, true);
-    staging.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    staging.fill(logicalDevice, const_cast<void*>(data));
-
-    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(logicalDevice, transferCommandPool);
-    uploadImage(cmd, image, staging);
-    CommandBuffer::endSingleTimeCommands(logicalDevice, transferCommandPool, transferQueue, cmd);
-
-    staging.free(logicalDevice);
-    staging.destroy(logicalDevice);
-}
-
-void Device::uploadImage(const CommandBuffer& commandBuffer, Image& image, const Buffer& staging) {
-    ImageBarrier barrier;
-    barrier.call(
-        logicalDevice, commandBuffer, image.get(),
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT
-    );
-    image.fillFromBuffer(logicalDevice, commandBuffer, staging);
-    barrier.call(
-        logicalDevice, commandBuffer, image.get(),
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
-    );
-}
-
-void Device::readImage(Image& image, void* out, size_t size) {
-    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, "ImageReadback");
-
-    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(logicalDevice, immediateCommandPool);
-    emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
-    image.copyToBuffer(commandBuffer, readback);
-    emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
-    CommandBuffer::endSingleTimeCommands(logicalDevice, immediateCommandPool, graphicsQueue, commandBuffer);
-
-    readback.read(logicalDevice, out, size);
-    readback.free(logicalDevice);
-    readback.destroy(logicalDevice);
-}
-
-void Device::copyImage(Image& src, Image& dst) {
-    CommandBuffer cmd = CommandBuffer::beginSingleTimeCommands(logicalDevice, immediateCommandPool);
-
-    ImageBarrier barrier;
-    barrier.call(
-        logicalDevice, cmd, dst.get(),
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT
-    );
-
-    src.copyToImage(cmd, dst);
-
-    barrier.call(
-        logicalDevice, cmd, dst.get(),
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-    );
-
-    CommandBuffer::endSingleTimeCommands(logicalDevice, immediateCommandPool, graphicsQueue, cmd);
-}
-
 void Device::destroyImage(Image& image) {
     if (!image.get()) return;
     auto retired = std::make_shared<Image>(std::move(image));
     retire([retired](const LogicalDevice& d) { retired->free(d); retired->destroy(d); });
     image = Image{};
-}
-
-ImageView Device::createImageView(Image& image, std::string name) {
-    if (name.empty() && !image.getResourceName().empty())
-        name = image.getResourceName() + "View";
-    ImageView view;
-    view.setResourceName(name.empty() ? "ImageView" : std::move(name));
-    view.init(logicalDevice, image);
-    return view;
 }
 
 ImageView

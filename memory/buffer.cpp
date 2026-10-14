@@ -2,9 +2,6 @@
 
 #include "../device/physical_device.hpp"
 #include "../device/logical_device.hpp"
-#include "../command/command_pool.hpp"
-#include "../command/command_buffer.hpp"
-#include "../device/queue.hpp"
 #include "../utils.hpp"
 
 namespace VkSmol {
@@ -70,25 +67,6 @@ void Buffer::init(
     vkCheck(vkCreateBuffer(device.get(), &createInfo, nullptr, &buffer), "Failed to create buffer");
 }
 
-void Buffer::initFilled(
-    const LogicalDevice& device, PhysicalDevice physicalDevice,
-    VkBufferUsageFlags usage,
-    const CommandPool& transferCommandPool, Queue transferQueue,
-    size_t size, void* data
-) {
-    Buffer stagingBuffer;
-    stagingBuffer.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size);
-    stagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer.fill(device, data);
-
-    this->init(device, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
-    this->alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    Buffer::copy(stagingBuffer, *this, device, transferCommandPool, transferQueue);
-
-    stagingBuffer.free(device);
-    stagingBuffer.destroy(device);
-}
-
 void Buffer::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device.get(), buffer, &memRequirements);
@@ -132,17 +110,6 @@ void Buffer::destroy(const LogicalDevice& device) {
     persistentMapping = false;
 }
 
-void Buffer::fill(const LogicalDevice& device, void* data) {
-    if (persistentMapping) {
-        memcpy(bufferMapped, data, size);
-    } else {
-        void* mem;
-        vkMapMemory(device.get(), bufferMemory, 0, size, 0, &mem);
-        memcpy(mem, data, size);
-        vkUnmapMemory(device.get(), bufferMemory);
-    }
-}
-
 void Buffer::write(const LogicalDevice& device, const void* data, size_t bytes, size_t offset) {
     if (offset + bytes > size)
         throw std::runtime_error("Buffer write out of range");
@@ -169,40 +136,6 @@ void Buffer::read(const LogicalDevice& device, void* out, size_t bytes, size_t o
         memcpy(out, mem, bytes);
         vkUnmapMemory(device.get(), bufferMemory);
     }
-}
-
-void Buffer::copy(const Buffer& srcBuffer, const Buffer& dstBuffer, const LogicalDevice& device, const CommandPool& transferCommandPool, Queue transferQueue) {
-    if (srcBuffer.getSize() != dstBuffer.getSize())
-        throw std::runtime_error("Buffers don't have the same size");
-
-    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
-
-    VkBufferCopy copyRegion{};
-    copyRegion.size = srcBuffer.getSize();
-    vkCmdCopyBuffer(commandBuffer.get(), srcBuffer.get(), dstBuffer.get(), 1, &copyRegion);
-
-    CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, commandBuffer);
-}
-
-
-void Buffer::bindVertex(const CommandBuffer& commandBuffer) {
-    #ifndef NDEBUG
-        if (!(usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
-            throw std::runtime_error("Trying to bind a buffer as a vertex buffer when it is not");
-    #endif
-
-    VkBuffer buffers[] = { buffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer.get(), 0, 1, buffers, offsets);
-}
-
-void Buffer::bindIndex(const CommandBuffer& commandBuffer, VkIndexType indexType) {
-    #ifndef NDEBUG
-        if (!(usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
-            throw std::runtime_error("Trying to bind a buffer as an index buffer when it is not");
-    #endif
-
-    vkCmdBindIndexBuffer(commandBuffer.get(), buffer, 0, indexType);
 }
 
 uint32_t Buffer::findMemoryType(PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {

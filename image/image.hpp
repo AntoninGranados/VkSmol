@@ -2,20 +2,12 @@
 
 #include <vulkan/vulkan.h>
 
-#include <string>
-
 #include "../base/tracked_resource.hpp"
 
 namespace VkSmol {
 
 class LogicalDevice;
 class PhysicalDevice;
-
-class CommandBuffer;
-class CommandPool;
-class Queue;
-
-class Buffer;
 
 class Image: public TrackedResource {
 public:
@@ -30,18 +22,7 @@ public:
         uint32_t mipLevels = 1, uint32_t arrayLayers = 1
     );
     void initExternal(VkImage handle, VkFormat fmt, uint32_t w, uint32_t h);
-    void initFromPath(
-        const LogicalDevice& device, PhysicalDevice physicalDevice,
-        const CommandPool& transferCommandPool, Queue transferQueue,
-        std::string path
-    );
     void alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
-    void fillFromBuffer(
-        const LogicalDevice& device, const CommandBuffer& commandBuffer,
-        const Buffer& buffer
-    );
-    void copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffer);
-    void copyToImage(const CommandBuffer& commandBuffer, Image& dst);
     void free(const LogicalDevice& device);
     void destroy(const LogicalDevice& device);
 

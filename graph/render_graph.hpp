@@ -6,25 +6,20 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "builder_resource.hpp"
 #include "compiled_resource.hpp"
-#include "render_graph_builder.hpp"
-#include "pass_context.hpp"
 #include "pass/compute_pass_builder.hpp"
 #include "pass/graphics_pass_builder.hpp"
 #include "pass/transfer_pass_builder.hpp"
+#include "pass_context.hpp"
+#include "pass_descriptors.hpp"
+#include "pass_pipelines.hpp"
+#include "render_graph_builder.hpp"
 
 #include "../command/command_buffer.hpp"
 #include "../render/dynamic_renderer.hpp"
-#include "../render/descriptor/descriptor_set_layout.hpp"
-#include "../render/descriptor/descriptor_set_group.hpp"
-#include "../render/descriptor/descriptor_writer.hpp"
-#include "../render/pipeline/compute_pipeline.hpp"
-#include "../render/pipeline/graphics_pipeline.hpp"
-#include "../render/pipeline/pipeline_cache.hpp"
 #include "../sync/fence.hpp"
 #include "../sync/semaphore.hpp"
 #include "../utils.hpp"
@@ -82,41 +77,13 @@ private:
     std::array<bool, MAX_FRAME_IN_FLIGHT> recordedSlots = {};
 
     DynamicRenderer dynamicRenderer;
+    PassDescriptors descriptors;
+    PassPipelines pipelines;
 
     VkQueryPool          timestampPool    = VK_NULL_HANDLE;
     uint32_t             numTimestamps    = 0;
     float                timestampPeriod  = 1.0f;
     std::vector<double>  cachedTimestamps;
-
-    std::unordered_map<uint32_t, ComputePipeline>  ownedComputePipelines;
-    std::unordered_map<uint32_t, GraphicsPipeline> ownedGraphicsPipelines;
-    std::unordered_map<uint32_t, uint32_t>         computePushConstantSizes;
-    std::unordered_map<uint32_t, VkExtent3D>       computeThreadGroupSizes;
-    std::unordered_map<uint32_t, uint32_t>         graphicsPushConstantSizes;
-    std::unordered_map<uint32_t, VkShaderStageFlags> graphicsPushConstantStages;
-    PipelineCache pipelineCache;
-
-    std::unordered_map<uint32_t, std::vector<DescriptorSetLayout>> passDescriptorLayouts;
-    std::unordered_map<uint32_t, std::vector<DescriptorSetGroup>>  passDescriptorGroups;
-    std::unordered_map<uint32_t, std::vector<uint64_t>>            writtenDescriptors;
-
-    void resolveBindings(std::vector<std::string>& errors);
-    std::optional<std::string>
-    checkImageBinding(const NamedBinding& binding, const ShaderParameter& parameter, ImageUsageType usage) const;
-    void checkImageAccesses(std::vector<std::string>& errors) const;
-
-    void initDescriptorSets();
-    void destroyDescriptorSets();
-    DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
-    void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
-    void destroyDescriptorSetGroup(DescriptorSetGroup& group);
-    std::vector<uint64_t> resolveDescriptors(const CompiledPass& pass) const;
-    void updateDescriptors(const CompiledPass& pass, uint32_t frameIndex);
-    void bindDescriptors(const CommandBuffer& commandBuffer, const CompiledPass& pass);
-
-    void initPipelines();
-    void destroyPipelines();
-    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines);
 
     void initSync();
     void destroySync();
@@ -124,8 +91,8 @@ private:
     void readTimestamps();
 
     void recordPass(const CommandBuffer& commandBuffer, const CompiledPass& pass);
+    void recordGraphicsPass(const CommandBuffer& commandBuffer, const CompiledPass& pass, const PassInfo& info);
     void emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass);
-    std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass) const;
 
     friend class PassContext;
 };

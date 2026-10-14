@@ -58,7 +58,6 @@ public:
     Queue&                    getPresentQueue() { return presentQueue; }
 
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
-    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {});
     const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines);
     void markShadersStale();
 
@@ -66,23 +65,15 @@ public:
     void freeCommandBuffer(CommandBuffer& commandBuffer);
     void immediateSubmit(const std::function<void(const CommandBuffer&)>& record);
 
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags = 0, void* data = nullptr, std::string name = {});
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags = 0, std::string name = {});
     void destroyBuffer(Buffer& buffer);
 
-    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
     Image createImage(
         uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format,
         VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {}
     );
-    Image createImageFromPath(std::string path, std::string name = {});
-    Image createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name = {});
-    Image createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name = {});
-    void fillImage(Image& image, const void* data, size_t size);
-    void readImage(Image& image, void* out, size_t size);
-    void copyImage(Image& src, Image& dst);
     void destroyImage(Image& image);
 
-    ImageView createImageView(Image& image, std::string name = {});
     ImageView
     createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range, std::string name = {});
     void destroyImageView(ImageView& imageView);
@@ -120,7 +111,6 @@ private:
     std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
 
     void flushRetired();
-    void uploadImage(const CommandBuffer& commandBuffer, Image& image, const Buffer& staging);
 
     std::vector<const char*> getRequiredInstanceExtensions(std::optional<const Window&> window) const;
     std::vector<const char*> getRequiredDeviceExtensions() const;

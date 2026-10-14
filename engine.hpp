@@ -15,20 +15,20 @@
 #include <ranges>
 #include <string>
 #include <type_traits>
-#include <variant>
 #include <vector>
 
 #include "./device/device.hpp"
 
-#include "./graph/builder_resource.hpp"
+#include "./command/pending_transfers.hpp"
 
-#include "./image/image_subresource.hpp"
-#include "./image/image_view_cache.hpp"
+#include "./graph/builder_resource.hpp"
 
 #include "./present/window.hpp"
 #include "./present/swapchain.hpp"
 
 #include "./render/shader_file_system.hpp"
+
+#include "./resource/resource_registry.hpp"
 
 #include "./sync/fence.hpp"
 #include "./sync/semaphore.hpp"
@@ -50,6 +50,7 @@ public:
     bool isHeadless() const { return !window.has_value(); }
 
     Device& getDevice() { return device; }
+    ResourceRegistry& getResources() { return resources; }
 
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { device.setShaderFileSystem(std::move(fileSystem)); }
 
@@ -125,54 +126,11 @@ public:
     void flush();
 
 private:
-    struct PersistentImage {
-        std::string name;
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        uint32_t width = 0, height = 0;
-        ImageSubresourceLayout layout;
-        VkImage image = VK_NULL_HANDLE;
-        VkImageView view = VK_NULL_HANDLE;
-        VkSampler sampler = VK_NULL_HANDLE;
-        std::vector<ImageAccessInfo> accesses;
-        bool imported = false;
-        Image ownedImage;
-        ImageViewCache ownedViews;
-        Sampler ownedSampler;
-    };
-
-    struct PersistentBuffer {
-        std::string                     name;
-        size_t                          size = 0;
-        VkBuffer                        buffer = VK_NULL_HANDLE;
-        std::optional<BufferAccessInfo> lastAccess;
-        bool                            imported = false;
-        Buffer                          ownedBuffer;
-    };
-
-    struct PendingWrite {
-        bool                   image;
-        uint32_t               destination;
-        size_t                 offset;
-        ImageSubresourceRange subresources;
-        std::vector<std::byte> data;
-    };
-
-    struct PendingCopy {
-        bool image;
-        uint32_t source;
-        uint32_t destination;
-        size_t sourceOffset;
-        size_t destinationOffset;
-        size_t size;
-        ImageSubresourceRange sourceSubresources;
-        ImageSubresourceRange destinationSubresources;
-    };
-
-    using PendingTransfer = std::variant<PendingWrite, PendingCopy>;
-
     std::optional<Window&> window;
     Device device;
     const LogicalDevice& logicalDevice;
+    ResourceRegistry resources;
+    PendingTransfers pendingTransfers;
     std::optional<Swapchain> swapchain;
     ImageHandle swapchainImage;
 
@@ -181,40 +139,12 @@ private:
     bool framebufferResized = false;
     uint32_t currentFrame = 0;
 
-    std::vector<PersistentImage>  images;
-    std::vector<PersistentBuffer> buffers;
-    std::vector<uint32_t>         freeImages;
-    std::vector<uint32_t>         freeBuffers;
-    std::vector<PendingTransfer>  pendingTransfers;
-
     bool slotStarted = false;
     std::array<std::vector<const Fence*>, MAX_FRAME_IN_FLIGHT> slotFences;
 
     void beginSlot();
     void registerFence(uint32_t slot, const Fence& fence);
     void unregisterFence(const Fence& fence);
-
-    ImageHandle  insertImage(PersistentImage&& image);
-    BufferHandle insertBuffer(PersistentBuffer&& buffer);
-    void allocateImage(PersistentImage& image);
-    void releaseImage(PersistentImage& image);
-    void allocateBuffer(PersistentBuffer& buffer);
-    void releaseBuffer(PersistentBuffer& buffer);
-    void dropPendingTransfers(bool image, uint32_t id);
-    void remapPendingTransfers(bool image, uint32_t a, uint32_t b);
-    void flushTransfers(const CommandBuffer& commandBuffer);
-
-    ImageSubresourceRange resolveSubresources(const PersistentImage& image, ImageSubresourceRange subresources) const;
-    void validateImageCopy(
-        const PersistentImage& source, ImageSubresourceRange sourceSubresources, const PersistentImage& destination,
-        ImageSubresourceRange destinationSubresources
-    ) const;
-
-    void transitionImage(
-        const CommandBuffer& commandBuffer, PersistentImage& image, ImageSubresourceRange subresources,
-        ImageAccessInfo access
-    );
-    void transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuffer& buffer, BufferAccessInfo access);
 
     std::optional<uint32_t> acquireImage();
     void presentImage(uint32_t imageIndex);

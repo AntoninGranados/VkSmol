@@ -1,6 +1,7 @@
-#include "image_transition.hpp"
+#include "resource_state.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include "../graph/compiled_resource.hpp"
 #include "../graph/graph_utils.hpp"
@@ -9,7 +10,7 @@ namespace VkSmol {
 
 namespace {
 
-bool needsBarrier(const ImageAccessInfo& from, const ImageAccessInfo& to) {
+template <class AccessInfo> bool needsBarrier(const AccessInfo& from, const AccessInfo& to) {
     return from.usage != to.usage || from.access == AccessType::Write || to.access == AccessType::Write;
 }
 
@@ -35,9 +36,29 @@ VkImageMemoryBarrier2 ImageTransition::toVk(VkImage image) const {
     };
 }
 
-std::vector<ImageTransition> transitionSubresources(
-    std::vector<ImageAccessInfo>& accesses, const ImageSubresourceLayout& layout, const ImageSubresourceRange& range,
-    const ImageAccessInfo& access
+VkBufferMemoryBarrier2 BufferTransition::toVk(VkBuffer buffer) const {
+    const VulkanBufferState src = bufferAccessToVk(from);
+    const VulkanBufferState dst = bufferAccessToVk(to);
+    return {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = src.stage,
+        .srcAccessMask = src.access,
+        .dstStageMask = dst.stage,
+        .dstAccessMask = dst.access,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffer,
+        .offset = 0,
+        .size = VK_WHOLE_SIZE,
+    };
+}
+
+void ImageState::reset(const ImageSubresourceLayout& layout, const ImageAccessInfo& access) {
+    accesses.assign(layout.count(), access);
+}
+
+std::vector<ImageTransition> ImageState::transition(
+    const ImageSubresourceLayout& layout, const ImageSubresourceRange& range, const ImageAccessInfo& access
 ) {
     std::vector<ImageTransition> transitions;
     const uint32_t endLayer = range.baseLayer + range.layerCount;
@@ -58,6 +79,14 @@ std::vector<ImageTransition> transitionSubresources(
         }
     }
     return transitions;
+}
+
+void BufferState::reset() { current.reset(); }
+
+std::optional<BufferTransition> BufferState::transition(const BufferAccessInfo& access) {
+    const std::optional<BufferAccessInfo> from = std::exchange(current, access);
+    if (!from || !needsBarrier(*from, access)) return std::nullopt;
+    return BufferTransition{.from = *from, .to = access};
 }
 
 } // namespace VkSmol

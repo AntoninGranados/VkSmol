@@ -1,14 +1,7 @@
 #include "image.hpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image/stb_image.h>
-
-#include "image_barrier.hpp"
 #include "../device/logical_device.hpp"
 #include "../device/physical_device.hpp"
-#include "../device/queue.hpp"
-#include "../command/command_buffer.hpp"
-#include "../command/command_pool.hpp"
 #include "../memory/buffer.hpp"
 #include "../utils.hpp"
 
@@ -97,62 +90,6 @@ void Image::init(
     vkCheck(vkCreateImage(device.get(), &imageInfo, nullptr, &image), "Failed to create image");
 }
 
-void Image::initFromPath(
-    const LogicalDevice& device, PhysicalDevice physicalDevice,
-    const CommandPool& transferCommandPool, Queue transferQueue,
-    std::string path
-) {
-    int width, height, channels;
-    stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
-    VkDeviceSize imageSize = width * height * 4;
-
-    if (!data)
-        throw std::runtime_error("failed to load texture image!");
-
-    Buffer stagingBuffer;
-    stagingBuffer.init(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, imageSize);
-    stagingBuffer.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer.fill(device, data);
-
-    stbi_image_free(data);
-
-    init(
-        device,
-        static_cast<uint32_t>(width), static_cast<uint32_t>(height),
-        VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-    );
-    alloc(device, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    ImageBarrier barrier;
-    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, transferCommandPool);
-
-    barrier.call(
-        device,
-        commandBuffer,
-        image,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT
-    );
-    
-    fillFromBuffer(device, commandBuffer, stagingBuffer);
-    
-    //! hardcoded destinations -> should be parameters (layout + access + stage)
-    barrier.call(
-        device,
-        commandBuffer,
-        image,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-    );
-
-    CommandBuffer::endSingleTimeCommands(device, transferCommandPool, transferQueue, commandBuffer);
-
-    stagingBuffer.free(device);
-    stagingBuffer.destroy(device);
-}
-
 void Image::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device.get(), image, &memRequirements);
@@ -168,78 +105,6 @@ void Image::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, Vk
 
     vkCheck(vkAllocateMemory(device.get(), &allocInfo, nullptr, &imageMemory), "Failed to allocate image memory");
     vkCheck(vkBindImageMemory(device.get(), image, imageMemory, 0), "Failed to bind image memory");
-}
-
-void Image::fillFromBuffer(
-    [[maybe_unused]] const LogicalDevice& device, const CommandBuffer& commandBuffer,
-    const Buffer& buffer
-) {
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-
-    region.imageOffset = { 0, 0, 0 };
-    region.imageExtent = { width, height, 1 };
-
-    vkCmdCopyBufferToImage(
-        commandBuffer.get(),
-        buffer.get(),
-        image,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &region
-    );
-}
-
-void Image::copyToBuffer(const CommandBuffer& commandBuffer, const Buffer& buffer) {
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-
-    region.imageOffset = { 0, 0, 0 };
-    region.imageExtent = { width, height, 1 };
-
-    vkCmdCopyImageToBuffer(
-        commandBuffer.get(),
-        image,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        buffer.get(),
-        1,
-        &region
-    );
-}
-
-void Image::copyToImage(const CommandBuffer& commandBuffer, Image& dst) {
-    VkImageCopy region{};
-    region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.srcSubresource.mipLevel = 0;
-    region.srcSubresource.baseArrayLayer = 0;
-    region.srcSubresource.layerCount = 1;
-    region.srcOffset = { 0, 0, 0 };
-
-    region.dstSubresource = region.srcSubresource;
-    region.dstOffset = { 0, 0, 0 };
-
-    region.extent = { width, height, 1 };
-
-    vkCmdCopyImage(
-        commandBuffer.get(),
-        image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        dst.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1, &region
-    );
 }
 
 void Image::free(const LogicalDevice& device) {

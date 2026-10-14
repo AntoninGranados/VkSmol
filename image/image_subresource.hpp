@@ -22,6 +22,7 @@ struct ImageSubresourceRange {
     bool operator==(const ImageSubresourceRange&) const = default;
 
     bool overlaps(const ImageSubresourceRange& other) const;
+    bool contains(const ImageSubresourceRange& other) const;
     VkImageSubresourceRange toVk() const;
     std::string toString() const;
 };

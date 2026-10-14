@@ -2,8 +2,11 @@
 
 #include <vulkan/vulkan.h>
 
-#include <string>
 #include <cstdint>
+#include <optional>
+#include <string>
+
+#include "builder_resource.hpp"
 
 namespace VkSmol {
 
@@ -17,6 +20,7 @@ struct BufferAccessInfo;
 struct VulkanImageState;
 struct VulkanBufferState;
 
+struct CompiledPass;
 struct CompiledRenderGraph;
 class Engine;
 
@@ -33,6 +37,8 @@ VkImageUsageFlags  imageUsageTypeToVkFlags(ImageUsageType usage);
 VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage);
 VkDescriptorType   bufferUsageTypeToDescriptorType(BufferUsageType usage);
 VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
+
+std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass);
 
 std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine);
 
