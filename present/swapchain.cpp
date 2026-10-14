@@ -111,12 +111,12 @@ void Swapchain::destroy(const LogicalDevice& device) {
     imageViews.clear();
 }
 
-uint32_t Swapchain::getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore) {
+std::optional<uint32_t> Swapchain::getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore) {
     uint32_t frameIndex;
 
     VkResult result = vkAcquireNextImageKHR(device.get(), swapchain, UINT64_MAX, semaphore.get(), VK_NULL_HANDLE, &frameIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
-        return SMOL_RECREATE_SWAPCHAIN;
+        return std::nullopt;
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
 

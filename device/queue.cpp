@@ -114,7 +114,7 @@ void Queue::submit(const std::vector<const CommandBuffer*>& commandBuffers) {
     vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
 }
 
-uint32_t Queue::present(
+bool Queue::present(
     const std::vector<const Swapchain*>& swapchains,
     const std::vector<uint32_t>& frameIndices,
     const std::vector<const Semaphore*>& waitSemaphores
@@ -137,11 +137,11 @@ uint32_t Queue::present(
 
     VkResult result = vkQueuePresentKHR(rawHandle(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-        return SMOL_RECREATE_SWAPCHAIN;
+        return true;
     else if (result != VK_SUCCESS)
         throw std::runtime_error("Failed to present the queue");
 
-    return 0;
+    return false;
 }
 
 void Queue::wait() {

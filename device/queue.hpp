@@ -56,8 +56,8 @@ public:
         const std::vector<const Semaphore*>& signalSemaphores
     );
     void submit(const std::vector<const CommandBuffer*>& commandBuffers);
-    // Returns SMOL_RECREATE_SWAPCHAIN if we need to recreate the swapchain
-    uint32_t present(
+    // Returns true if we need to recreate the swapchain
+    bool present(
         const std::vector<const Swapchain*>& swapchains,
         const std::vector<uint32_t>& frameIndices,
         const std::vector<const Semaphore*>& waitSemaphores

@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <optional>
 #include <vector>
 #include <cstdint>
 
@@ -48,8 +49,8 @@ public:
     VkExtent2D& getExtent() { return extent; };
     const VkExtent2D& getExtent() const { return extent; };
 
-    // Returns SMOL_RECREATE_SWAPCHAIN if we need to recreate the swapchain
-    uint32_t getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);
+    // Returns std::nullopt if we need to recreate the swapchain
+    std::optional<uint32_t> getNextImageIndex(const LogicalDevice& device, const Semaphore& semaphore);
 
 private:
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;

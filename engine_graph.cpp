@@ -541,16 +541,16 @@ std::optional<FrameContext> Engine::beginFrame() {
     stagingArenas[currentFrame].used = 0;
 
     if (!platform->isHeadless()) {
-        const uint32_t result = std::get<WindowedState>(displayState).swapchain.getNextImageIndex(
+        const std::optional<uint32_t> result = std::get<WindowedState>(displayState).swapchain.getNextImageIndex(
             device,
             std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
-        if (result == SMOL_RECREATE_SWAPCHAIN) {
+        if (!result) {
             recreateSwapchain();
             return {};
         }
 
         Fence::reset(fences, device);
-        imageIndex = result;
+        imageIndex = *result;
 
         return FrameContext{
             .extent              = getExtent(),
@@ -574,9 +574,9 @@ void Engine::present() {
     for (const CompiledSubmissionGroup& group : graph.submissionGroups)
         if (group.signalsPresentSemaphore) { presentGroupId = group.handle.id; break; }
 
-    const uint32_t result = std::get<WindowedState>(displayState).presentQueue.present(
+    const bool outOfDate = std::get<WindowedState>(displayState).presentQueue.present(
         { &std::get<WindowedState>(displayState).swapchain }, { imageIndex }, { &groupSemaphores[presentGroupId][currentFrame] });
-    if (result == SMOL_RECREATE_SWAPCHAIN || framebufferResized) {
+    if (outOfDate || framebufferResized) {
         recreateSwapchain();
     }
 }
