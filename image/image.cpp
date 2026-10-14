@@ -15,18 +15,16 @@
 namespace VkSmol {
 
 Image::Image(Image&& other)
-    : TrackedResource(std::move(other)),
-      image(other.image),
-      imageMemory(other.imageMemory),
-      format(other.format),
-      width(other.width),
-      height(other.height),
+    : TrackedResource(std::move(other)), image(other.image), imageMemory(other.imageMemory), format(other.format),
+      width(other.width), height(other.height), mipLevels(other.mipLevels), arrayLayers(other.arrayLayers),
       owned(other.owned) {
     other.image = VK_NULL_HANDLE;
     other.imageMemory = VK_NULL_HANDLE;
     other.format = VK_FORMAT_UNDEFINED;
     other.width = 0;
     other.height = 0;
+    other.mipLevels = 1;
+    other.arrayLayers = 1;
     other.owned = true;
 }
 
@@ -44,6 +42,8 @@ Image& Image::operator=(Image&& other) {
     format = other.format;
     width = other.width;
     height = other.height;
+    mipLevels = other.mipLevels;
+    arrayLayers = other.arrayLayers;
     owned = other.owned;
 
     other.image = VK_NULL_HANDLE;
@@ -51,6 +51,8 @@ Image& Image::operator=(Image&& other) {
     other.format = VK_FORMAT_UNDEFINED;
     other.width = 0;
     other.height = 0;
+    other.mipLevels = 1;
+    other.arrayLayers = 1;
     other.owned = true;
 
     return *this;
@@ -66,13 +68,14 @@ void Image::initExternal(VkImage handle, VkFormat fmt, uint32_t w, uint32_t h) {
 }
 
 void Image::init(
-    const LogicalDevice& device,
-    uint32_t width_, uint32_t height_,
-    VkFormat format_, VkImageUsageFlags usage
+    const LogicalDevice& device, uint32_t width_, uint32_t height_, VkFormat format_, VkImageUsageFlags usage,
+    uint32_t mipLevels_, uint32_t arrayLayers_
 ) {
     width = width_;
     height = height_;
     format = format_;
+    mipLevels = mipLevels_;
+    arrayLayers = arrayLayers_;
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -80,8 +83,8 @@ void Image::init(
     imageInfo.extent.width = width;
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
+    imageInfo.mipLevels = mipLevels;
+    imageInfo.arrayLayers = arrayLayers;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
     imageInfo.format = format;
@@ -254,6 +257,8 @@ void Image::destroy(const LogicalDevice& device) {
     format = VK_FORMAT_UNDEFINED;
     width = 0;
     height = 0;
+    mipLevels = 1;
+    arrayLayers = 1;
     owned = true;
 }
 

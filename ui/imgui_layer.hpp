@@ -29,7 +29,7 @@ public:
     void render(PassContext& context);
 
     ImTextureID addTexture(VkSampler sampler, VkImageView view, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ImTextureID addTexture(ImageHandle image);
+    ImTextureID addTexture(ImageRange image);
     void removeTexture(ImTextureID texture);
 
 private:

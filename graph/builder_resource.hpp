@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility>
 
+#include "../image/image_subresource.hpp"
 #include "../render/shader.hpp"
 
 namespace VkSmol {
@@ -19,9 +20,49 @@ namespace VkSmol {
 // ================
 
 constexpr uint32_t InvalidHandle = uint32_t(-1);
+
+struct ImageRange;
+
 struct PassHandle   { uint32_t id = InvalidHandle; };
-struct ImageHandle  { uint32_t id = InvalidHandle; bool operator==(const ImageHandle&) const = default; };
 struct BufferHandle { uint32_t id = InvalidHandle; bool operator==(const BufferHandle&) const = default; };
+struct ImageHandle {
+    uint32_t id = InvalidHandle;
+    bool operator==(const ImageHandle&) const = default;
+
+    ImageRange mip(uint32_t index) const;
+    ImageRange mips(uint32_t base, uint32_t count) const;
+    ImageRange layer(uint32_t index) const;
+    ImageRange layers(uint32_t base, uint32_t count) const;
+};
+
+struct ImageRange {
+    ImageHandle image;
+    ImageSubresourceRange subresources;
+
+    ImageRange(ImageHandle image, ImageSubresourceRange subresources = {}) : image(image), subresources(subresources) {}
+
+    ImageRange mip(uint32_t index) const { return mips(index, 1); }
+    ImageRange mips(uint32_t base, uint32_t count) const {
+        ImageRange range = *this;
+        range.subresources.baseMip = base;
+        range.subresources.mipCount = count;
+        return range;
+    }
+    ImageRange layer(uint32_t index) const { return layers(index, 1); }
+    ImageRange layers(uint32_t base, uint32_t count) const {
+        ImageRange range = *this;
+        range.subresources.baseLayer = base;
+        range.subresources.layerCount = count;
+        return range;
+    }
+};
+
+inline ImageRange ImageHandle::mip(uint32_t index) const { return ImageRange(*this).mip(index); }
+inline ImageRange ImageHandle::mips(uint32_t base, uint32_t count) const { return ImageRange(*this).mips(base, count); }
+inline ImageRange ImageHandle::layer(uint32_t index) const { return ImageRange(*this).layer(index); }
+inline ImageRange ImageHandle::layers(uint32_t base, uint32_t count) const {
+    return ImageRange(*this).layers(base, count);
+}
 
 class PassContext;
 
@@ -64,24 +105,17 @@ enum class AttachmentLoad : uint16_t {
     Load,
 };
 
-// @note not used for now
-struct ImageSubresourceRangeInfo {
-    uint32_t baseMipLevel = 0;
-    uint32_t levelCount = 1;
-    uint32_t baseArrayLayer = 0;
-    uint32_t layerCount = 1;
-};
-
 struct ImageAccessInfo {
     ImageUsageType usage = ImageUsageType::Undefined;
     AccessType access = AccessType::None;
     WriteMode writeMode = WriteMode::Overwrite;
     AttachmentLoad attachmentLoad = AttachmentLoad::DontCare;
-    ImageSubresourceRangeInfo subresourceRangeInfo{};
+    bool operator==(const ImageAccessInfo&) const = default;
 };
 
 struct ImageAccess {
     ImageHandle image;
+    ImageSubresourceRange subresources;
     ImageAccessInfo info;
 };
 
@@ -114,11 +148,13 @@ struct BufferAccess {
 // ================
 
 struct DescriptorBindingDecl {
-    uint32_t           set;
-    uint32_t           binding;
-    bool               isImage;
-    uint32_t           handleId;
-    VkDescriptorType   descriptorType;
+    uint32_t set;
+    uint32_t binding;
+    bool isImage;
+    uint32_t handleId;
+    ImageSubresourceRange subresources;
+    VkImageViewType viewType;
+    VkDescriptorType descriptorType;
     VkShaderStageFlags stageFlags;
 };
 
@@ -151,9 +187,10 @@ struct GraphicsPipelineInfo {
 
 struct NamedBinding {
     std::string name;
-    bool        isImage;
-    uint32_t    handleId;
-    AccessType  access;
+    bool isImage;
+    uint32_t handleId;
+    ImageSubresourceRange subresources;
+    AccessType access;
 };
 
 struct PassInfo {

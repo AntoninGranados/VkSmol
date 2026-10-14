@@ -43,7 +43,8 @@ GraphicsPassBuilder& GraphicsPassBuilder::indexBuffer(BufferHandle buffer, VkInd
     return *this;
 }
 
-GraphicsPassBuilder& GraphicsPassBuilder::colorAttachment(ImageHandle image, AttachmentLoad load, std::array<float, 4> clearColor) {
+GraphicsPassBuilder&
+GraphicsPassBuilder::colorAttachment(ImageRange image, AttachmentLoad load, std::array<float, 4> clearColor) {
     const ImageAccessInfo info{
         .usage          = ImageUsageType::ColorAttachment,
         .access         = AccessType::Write,
@@ -51,9 +52,10 @@ GraphicsPassBuilder& GraphicsPassBuilder::colorAttachment(ImageHandle image, Att
         .attachmentLoad = load,
     };
     checkImageAccessInfoValid(info);
-    graph->passes[handle.id].imageAccesses.push_back({ .image = image, .info = info });
+    graph->passes[handle.id].imageAccesses.push_back(
+        {.image = image.image, .subresources = image.subresources, .info = info}
+    );
     graph->passes[handle.id].clearColor = clearColor;
     return *this;
 }
-
 }

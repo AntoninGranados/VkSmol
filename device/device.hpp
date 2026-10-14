@@ -70,6 +70,10 @@ public:
     void destroyBuffer(Buffer& buffer);
 
     Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
+    Image createImage(
+        uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format,
+        VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {}
+    );
     Image createImageFromPath(std::string path, std::string name = {});
     Image createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name = {});
     Image createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name = {});
@@ -79,6 +83,8 @@ public:
     void destroyImage(Image& image);
 
     ImageView createImageView(Image& image, std::string name = {});
+    ImageView
+    createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range, std::string name = {});
     void destroyImageView(ImageView& imageView);
 
     Sampler createSampler(std::string name = {});

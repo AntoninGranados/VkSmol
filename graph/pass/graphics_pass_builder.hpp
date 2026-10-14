@@ -18,7 +18,8 @@ public:
     GraphicsPassBuilder& vertexInput(const VkPipelineVertexInputStateCreateInfo& vertexInput);
     GraphicsPassBuilder& vertexBuffer(BufferHandle buffer);
     GraphicsPassBuilder& indexBuffer(BufferHandle buffer, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
-    GraphicsPassBuilder& colorAttachment(ImageHandle image, AttachmentLoad load, std::array<float, 4> clearColor = { 0.0f, 0.0f, 0.0f, 1.0f });
+    GraphicsPassBuilder&
+    colorAttachment(ImageRange image, AttachmentLoad load, std::array<float, 4> clearColor = {0.0f, 0.0f, 0.0f, 1.0f});
 
 private:
     GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)

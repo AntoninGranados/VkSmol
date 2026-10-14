@@ -156,9 +156,16 @@ void Device::destroyBuffer(Buffer& buffer) {
 // ——— Images —————————————————————————————————————————————————————————————————
 
 Image Device::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name) {
+    return createImage(width, height, 1, 1, format, usage, properties, std::move(name));
+}
+
+Image Device::createImage(
+    uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format, VkImageUsageFlags usage,
+    VkMemoryPropertyFlags properties, std::string name
+) {
     Image img;
     img.setResourceName(name.empty() ? "Image" : std::move(name));
-    img.init(logicalDevice, width, height, format, usage);
+    img.init(logicalDevice, width, height, format, usage, mipLevels, arrayLayers);
     img.alloc(logicalDevice, physicalDevice, properties);
     return img;
 }
@@ -284,6 +291,15 @@ ImageView Device::createImageView(Image& image, std::string name) {
     ImageView view;
     view.setResourceName(name.empty() ? "ImageView" : std::move(name));
     view.init(logicalDevice, image);
+    return view;
+}
+
+ImageView
+Device::createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range, std::string name) {
+    if (name.empty() && !image.getResourceName().empty()) name = image.getResourceName() + "View";
+    ImageView view;
+    view.setResourceName(name.empty() ? "ImageView" : std::move(name));
+    view.init(logicalDevice, image, type, range);
     return view;
 }
 

@@ -7,8 +7,8 @@ namespace VkSmol {
 
 class TransferPassBuilder: public PassBuilder<TransferPassBuilder> {
 public:
-    TransferPassBuilder& copyFrom(ImageHandle imageHandle);
-    TransferPassBuilder& copyTo(ImageHandle imageHandle);
+    TransferPassBuilder& copyFrom(ImageRange image);
+    TransferPassBuilder& copyTo(ImageRange image);
 
 private:
     TransferPassBuilder(PassHandle handle, RenderGraphBuilder* graph): PassBuilder(handle, graph) {}

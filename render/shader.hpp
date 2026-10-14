@@ -29,6 +29,7 @@ struct ShaderParameter {
     std::string      name;
     ShaderLocation   location;
     VkDescriptorType descriptorType;
+    VkImageViewType viewType;
     bool             writable;
     bool             used;
 };

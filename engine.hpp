@@ -22,6 +22,9 @@
 
 #include "./graph/builder_resource.hpp"
 
+#include "./image/image_subresource.hpp"
+#include "./image/image_view_cache.hpp"
+
 #include "./present/window.hpp"
 #include "./present/swapchain.hpp"
 
@@ -57,7 +60,9 @@ public:
 
     void waitIdle() { device.waitIdle(); }
 
-    ImageHandle createImage(std::string name, VkFormat format, uint32_t width, uint32_t height);
+    ImageHandle createImage(
+        std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t layers = 1, uint32_t mips = 1
+    );
     ImageHandle importImage(std::string name, VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height,
                             ImageAccessInfo currentAccess = {});
     ImageHandle loadImage(const std::string& path);
@@ -66,25 +71,27 @@ public:
     void swapImages(ImageHandle a, ImageHandle b);
 
     const std::string& getImageName(ImageHandle image) const;
-    VkExtent2D  getImageExtent(ImageHandle image) const;
+    VkExtent2D getImageExtent(ImageHandle image, uint32_t mip = 0) const;
+    uint32_t getImageLayerCount(ImageHandle image) const;
+    uint32_t getImageMipCount(ImageHandle image) const;
     VkFormat    getImageFormat(ImageHandle image) const;
     VkImage     getImage(ImageHandle image) const;
-    VkImageView getImageView(ImageHandle image) const;
+    VkImageView getImageView(ImageRange image, std::optional<VkImageViewType> type = std::nullopt);
     VkSampler   getSampler(ImageHandle image) const;
 
-    void writeImage(ImageHandle image, const void* data, size_t size);
-    template <std::ranges::contiguous_range R>
-    void writeImage(ImageHandle image, const R& values) {
+    ImageSubresourceRange resolveImageRange(ImageRange image) const;
+
+    void writeImage(ImageRange image, const void* data, size_t size);
+    template <std::ranges::contiguous_range R> void writeImage(ImageRange image, const R& values) {
         writeImage(image, std::ranges::data(values), std::ranges::size(values) * sizeof(std::ranges::range_value_t<R>));
     }
 
-    void readImage(ImageHandle image, void* out, size_t size);
-    template <std::ranges::contiguous_range R>
-    void readImage(ImageHandle image, R& out) {
+    void readImage(ImageRange image, void* out, size_t size);
+    template <std::ranges::contiguous_range R> void readImage(ImageRange image, R& out) {
         readImage(image, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>));
     }
 
-    void copyImage(ImageHandle source, ImageHandle destination);
+    void copyImage(ImageRange source, ImageRange destination);
 
     BufferHandle createBuffer(std::string name, size_t size, const void* initialData = nullptr);
     BufferHandle importBuffer(std::string name, VkBuffer buffer, size_t size);
@@ -119,17 +126,18 @@ public:
 
 private:
     struct PersistentImage {
-        std::string     name;
-        VkFormat        format = VK_FORMAT_UNDEFINED;
-        uint32_t        width = 0, height = 0;
-        VkImage         image   = VK_NULL_HANDLE;
-        VkImageView     view    = VK_NULL_HANDLE;
-        VkSampler       sampler = VK_NULL_HANDLE;
-        ImageAccessInfo lastAccess;
-        bool            imported = false;
-        Image           ownedImage;
-        ImageView       ownedView;
-        Sampler         ownedSampler;
+        std::string name;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        uint32_t width = 0, height = 0;
+        ImageSubresourceLayout layout;
+        VkImage image = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;
+        std::vector<ImageAccessInfo> accesses;
+        bool imported = false;
+        Image ownedImage;
+        ImageViewCache ownedViews;
+        Sampler ownedSampler;
     };
 
     struct PersistentBuffer {
@@ -145,16 +153,19 @@ private:
         bool                   image;
         uint32_t               destination;
         size_t                 offset;
+        ImageSubresourceRange subresources;
         std::vector<std::byte> data;
     };
 
     struct PendingCopy {
-        bool     image;
+        bool image;
         uint32_t source;
         uint32_t destination;
-        size_t   sourceOffset;
-        size_t   destinationOffset;
-        size_t   size;
+        size_t sourceOffset;
+        size_t destinationOffset;
+        size_t size;
+        ImageSubresourceRange sourceSubresources;
+        ImageSubresourceRange destinationSubresources;
     };
 
     using PendingTransfer = std::variant<PendingWrite, PendingCopy>;
@@ -193,7 +204,16 @@ private:
     void remapPendingTransfers(bool image, uint32_t a, uint32_t b);
     void flushTransfers(const CommandBuffer& commandBuffer);
 
-    void transitionImage(const CommandBuffer& commandBuffer, PersistentImage& image, ImageAccessInfo access);
+    ImageSubresourceRange resolveSubresources(const PersistentImage& image, ImageSubresourceRange subresources) const;
+    void validateImageCopy(
+        const PersistentImage& source, ImageSubresourceRange sourceSubresources, const PersistentImage& destination,
+        ImageSubresourceRange destinationSubresources
+    ) const;
+
+    void transitionImage(
+        const CommandBuffer& commandBuffer, PersistentImage& image, ImageSubresourceRange subresources,
+        ImageAccessInfo access
+    );
     void transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuffer& buffer, BufferAccessInfo access);
 
     std::optional<uint32_t> acquireImage();

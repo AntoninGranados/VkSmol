@@ -36,9 +36,11 @@ RenderGraph::~RenderGraph() {
 
 // ——— Declaration —————————————————————————————————————————————————————————————
 
-ImageHandle RenderGraph::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height) {
+ImageHandle RenderGraph::createImage(
+    std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t layers, uint32_t mips
+) {
     assert(!baked);
-    return ownedImages.emplace_back(engine.createImage(std::move(name), format, width, height));
+    return ownedImages.emplace_back(engine.createImage(std::move(name), format, width, height, layers, mips));
 }
 
 BufferHandle RenderGraph::createBuffer(std::string name, size_t size) {
@@ -74,6 +76,7 @@ void RenderGraph::bake(std::string pipelineCachePath) {
     std::vector<std::string> errors;
 
     resolveBindings(errors);
+    checkImageAccesses(errors);
     if (!errors.empty()) {
         std::string message = errors.front();
         for (size_t i = 1; i < errors.size(); ++i) message += "\n" + errors[i];
@@ -159,7 +162,19 @@ void RenderGraph::resolveBindings(std::vector<std::string>& errors) {
                     errors.push_back(std::format("The parameter [{}{}{}] of the pass [{}] is not an image the graph can bind", MSG_RED_B, binding.name, MSG_RESET, pass.name));
                     continue;
                 }
-                pass.imageAccesses.push_back({ .image = { .id = binding.handleId }, .info = { .usage = *usage, .access = binding.access } });
+                if (const std::optional<std::string> error = checkImageBinding(binding, parameter, *usage)) {
+                    errors.push_back(
+                        std::format(
+                            "The pass [{}] binds [{}{}{}]: {}", pass.name, MSG_RED_B, binding.name, MSG_RESET, *error
+                        )
+                    );
+                    continue;
+                }
+                pass.imageAccesses.push_back({
+                    .image = {.id = binding.handleId},
+                    .subresources = binding.subresources,
+                    .info = {.usage = *usage, .access = binding.access},
+                });
             } else {
                 std::optional<BufferUsageType> usage;
                 if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) usage = BufferUsageType::Storage;
@@ -172,13 +187,75 @@ void RenderGraph::resolveBindings(std::vector<std::string>& errors) {
             }
 
             pass.descriptorBindings.push_back({
-                .set            = parameter.location.set,
-                .binding        = parameter.location.binding,
-                .isImage        = binding.isImage,
-                .handleId       = binding.handleId,
+                .set = parameter.location.set,
+                .binding = parameter.location.binding,
+                .isImage = binding.isImage,
+                .handleId = binding.handleId,
+                .subresources = binding.subresources,
+                .viewType = parameter.viewType,
                 .descriptorType = parameter.descriptorType,
-                .stageFlags     = stageFlags,
+                .stageFlags = stageFlags,
             });
+        }
+    }
+}
+
+std::optional<std::string> RenderGraph::checkImageBinding(
+    const NamedBinding& binding, const ShaderParameter& parameter, ImageUsageType usage
+) const {
+    ImageSubresourceRange range;
+    try {
+        range = engine.resolveImageRange(ImageRange({.id = binding.handleId}, binding.subresources));
+    } catch (const std::exception& e) { return e.what(); }
+    if (parameter.viewType != VK_IMAGE_VIEW_TYPE_2D && parameter.viewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY)
+        return "the shader declares a texture shape the graph cannot bind (only 2D and 2D arrays)";
+    if (parameter.viewType == VK_IMAGE_VIEW_TYPE_2D && range.layerCount != 1)
+        return std::format(
+            "the shader declares a 2D texture but [{}] spans {} layers", range.toString(), range.layerCount
+        );
+    if (usage == ImageUsageType::Storage && range.mipCount != 1)
+        return std::format(
+            "a storage image must be a single mip but [{}] spans {} mips", range.toString(), range.mipCount
+        );
+    return std::nullopt;
+}
+
+void RenderGraph::checkImageAccesses(std::vector<std::string>& errors) const {
+    for (const PassInfo& pass : builder.passes) {
+        std::vector<std::optional<ImageSubresourceRange>> ranges;
+        for (const ImageAccess& access : pass.imageAccesses) {
+            try {
+                ranges.push_back(engine.resolveImageRange(ImageRange(access.image, access.subresources)));
+            } catch (const std::exception& e) {
+                errors.push_back(std::format("The pass [{}] accesses an invalid range: {}", pass.name, e.what()));
+                ranges.push_back(std::nullopt);
+                continue;
+            }
+            const bool attachment = access.info.usage == ImageUsageType::ColorAttachment ||
+                                    access.info.usage == ImageUsageType::DepthAttachment;
+            if (attachment && (ranges.back()->mipCount != 1 || ranges.back()->layerCount != 1))
+                errors.push_back(
+                    std::format(
+                        "The pass [{}] attaches [{}] of the image [{}] but attachments must be a single mip and layer",
+                        pass.name, ranges.back()->toString(), engine.getImageName(access.image)
+                    )
+                );
+        }
+
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            for (size_t j = i + 1; j < ranges.size(); ++j) {
+                const ImageAccess& a = pass.imageAccesses[i];
+                const ImageAccess& b = pass.imageAccesses[j];
+                if (!ranges[i] || !ranges[j] || a.image != b.image || a.info.usage == b.info.usage) continue;
+                if (!ranges[i]->overlaps(*ranges[j])) continue;
+                errors.push_back(
+                    std::format(
+                        "The pass [{}] uses [{}] of the image [{}] as {} and [{}] as {}", pass.name,
+                        ranges[i]->toString(), engine.getImageName(a.image), imageUsageToStr(a.info.usage),
+                        ranges[j]->toString(), imageUsageToStr(b.info.usage)
+                    )
+                );
+            }
         }
     }
 }
@@ -278,7 +355,9 @@ std::vector<uint64_t> RenderGraph::resolveDescriptors(const CompiledPass& pass) 
     for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
         if (decl.isImage) {
             const ImageHandle image = { .id = decl.handleId };
-            resolved.push_back(reinterpret_cast<uint64_t>(engine.getImageView(image)));
+            resolved.push_back(
+                reinterpret_cast<uint64_t>(engine.getImageView({image, decl.subresources}, decl.viewType))
+            );
             resolved.push_back(reinterpret_cast<uint64_t>(engine.getSampler(image)));
         } else {
             const BufferHandle buffer = { .id = decl.handleId };
@@ -302,10 +381,11 @@ void RenderGraph::updateDescriptors(const CompiledPass& pass, uint32_t frameInde
             if (decl.set != set) continue;
             if (decl.isImage) {
                 const ImageHandle image = { .id = decl.handleId };
+                const VkImageView view = engine.getImageView({image, decl.subresources}, decl.viewType);
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    writer.combinedImageSampler(decl.binding, engine.getImageView(image), engine.getSampler(image));
+                    writer.combinedImageSampler(decl.binding, view, engine.getSampler(image));
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                    writer.storageImage(decl.binding, engine.getImageView(image));
+                    writer.storageImage(decl.binding, view);
             } else {
                 const BufferHandle buffer = { .id = decl.handleId };
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
@@ -449,13 +529,8 @@ const std::vector<uint32_t>& RenderGraph::compilePassShader(const CompiledPass& 
 // ——— Barriers ————————————————————————————————————————————————————————————————
 
 void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
-    for (const ImageAccess& access : pass.imageAccesses) {
-        Engine::PersistentImage& image = engine.images[access.image.id];
-        const ImageAccessInfo& current = image.lastAccess;
-        if (current.usage == access.info.usage && current.access != AccessType::Write && access.info.access != AccessType::Write)
-            continue;
-        engine.transitionImage(commandBuffer, image, access.info);
-    }
+    for (const ImageAccess& access : pass.imageAccesses)
+        engine.transitionImage(commandBuffer, engine.images[access.image.id], access.subresources, access.info);
 
     for (const BufferAccess& access : pass.bufferAccesses) {
         Engine::PersistentBuffer& buffer = engine.buffers[access.buffer.id];
@@ -588,14 +663,15 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
             if (!attachment)
                 throw std::runtime_error(std::format("The graphics pass [{}] has no color attachment", pass.name));
 
-            const VkExtent2D extent = engine.getImageExtent(attachment->image);
+            const ImageRange target(attachment->image, attachment->subresources);
+            const VkExtent2D extent =
+                engine.getImageExtent(attachment->image, engine.resolveImageRange(target).baseMip);
             VkClearColorValue clearColor = {};
             std::memcpy(clearColor.float32, info.clearColor.data(), sizeof(clearColor.float32));
             dynamicRenderer.begin(
-                commandBuffer,
-                engine.getImageView(attachment->image), imageAccessToVk(attachment->info).layout,
-                attachmentLoadToVk(attachment->info.attachmentLoad), VK_ATTACHMENT_STORE_OP_STORE,
-                clearColor, VkRect2D{ {}, extent }
+                commandBuffer, engine.getImageView(target, VK_IMAGE_VIEW_TYPE_2D),
+                imageAccessToVk(attachment->info).layout, attachmentLoadToVk(attachment->info.attachmentLoad),
+                VK_ATTACHMENT_STORE_OP_STORE, clearColor, VkRect2D{{}, extent}
             );
 
             if (pass.pipelineId) {
@@ -696,8 +772,8 @@ VkImage PassContext::getImage(ImageHandle handle) const {
     return graph.engine.getImage(handle);
 }
 
-VkImageView PassContext::getImageView(ImageHandle handle) const {
-    return graph.engine.getImageView(handle);
+VkImageView PassContext::getImageView(ImageRange image, std::optional<VkImageViewType> type) const {
+    return graph.engine.getImageView(image, type);
 }
 
 VkBuffer PassContext::getBuffer(BufferHandle handle) const {

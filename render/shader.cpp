@@ -100,6 +100,23 @@ static std::optional<std::pair<VkDescriptorType, bool>> reflectDescriptorType(sl
     }
 }
 
+static VkImageViewType reflectViewType(slang::TypeLayoutReflection* type) {
+    const SlangResourceShape shape = type->getResourceShape();
+    const bool array = (shape & SLANG_TEXTURE_ARRAY_FLAG) != 0;
+    switch (shape & SLANG_RESOURCE_BASE_SHAPE_MASK) {
+    case SLANG_TEXTURE_1D:
+        return array ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+    case SLANG_TEXTURE_2D:
+        return array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    case SLANG_TEXTURE_3D:
+        return VK_IMAGE_VIEW_TYPE_3D;
+    case SLANG_TEXTURE_CUBE:
+        return array ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_CUBE;
+    default:
+        return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    }
+}
+
 ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& defines, ShaderFileSystem& fileSystem) {
     ShaderCompilation compilation;
     SlangFileSystem slangFileSystem(fileSystem, compilation.dependencies);
@@ -202,7 +219,9 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
 
         bool used = false;
         metadata->isParameterLocationUsed(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, used);
-        compilation.parameters.push_back({ name, ShaderLocation(set, binding), descriptor->first, descriptor->second, used });
+        compilation.parameters.push_back(
+            {name, ShaderLocation(set, binding), descriptor->first, reflectViewType(type), descriptor->second, used}
+        );
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
 

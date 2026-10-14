@@ -45,7 +45,9 @@ public:
     RenderGraph(RenderGraph&&) = delete;
     RenderGraph& operator=(RenderGraph&&) = delete;
 
-    ImageHandle  createImage(std::string name, VkFormat format, uint32_t width, uint32_t height);
+    ImageHandle createImage(
+        std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t layers = 1, uint32_t mips = 1
+    );
     BufferHandle createBuffer(std::string name, size_t size);
 
     ComputePassBuilder  addComputePass(std::string name);
@@ -99,6 +101,9 @@ private:
     std::unordered_map<uint32_t, std::vector<uint64_t>>            writtenDescriptors;
 
     void resolveBindings(std::vector<std::string>& errors);
+    std::optional<std::string>
+    checkImageBinding(const NamedBinding& binding, const ShaderParameter& parameter, ImageUsageType usage) const;
+    void checkImageAccesses(std::vector<std::string>& errors) const;
 
     void initDescriptorSets();
     void destroyDescriptorSets();

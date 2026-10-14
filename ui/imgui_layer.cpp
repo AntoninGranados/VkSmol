@@ -88,8 +88,8 @@ ImTextureID ImGuiLayer::addTexture(VkSampler sampler, VkImageView view, VkImageL
     return reinterpret_cast<ImTextureID>(ImGui_ImplVulkan_AddTexture(sampler, view, layout));
 }
 
-ImTextureID ImGuiLayer::addTexture(ImageHandle image) {
-    return addTexture(engine.getSampler(image), engine.getImageView(image));
+ImTextureID ImGuiLayer::addTexture(ImageRange image) {
+    return addTexture(engine.getSampler(image.image), engine.getImageView(image, VK_IMAGE_VIEW_TYPE_2D));
 }
 
 void ImGuiLayer::removeTexture(ImTextureID texture) {

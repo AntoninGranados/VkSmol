@@ -269,6 +269,10 @@ std::string passTypeToStr(PassType type) {
     return "";
 }
 
+std::string rangeSuffix(const ImageSubresourceRange& subresources) {
+    return subresources == ImageSubresourceRange{} ? "" : " (" + subresources.toString() + ")";
+}
+
 std::string descriptorTypeToStr(VkDescriptorType type) {
     switch (type) {
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:         return "Uniform";
@@ -298,7 +302,8 @@ std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine)
                 });
             out += "      Bindings:\n";
             for (const DescriptorBindingDecl& d : decls) {
-                const std::string name = d.isImage ? imageName(d.handleId) : bufferName(d.handleId);
+                const std::string name =
+                    d.isImage ? imageName(d.handleId) + rangeSuffix(d.subresources) : bufferName(d.handleId);
                 out += std::format("        {}.{:<2}  {:6}  {:36}  {}\n",
                     d.set, d.binding, d.isImage ? "image" : "buffer",
                     '"' + name + '"',
@@ -315,12 +320,14 @@ std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine)
         for (const ImageAccess& a : pass.imageAccesses) {
             const ImageUsageType u = a.info.usage;
             if (u == ImageUsageType::ColorAttachment || u == ImageUsageType::DepthAttachment)
-                out += std::format("      Attachment: \"{}\"  {}  load:{}\n",
-                    imageName(a.image.id),
-                    imageUsageToStr(u),
-                    attachmentLoadToStr(a.info.attachmentLoad));
+                out += std::format(
+                    "      Attachment: \"{}\"  {}  load:{}\n", imageName(a.image.id) + rangeSuffix(a.subresources),
+                    imageUsageToStr(u), attachmentLoadToStr(a.info.attachmentLoad)
+                );
             else if (u == ImageUsageType::Present || u == ImageUsageType::TransferSrc || u == ImageUsageType::TransferDst)
-                out += std::format("      {}:  \"{}\"\n", imageUsageToStr(u), imageName(a.image.id));
+                out += std::format(
+                    "      {}:  \"{}\"\n", imageUsageToStr(u), imageName(a.image.id) + rangeSuffix(a.subresources)
+                );
         }
 
         if (pass.pipelineId) {

@@ -7,9 +7,9 @@
 
 #include <stb_image/stb_image.h>
 
-#include "image/image_barrier.hpp"
 #include "graph/compiled_resource.hpp"
 #include "graph/graph_utils.hpp"
+#include "image/image_transition.hpp"
 
 namespace VkSmol {
 
@@ -65,12 +65,42 @@ size_t alignStaging(size_t offset) {
     return (offset + kStagingAlignment - 1) & ~(kStagingAlignment - 1);
 }
 
+void checkImageLayout(const std::string& name, VkExtent2D extent, const ImageSubresourceLayout& layout) {
+    if (layout.layerCount == 0 || layout.mipCount == 0 || layout.mipCount > maxMipCount(extent))
+        throw std::runtime_error(
+            std::format(
+                "The image [{}] of {}x{} cannot have {} layers and {} mips", name, extent.width, extent.height,
+                layout.layerCount, layout.mipCount
+            )
+        );
+}
+
+size_t texelSize(const std::string& name, VkExtent2D extent, const ImageSubresourceRange& range, size_t size) {
+    const size_t texels = texelCount(extent, range);
+    if (size % texels != 0)
+        throw std::runtime_error(
+            std::format(
+                "{} bytes do not tightly pack the {} texels of [{}] in the image [{}]", size, texels, range.toString(),
+                name
+            )
+        );
+    return size / texels;
+}
 }
 
 // ——— Images ——————————————————————————————————————————————————————————————————
 
-ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t width, uint32_t height) {
-    PersistentImage image = { .name = std::move(name), .format = format, .width = width, .height = height };
+ImageHandle Engine::createImage(
+    std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t layers, uint32_t mips
+) {
+    PersistentImage image = {
+        .name = std::move(name),
+        .format = format,
+        .width = width,
+        .height = height,
+        .layout = {.mipCount = mips, .layerCount = layers},
+    };
+    checkImageLayout(image.name, {width, height}, image.layout);
     allocateImage(image);
     return insertImage(std::move(image));
 }
@@ -78,14 +108,14 @@ ImageHandle Engine::createImage(std::string name, VkFormat format, uint32_t widt
 ImageHandle Engine::importImage(std::string name, VkImage handle, VkImageView view, VkFormat format, uint32_t width, uint32_t height,
                                 ImageAccessInfo currentAccess) {
     PersistentImage image = {
-        .name       = std::move(name),
-        .format     = format,
-        .width      = width,
-        .height     = height,
-        .image      = handle,
-        .view       = view,
-        .lastAccess = currentAccess,
-        .imported   = true,
+        .name = std::move(name),
+        .format = format,
+        .width = width,
+        .height = height,
+        .image = handle,
+        .view = view,
+        .accesses = {currentAccess},
+        .imported = true,
     };
     image.ownedSampler = device.createSampler(image.name + "Sampler");
     image.sampler      = image.ownedSampler.get();
@@ -118,6 +148,7 @@ void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
     if (image.imported)
         throw std::runtime_error(std::format("Cannot resize the image [{}] as it is imported", image.name));
     if (image.width == width && image.height == height) return;
+    checkImageLayout(image.name, {width, height}, image.layout);
 
     dropPendingTransfers(true, handle.id);
     releaseImage(image);
@@ -138,9 +169,18 @@ const std::string& Engine::getImageName(ImageHandle handle) const {
     return images[handle.id].name;
 }
 
-VkExtent2D Engine::getImageExtent(ImageHandle handle) const {
-    return { images[handle.id].width, images[handle.id].height };
+VkExtent2D Engine::getImageExtent(ImageHandle handle, uint32_t mip) const {
+    const PersistentImage& image = images[handle.id];
+    if (mip >= image.layout.mipCount)
+        throw std::runtime_error(
+            std::format("The image [{}] has no mip {} (it has {})", image.name, mip, image.layout.mipCount)
+        );
+    return mipExtent({image.width, image.height}, mip);
 }
+
+uint32_t Engine::getImageLayerCount(ImageHandle handle) const { return images[handle.id].layout.layerCount; }
+
+uint32_t Engine::getImageMipCount(ImageHandle handle) const { return images[handle.id].layout.mipCount; }
 
 VkFormat Engine::getImageFormat(ImageHandle handle) const {
     return images[handle.id].format;
@@ -150,33 +190,60 @@ VkImage Engine::getImage(ImageHandle handle) const {
     return images[handle.id].image;
 }
 
-VkImageView Engine::getImageView(ImageHandle handle) const {
-    return images[handle.id].view;
+VkImageView Engine::getImageView(ImageRange range, std::optional<VkImageViewType> type) {
+    PersistentImage& image = images[range.image.id];
+    const ImageSubresourceRange subresources = resolveSubresources(image, range.subresources);
+    const VkImageViewType viewType =
+        type.value_or(subresources.layerCount > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
+    if (!image.imported) return image.ownedViews.getOrCreate(device, image.ownedImage, viewType, subresources);
+
+    if (viewType != VK_IMAGE_VIEW_TYPE_2D)
+        throw std::runtime_error(std::format("The imported image [{}] only provides a 2D view", image.name));
+    return image.view;
 }
 
 VkSampler Engine::getSampler(ImageHandle handle) const {
     return images[handle.id].sampler;
 }
 
-void Engine::writeImage(ImageHandle handle, const void* data, size_t size) {
-    if (size == 0) return;
-    const std::byte* bytes = static_cast<const std::byte*>(data);
-    pendingTransfers.push_back(PendingWrite{ .image = true, .destination = handle.id, .offset = 0, .data = std::vector<std::byte>(bytes, bytes + size) });
+ImageSubresourceRange Engine::resolveImageRange(ImageRange range) const {
+    return resolveSubresources(images[range.image.id], range.subresources);
 }
 
-void Engine::readImage(ImageHandle handle, void* out, size_t size) {
+void Engine::writeImage(ImageRange range, const void* data, size_t size) {
     if (size == 0) return;
-    PersistentImage& image = images[handle.id];
+    const PersistentImage& image = images[range.image.id];
+    texelSize(image.name, {image.width, image.height}, resolveSubresources(image, range.subresources), size);
+    const std::byte* bytes = static_cast<const std::byte*>(data);
+    pendingTransfers.push_back(
+        PendingWrite{
+            .image = true,
+            .destination = range.image.id,
+            .offset = 0,
+            .subresources = range.subresources,
+            .data = std::vector<std::byte>(bytes, bytes + size),
+        }
+    );
+}
+
+void Engine::readImage(ImageRange range, void* out, size_t size) {
+    if (size == 0) return;
+    PersistentImage& image = images[range.image.id];
+    const ImageSubresourceRange subresources = resolveSubresources(image, range.subresources);
+    const VkExtent2D extent = {image.width, image.height};
+    const std::vector<VkBufferImageCopy> regions =
+        bufferImageCopyRegions(extent, subresources, 0, texelSize(image.name, extent, subresources, size));
 
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, image.name + "Readback");
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
         flushTransfers(commandBuffer);
-        transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferSrc, .access = AccessType::Read });
-        const VkBufferImageCopy region{
-            .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-            .imageExtent      = { image.width, image.height, 1 },
-        };
-        vkCmdCopyImageToBuffer(commandBuffer.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.get(), 1, &region);
+        transitionImage(
+            commandBuffer, image, subresources, {.usage = ImageUsageType::TransferSrc, .access = AccessType::Read}
+        );
+        vkCmdCopyImageToBuffer(
+            commandBuffer.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.get(),
+            static_cast<uint32_t>(regions.size()), regions.data()
+        );
         device.emitMemoryBarrier(commandBuffer,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
             VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
@@ -185,21 +252,52 @@ void Engine::readImage(ImageHandle handle, void* out, size_t size) {
     device.destroyBuffer(readback);
 }
 
-void Engine::copyImage(ImageHandle source, ImageHandle destination) {
-    const PersistentImage& from = images[source.id];
-    const PersistentImage& to   = images[destination.id];
-    if (from.width != to.width || from.height != to.height)
-        throw std::runtime_error(std::format("Cannot copy the image [{}] of {}x{} into the image [{}] of {}x{}",
-            from.name, from.width, from.height, to.name, to.width, to.height));
+void Engine::copyImage(ImageRange source, ImageRange destination) {
+    validateImageCopy(
+        images[source.image.id], source.subresources, images[destination.image.id], destination.subresources
+    );
+    pendingTransfers.push_back(
+        PendingCopy{
+            .image = true,
+            .source = source.image.id,
+            .destination = destination.image.id,
+            .sourceOffset = 0,
+            .destinationOffset = 0,
+            .size = 0,
+            .sourceSubresources = source.subresources,
+            .destinationSubresources = destination.subresources,
+        }
+    );
+}
 
-    pendingTransfers.push_back(PendingCopy{
-        .image             = true,
-        .source            = source.id,
-        .destination       = destination.id,
-        .sourceOffset      = 0,
-        .destinationOffset = 0,
-        .size              = 0,
-    });
+void Engine::validateImageCopy(
+    const PersistentImage& source, ImageSubresourceRange sourceSubresources, const PersistentImage& destination,
+    ImageSubresourceRange destinationSubresources
+) const {
+    const ImageSubresourceRange from = resolveSubresources(source, sourceSubresources);
+    const ImageSubresourceRange to = resolveSubresources(destination, destinationSubresources);
+    if (from.mipCount != to.mipCount || from.layerCount != to.layerCount)
+        throw std::runtime_error(
+            std::format(
+                "Cannot copy {} mips and {} layers of the image [{}] into {} mips and {} layers of the image [{}]",
+                from.mipCount, from.layerCount, source.name, to.mipCount, to.layerCount, destination.name
+            )
+        );
+    if (&source == &destination && from.overlaps(to))
+        throw std::runtime_error(std::format("Cannot copy overlapping subresources of the image [{}]", source.name));
+
+    for (uint32_t i = 0; i < from.mipCount; ++i) {
+        const VkExtent2D fromExtent = mipExtent({source.width, source.height}, from.baseMip + i);
+        const VkExtent2D toExtent = mipExtent({destination.width, destination.height}, to.baseMip + i);
+        if (fromExtent.width != toExtent.width || fromExtent.height != toExtent.height)
+            throw std::runtime_error(
+                std::format(
+                    "Cannot copy mip {} of the image [{}] of {}x{} into mip {} of the image [{}] of {}x{}",
+                    from.baseMip + i, source.name, fromExtent.width, fromExtent.height, to.baseMip + i,
+                    destination.name, toExtent.width, toExtent.height
+                )
+            );
+    }
 }
 
 // ——— Buffers —————————————————————————————————————————————————————————————————
@@ -323,7 +421,6 @@ void Engine::flushTransfers(const CommandBuffer& commandBuffer) {
     if (stagingSize > 0)
         staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped, nullptr, "EngineStaging");
 
-    constexpr VkImageSubresourceLayers layers{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 };
     constexpr ImageAccessInfo imageSource{ .usage = ImageUsageType::TransferSrc, .access = AccessType::Read };
     constexpr ImageAccessInfo imageDestination{ .usage = ImageUsageType::TransferDst, .access = AccessType::Write };
     constexpr BufferAccessInfo bufferSource{ .usage = BufferUsageType::TransferSrc, .access = AccessType::Read };
@@ -337,13 +434,16 @@ void Engine::flushTransfers(const CommandBuffer& commandBuffer) {
 
             if (write->image) {
                 PersistentImage& image = images[write->destination];
-                transitionImage(commandBuffer, image, imageDestination);
-                const VkBufferImageCopy region{
-                    .bufferOffset     = stagingOffset,
-                    .imageSubresource = layers,
-                    .imageExtent      = { image.width, image.height, 1 },
-                };
-                vkCmdCopyBufferToImage(commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                const ImageSubresourceRange subresources = resolveSubresources(image, write->subresources);
+                const VkExtent2D extent = {image.width, image.height};
+                const std::vector<VkBufferImageCopy> regions = bufferImageCopyRegions(
+                    extent, subresources, stagingOffset, texelSize(image.name, extent, subresources, write->data.size())
+                );
+                transitionImage(commandBuffer, image, subresources, imageDestination);
+                vkCmdCopyBufferToImage(
+                    commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    static_cast<uint32_t>(regions.size()), regions.data()
+                );
             } else {
                 PersistentBuffer& buffer = buffers[write->destination];
                 transitionBuffer(commandBuffer, buffer, bufferDestination);
@@ -356,17 +456,16 @@ void Engine::flushTransfers(const CommandBuffer& commandBuffer) {
             if (copy.image) {
                 PersistentImage& source      = images[copy.source];
                 PersistentImage& destination = images[copy.destination];
-                transitionImage(commandBuffer, source, imageSource);
-                transitionImage(commandBuffer, destination, imageDestination);
-                const VkImageCopy region{
-                    .srcSubresource = layers,
-                    .dstSubresource = layers,
-                    .extent         = { source.width, source.height, 1 },
-                };
-                vkCmdCopyImage(commandBuffer.get(),
-                    source.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    destination.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1, &region);
+                validateImageCopy(source, copy.sourceSubresources, destination, copy.destinationSubresources);
+                const ImageSubresourceRange from = resolveSubresources(source, copy.sourceSubresources);
+                const ImageSubresourceRange to = resolveSubresources(destination, copy.destinationSubresources);
+                transitionImage(commandBuffer, source, from, imageSource);
+                transitionImage(commandBuffer, destination, to, imageDestination);
+                const std::vector<VkImageCopy> regions = imageCopyRegions({source.width, source.height}, from, to);
+                vkCmdCopyImage(
+                    commandBuffer.get(), source.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, static_cast<uint32_t>(regions.size()), regions.data()
+                );
             } else {
                 PersistentBuffer& source      = buffers[copy.source];
                 PersistentBuffer& destination = buffers[copy.destination];
@@ -435,18 +534,19 @@ BufferHandle Engine::insertBuffer(PersistentBuffer&& buffer) {
 
 void Engine::allocateImage(PersistentImage& image) {
     const VkImageUsageFlags usage = supportedImageUsage(device.getPhysicalDevice(), image.format);
-    image.ownedImage = device.createImage(image.width, image.height, image.format, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image.name);
-    image.ownedView  = device.createImageView(image.ownedImage, image.name + "View");
+    image.ownedImage = device.createImage(
+        image.width, image.height, image.layout.mipCount, image.layout.layerCount, image.format, usage,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image.name
+    );
     if (!image.ownedSampler.isValid()) image.ownedSampler = device.createSampler(image.name + "Sampler");
 
     image.image      = image.ownedImage.get();
-    image.view       = image.ownedView.get();
     image.sampler    = image.ownedSampler.get();
-    image.lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None };
+    image.accesses.assign(image.layout.count(), ImageAccessInfo{});
 }
 
 void Engine::releaseImage(PersistentImage& image) {
-    device.destroyImageView(image.ownedView);
+    image.ownedViews.destroy(device);
     device.destroyImage(image.ownedImage);
     image.image = VK_NULL_HANDLE;
     image.view  = VK_NULL_HANDLE;
@@ -463,18 +563,35 @@ void Engine::releaseBuffer(PersistentBuffer& buffer) {
     buffer.buffer = VK_NULL_HANDLE;
 }
 
-void Engine::transitionImage(const CommandBuffer& commandBuffer, PersistentImage& image, ImageAccessInfo access) {
-    const VulkanImageState src = imageAccessToVk(image.lastAccess);
-    const VulkanImageState dst = imageAccessToVk(access);
-    ImageBarrier barrier;
-    barrier.call(
-        logicalDevice, commandBuffer, image.image,
-        src.layout, dst.layout,
-        src.access, dst.access,
-        src.stage, dst.stage,
-        dst.aspect
-    );
-    image.lastAccess = access;
+ImageSubresourceRange
+Engine::resolveSubresources(const PersistentImage& image, ImageSubresourceRange subresources) const {
+    const std::optional<ImageSubresourceRange> resolved = image.layout.resolve(subresources);
+    if (!resolved)
+        throw std::runtime_error(
+            std::format(
+                "The subresources [{}] are out of the image [{}] of {} mips and {} layers", subresources.toString(),
+                image.name, image.layout.mipCount, image.layout.layerCount
+            )
+        );
+    return *resolved;
+}
+
+void Engine::transitionImage(
+    const CommandBuffer& commandBuffer, PersistentImage& image, ImageSubresourceRange subresources,
+    ImageAccessInfo access
+) {
+    const std::vector<ImageTransition> transitions =
+        transitionSubresources(image.accesses, image.layout, resolveSubresources(image, subresources), access);
+    if (transitions.empty()) return;
+
+    std::vector<VkImageMemoryBarrier2> barriers;
+    for (const ImageTransition& transition : transitions) barriers.push_back(transition.toVk(image.image));
+    const VkDependencyInfo dependency{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
+        .pImageMemoryBarriers = barriers.data(),
+    };
+    logicalDevice.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
 }
 
 void Engine::transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuffer& buffer, BufferAccessInfo access) {
@@ -534,7 +651,7 @@ std::optional<uint32_t> Engine::acquireImage() {
     image.view       = swapchain->getImageView(*imageIndex).get();
     image.width      = swapchain->getExtent().width;
     image.height     = swapchain->getExtent().height;
-    image.lastAccess = { .usage = ImageUsageType::Undefined, .access = AccessType::None };
+    image.accesses.assign(image.layout.count(), ImageAccessInfo{});
     return imageIndex;
 }
 

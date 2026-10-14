@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <optional>
 #include <type_traits>
 
 #include "builder_resource.hpp"
@@ -32,7 +33,7 @@ public:
     }
 
     VkImage getImage(ImageHandle handle) const;
-    VkImageView getImageView(ImageHandle handle) const;
+    VkImageView getImageView(ImageRange image, std::optional<VkImageViewType> type = std::nullopt) const;
     VkBuffer getBuffer(BufferHandle handle) const;
 
 private:

@@ -6,14 +6,15 @@
 
 namespace VkSmol {
 
-TransferPassBuilder& TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
+TransferPassBuilder& TransferPassBuilder::copyFrom(ImageRange image) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferSrc,
         .access = AccessType::Read,
     });
 
     graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
+        .image = image.image,
+        .subresources = image.subresources,
         .info = {
             .usage = ImageUsageType::TransferSrc,
             .access = AccessType::Read,
@@ -22,14 +23,15 @@ TransferPassBuilder& TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
     return *this;
 }
 
-TransferPassBuilder& TransferPassBuilder::copyTo(ImageHandle imageHandle) {
+TransferPassBuilder& TransferPassBuilder::copyTo(ImageRange image) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferDst,
         .access = AccessType::Write,
     });
 
     graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
+        .image = image.image,
+        .subresources = image.subresources,
         .info = {
             .usage = ImageUsageType::TransferDst,
             .access = AccessType::Write,
@@ -37,5 +39,4 @@ TransferPassBuilder& TransferPassBuilder::copyTo(ImageHandle imageHandle) {
     });
     return *this;
 }
-
 }
