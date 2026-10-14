@@ -42,10 +42,6 @@ public:
 
     GLFWwindow* getWindow() const { return window; }
 
-    void imguiInitGlfwBackend();
-    void imguiGlfwNewFrame();
-    void imguiGlfwShutdown();
-
 private:
     GLFWwindow* window = nullptr;
 

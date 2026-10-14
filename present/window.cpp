@@ -1,7 +1,5 @@
 #include "window.hpp"
 
-#include "imgui/imgui_impl_glfw.h"
-
 #include <stdexcept>
 
 namespace VkSmol {
@@ -105,18 +103,6 @@ void Window::setCursorMode(int mode) {
 
 double Window::getTime() const {
     return glfwGetTime();
-}
-
-void Window::imguiInitGlfwBackend() {
-    ImGui_ImplGlfw_InitForVulkan(window, true);
-}
-
-void Window::imguiGlfwNewFrame() {
-    ImGui_ImplGlfw_NewFrame();
-}
-
-void Window::imguiGlfwShutdown() {
-    ImGui_ImplGlfw_Shutdown();
 }
 
 void Window::framebufferResizeBridge(GLFWwindow* w, int width, int height) {

@@ -23,7 +23,6 @@
 #include "./present/window.hpp"
 #include "./present/swapchain.hpp"
 
-#include "./render/descriptor/descriptor_pool.hpp"
 #include "./render/shader_file_system.hpp"
 
 #include "./sync/fence.hpp"
@@ -50,6 +49,7 @@ public:
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { device.setShaderFileSystem(std::move(fileSystem)); }
 
     VkExtent2D getExtent() const { return swapchain ? swapchain->getExtent() : VkExtent2D{}; }
+    VkFormat getSwapchainFormat() const { return swapchain ? swapchain->getImageFormat() : VK_FORMAT_UNDEFINED; }
     uint32_t getFrame() const { return currentFrame; }
 
     void waitIdle() { device.waitIdle(); }
@@ -107,9 +107,6 @@ private:
     bool framebufferResized = false;
     uint32_t currentFrame = 0;
 
-    DescriptorPool uiDescriptorPool;
-    VkFormat uiColorFormat = VK_FORMAT_UNDEFINED;
-
     std::vector<PersistentImage>  images;
     std::vector<PersistentBuffer> buffers;
 
@@ -126,8 +123,6 @@ private:
     std::optional<uint32_t> acquireImage();
     void presentImage(uint32_t imageIndex, const Semaphore& waitSemaphore);
     void recreateSwapchain();
-
-    void initImgui();
 
     friend class RenderGraph;
 };
