@@ -15,6 +15,7 @@
 #include <ranges>
 #include <string>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "./device/device.hpp"
@@ -83,6 +84,8 @@ public:
         readImage(image, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>));
     }
 
+    void copyImage(ImageHandle source, ImageHandle destination);
+
     BufferHandle createBuffer(std::string name, size_t size, const void* initialData = nullptr);
     BufferHandle importBuffer(std::string name, VkBuffer buffer, size_t size);
     void destroyBuffer(BufferHandle buffer);
@@ -109,6 +112,8 @@ public:
     void readBuffer(BufferHandle buffer, R& out, size_t offset = 0) {
         readBuffer(buffer, std::ranges::data(out), std::ranges::size(out) * sizeof(std::ranges::range_value_t<R>), offset);
     }
+
+    void copyBuffer(BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset = 0, size_t destinationOffset = 0);
 
     void flush();
 
@@ -138,10 +143,21 @@ private:
 
     struct PendingWrite {
         bool                   image;
-        uint32_t               id;
+        uint32_t               destination;
         size_t                 offset;
         std::vector<std::byte> data;
     };
+
+    struct PendingCopy {
+        bool     image;
+        uint32_t source;
+        uint32_t destination;
+        size_t   sourceOffset;
+        size_t   destinationOffset;
+        size_t   size;
+    };
+
+    using PendingTransfer = std::variant<PendingWrite, PendingCopy>;
 
     std::optional<Window&> window;
     Device device;
@@ -158,7 +174,7 @@ private:
     std::vector<PersistentBuffer> buffers;
     std::vector<uint32_t>         freeImages;
     std::vector<uint32_t>         freeBuffers;
-    std::vector<PendingWrite>     pendingWrites;
+    std::vector<PendingTransfer>  pendingTransfers;
 
     bool slotStarted = false;
     std::array<std::vector<const Fence*>, MAX_FRAME_IN_FLIGHT> slotFences;
@@ -173,8 +189,9 @@ private:
     void releaseImage(PersistentImage& image);
     void allocateBuffer(PersistentBuffer& buffer);
     void releaseBuffer(PersistentBuffer& buffer);
-    void dropPendingWrites(bool image, uint32_t id);
-    void flushWrites(const CommandBuffer& commandBuffer);
+    void dropPendingTransfers(bool image, uint32_t id);
+    void remapPendingTransfers(bool image, uint32_t a, uint32_t b);
+    void flushTransfers(const CommandBuffer& commandBuffer);
 
     void transitionImage(const CommandBuffer& commandBuffer, PersistentImage& image, ImageAccessInfo access);
     void transitionBuffer(const CommandBuffer& commandBuffer, PersistentBuffer& buffer, BufferAccessInfo access);

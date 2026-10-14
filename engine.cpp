@@ -106,7 +106,7 @@ ImageHandle Engine::loadImage(const std::string& path) {
 void Engine::destroyImage(ImageHandle handle) {
     PersistentImage& image = images[handle.id];
     assert(image.image != VK_NULL_HANDLE);
-    dropPendingWrites(true, handle.id);
+    dropPendingTransfers(true, handle.id);
     releaseImage(image);
     device.destroySampler(image.ownedSampler);
     image = {};
@@ -119,7 +119,7 @@ void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
         throw std::runtime_error(std::format("Cannot resize the image [{}] as it is imported", image.name));
     if (image.width == width && image.height == height) return;
 
-    dropPendingWrites(true, handle.id);
+    dropPendingTransfers(true, handle.id);
     releaseImage(image);
     image.width  = width;
     image.height = height;
@@ -131,12 +131,7 @@ void Engine::swapImages(ImageHandle a, ImageHandle b) {
     PersistentImage& second = images[b.id];
     std::swap(first.name, second.name);
     std::swap(first, second);
-
-    for (PendingWrite& write : pendingWrites) {
-        if (!write.image) continue;
-        if (write.id == a.id) write.id = b.id;
-        else if (write.id == b.id) write.id = a.id;
-    }
+    remapPendingTransfers(true, a.id, b.id);
 }
 
 const std::string& Engine::getImageName(ImageHandle handle) const {
@@ -166,7 +161,7 @@ VkSampler Engine::getSampler(ImageHandle handle) const {
 void Engine::writeImage(ImageHandle handle, const void* data, size_t size) {
     if (size == 0) return;
     const std::byte* bytes = static_cast<const std::byte*>(data);
-    pendingWrites.push_back({ .image = true, .id = handle.id, .offset = 0, .data = std::vector<std::byte>(bytes, bytes + size) });
+    pendingTransfers.push_back(PendingWrite{ .image = true, .destination = handle.id, .offset = 0, .data = std::vector<std::byte>(bytes, bytes + size) });
 }
 
 void Engine::readImage(ImageHandle handle, void* out, size_t size) {
@@ -175,7 +170,7 @@ void Engine::readImage(ImageHandle handle, void* out, size_t size) {
 
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, image.name + "Readback");
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
-        flushWrites(commandBuffer);
+        flushTransfers(commandBuffer);
         transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferSrc, .access = AccessType::Read });
         const VkBufferImageCopy region{
             .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
@@ -188,6 +183,23 @@ void Engine::readImage(ImageHandle handle, void* out, size_t size) {
     });
     readback.read(logicalDevice, out, size);
     device.destroyBuffer(readback);
+}
+
+void Engine::copyImage(ImageHandle source, ImageHandle destination) {
+    const PersistentImage& from = images[source.id];
+    const PersistentImage& to   = images[destination.id];
+    if (from.width != to.width || from.height != to.height)
+        throw std::runtime_error(std::format("Cannot copy the image [{}] of {}x{} into the image [{}] of {}x{}",
+            from.name, from.width, from.height, to.name, to.width, to.height));
+
+    pendingTransfers.push_back(PendingCopy{
+        .image             = true,
+        .source            = source.id,
+        .destination       = destination.id,
+        .sourceOffset      = 0,
+        .destinationOffset = 0,
+        .size              = 0,
+    });
 }
 
 // ——— Buffers —————————————————————————————————————————————————————————————————
@@ -207,7 +219,7 @@ BufferHandle Engine::importBuffer(std::string name, VkBuffer handle, size_t size
 void Engine::destroyBuffer(BufferHandle handle) {
     PersistentBuffer& buffer = buffers[handle.id];
     assert(buffer.buffer != VK_NULL_HANDLE);
-    dropPendingWrites(false, handle.id);
+    dropPendingTransfers(false, handle.id);
     releaseBuffer(buffer);
     buffer = {};
     freeBuffers.push_back(handle.id);
@@ -219,7 +231,7 @@ void Engine::resizeBuffer(BufferHandle handle, size_t size) {
         throw std::runtime_error(std::format("Cannot resize the buffer [{}] as it is imported", buffer.name));
     if (buffer.size == size) return;
 
-    dropPendingWrites(false, handle.id);
+    dropPendingTransfers(false, handle.id);
     releaseBuffer(buffer);
     buffer.size = size;
     allocateBuffer(buffer);
@@ -230,12 +242,7 @@ void Engine::swapBuffers(BufferHandle a, BufferHandle b) {
     PersistentBuffer& second = buffers[b.id];
     std::swap(first.name, second.name);
     std::swap(first, second);
-
-    for (PendingWrite& write : pendingWrites) {
-        if (write.image) continue;
-        if (write.id == a.id) write.id = b.id;
-        else if (write.id == b.id) write.id = a.id;
-    }
+    remapPendingTransfers(false, a.id, b.id);
 }
 
 const std::string& Engine::getBufferName(BufferHandle handle) const {
@@ -257,7 +264,7 @@ void Engine::writeBuffer(BufferHandle handle, const void* data, size_t size, siz
         throw std::runtime_error(std::format("Writing {} bytes at offset {} overflows the buffer [{}] of {} bytes", size, offset, buffer.name, buffer.size));
 
     const std::byte* bytes = static_cast<const std::byte*>(data);
-    pendingWrites.push_back({ .image = false, .id = handle.id, .offset = offset, .data = std::vector<std::byte>(bytes, bytes + size) });
+    pendingTransfers.push_back(PendingWrite{ .image = false, .destination = handle.id, .offset = offset, .data = std::vector<std::byte>(bytes, bytes + size) });
 }
 
 void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offset) {
@@ -268,7 +275,7 @@ void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offs
 
     Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, buffer.name + "Readback");
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
-        flushWrites(commandBuffer);
+        flushTransfers(commandBuffer);
         transitionBuffer(commandBuffer, buffer, { .usage = BufferUsageType::TransferSrc, .access = AccessType::Read });
         const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
         vkCmdCopyBuffer(commandBuffer.get(), buffer.buffer, readback.get(), 1, &region);
@@ -280,49 +287,126 @@ void Engine::readBuffer(BufferHandle handle, void* out, size_t size, size_t offs
     device.destroyBuffer(readback);
 }
 
+void Engine::copyBuffer(BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset, size_t destinationOffset) {
+    if (size == 0) return;
+    const PersistentBuffer& from = buffers[source.id];
+    const PersistentBuffer& to   = buffers[destination.id];
+    if (sourceOffset + size > from.size)
+        throw std::runtime_error(std::format("Copying {} bytes at offset {} overflows the buffer [{}] of {} bytes", size, sourceOffset, from.name, from.size));
+    if (destinationOffset + size > to.size)
+        throw std::runtime_error(std::format("Copying {} bytes at offset {} overflows the buffer [{}] of {} bytes", size, destinationOffset, to.name, to.size));
+
+    pendingTransfers.push_back(PendingCopy{
+        .image             = false,
+        .source            = source.id,
+        .destination       = destination.id,
+        .sourceOffset      = sourceOffset,
+        .destinationOffset = destinationOffset,
+        .size              = size,
+    });
+}
+
 // ——— Transfers ———————————————————————————————————————————————————————————————
 
 void Engine::flush() {
-    if (pendingWrites.empty()) return;
-    device.immediateSubmit([&](const CommandBuffer& commandBuffer) { flushWrites(commandBuffer); });
+    if (pendingTransfers.empty()) return;
+    device.immediateSubmit([&](const CommandBuffer& commandBuffer) { flushTransfers(commandBuffer); });
 }
 
-void Engine::flushWrites(const CommandBuffer& commandBuffer) {
-    if (pendingWrites.empty()) return;
+void Engine::flushTransfers(const CommandBuffer& commandBuffer) {
+    if (pendingTransfers.empty()) return;
 
     size_t stagingSize = 0;
-    for (const PendingWrite& write : pendingWrites) stagingSize = alignStaging(stagingSize) + write.data.size();
-    Buffer staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped, nullptr, "EngineStaging");
+    for (const PendingTransfer& transfer : pendingTransfers)
+        if (const auto* write = std::get_if<PendingWrite>(&transfer)) stagingSize = alignStaging(stagingSize) + write->data.size();
+    Buffer staging;
+    if (stagingSize > 0)
+        staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped, nullptr, "EngineStaging");
+
+    constexpr VkImageSubresourceLayers layers{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 };
+    constexpr ImageAccessInfo imageSource{ .usage = ImageUsageType::TransferSrc, .access = AccessType::Read };
+    constexpr ImageAccessInfo imageDestination{ .usage = ImageUsageType::TransferDst, .access = AccessType::Write };
+    constexpr BufferAccessInfo bufferSource{ .usage = BufferUsageType::TransferSrc, .access = AccessType::Read };
+    constexpr BufferAccessInfo bufferDestination{ .usage = BufferUsageType::TransferDst, .access = AccessType::Write };
 
     size_t stagingOffset = 0;
-    for (const PendingWrite& write : pendingWrites) {
-        stagingOffset = alignStaging(stagingOffset);
-        staging.write(logicalDevice, write.data.data(), write.data.size(), stagingOffset);
+    for (const PendingTransfer& transfer : pendingTransfers) {
+        if (const auto* write = std::get_if<PendingWrite>(&transfer)) {
+            stagingOffset = alignStaging(stagingOffset);
+            staging.write(logicalDevice, write->data.data(), write->data.size(), stagingOffset);
 
-        if (write.image) {
-            PersistentImage& image = images[write.id];
-            transitionImage(commandBuffer, image, { .usage = ImageUsageType::TransferDst, .access = AccessType::Write });
-            const VkBufferImageCopy region{
-                .bufferOffset     = stagingOffset,
-                .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-                .imageExtent      = { image.width, image.height, 1 },
-            };
-            vkCmdCopyBufferToImage(commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            if (write->image) {
+                PersistentImage& image = images[write->destination];
+                transitionImage(commandBuffer, image, imageDestination);
+                const VkBufferImageCopy region{
+                    .bufferOffset     = stagingOffset,
+                    .imageSubresource = layers,
+                    .imageExtent      = { image.width, image.height, 1 },
+                };
+                vkCmdCopyBufferToImage(commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            } else {
+                PersistentBuffer& buffer = buffers[write->destination];
+                transitionBuffer(commandBuffer, buffer, bufferDestination);
+                const VkBufferCopy region{ .srcOffset = stagingOffset, .dstOffset = write->offset, .size = write->data.size() };
+                vkCmdCopyBuffer(commandBuffer.get(), staging.get(), buffer.buffer, 1, &region);
+            }
+            stagingOffset += write->data.size();
         } else {
-            PersistentBuffer& buffer = buffers[write.id];
-            transitionBuffer(commandBuffer, buffer, { .usage = BufferUsageType::TransferDst, .access = AccessType::Write });
-            const VkBufferCopy region{ .srcOffset = stagingOffset, .dstOffset = write.offset, .size = write.data.size() };
-            vkCmdCopyBuffer(commandBuffer.get(), staging.get(), buffer.buffer, 1, &region);
+            const PendingCopy& copy = std::get<PendingCopy>(transfer);
+            if (copy.image) {
+                PersistentImage& source      = images[copy.source];
+                PersistentImage& destination = images[copy.destination];
+                transitionImage(commandBuffer, source, imageSource);
+                transitionImage(commandBuffer, destination, imageDestination);
+                const VkImageCopy region{
+                    .srcSubresource = layers,
+                    .dstSubresource = layers,
+                    .extent         = { source.width, source.height, 1 },
+                };
+                vkCmdCopyImage(commandBuffer.get(),
+                    source.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    destination.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &region);
+            } else {
+                PersistentBuffer& source      = buffers[copy.source];
+                PersistentBuffer& destination = buffers[copy.destination];
+                transitionBuffer(commandBuffer, source, bufferSource);
+                transitionBuffer(commandBuffer, destination, bufferDestination);
+                const VkBufferCopy region{ .srcOffset = copy.sourceOffset, .dstOffset = copy.destinationOffset, .size = copy.size };
+                vkCmdCopyBuffer(commandBuffer.get(), source.buffer, destination.buffer, 1, &region);
+            }
         }
-        stagingOffset += write.data.size();
     }
 
-    pendingWrites.clear();
+    pendingTransfers.clear();
     device.destroyBuffer(staging);
 }
 
-void Engine::dropPendingWrites(bool image, uint32_t id) {
-    std::erase_if(pendingWrites, [&](const PendingWrite& write) { return write.image == image && write.id == id; });
+void Engine::dropPendingTransfers(bool image, uint32_t id) {
+    std::erase_if(pendingTransfers, [&](const PendingTransfer& transfer) {
+        if (const auto* write = std::get_if<PendingWrite>(&transfer))
+            return write->image == image && write->destination == id;
+        const PendingCopy& copy = std::get<PendingCopy>(transfer);
+        return copy.image == image && (copy.source == id || copy.destination == id);
+    });
+}
+
+void Engine::remapPendingTransfers(bool image, uint32_t a, uint32_t b) {
+    const auto remap = [&](uint32_t& id) {
+        if (id == a) id = b;
+        else if (id == b) id = a;
+    };
+    for (PendingTransfer& transfer : pendingTransfers) {
+        if (auto* write = std::get_if<PendingWrite>(&transfer)) {
+            if (write->image == image) remap(write->destination);
+        } else {
+            PendingCopy& copy = std::get<PendingCopy>(transfer);
+            if (copy.image == image) {
+                remap(copy.source);
+                remap(copy.destination);
+            }
+        }
+    }
 }
 
 // ——— Storage —————————————————————————————————————————————————————————————————

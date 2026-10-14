@@ -542,7 +542,7 @@ void RenderGraph::execute() {
     CommandBuffer& commandBuffer = commandBuffers[frame];
     commandBuffer.reset();
     commandBuffer.beginRecording();
-    engine.flushWrites(commandBuffer);
+    engine.flushTransfers(commandBuffer);
     for (const CompiledPass& pass : graph.compiledPasses)
         recordPass(commandBuffer, pass);
     commandBuffer.endRecording();
