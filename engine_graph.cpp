@@ -28,7 +28,7 @@ void Engine::setGraph(RenderGraphBuilder& builder) {
 void Engine::initImages() {
     for (uint32_t id = 0; id < graph.images.size(); ++id) {
         const ImageInfo& info = graph.images[id];
-        if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED || ownedImages.contains(id)) continue;
+        if (info.ownership == ImageOwnership::Imported || ownedImages.contains(id)) continue;
 
         Image img  = createImage(info.width, info.height, info.format, imageUsageFlags(graph, id), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
         ImageView view = createImageView(img, info.name + "View");
@@ -68,7 +68,7 @@ VkImageUsageFlags Engine::imageUsageFlags(const CompiledRenderGraph& compiled, u
 void Engine::initBuffers() {
     for (uint32_t id = 0; id < graph.buffers.size(); ++id) {
         const BufferInfo& info = graph.buffers[id];
-        if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || ownedBuffers.contains(id)) continue;
+        if (info.ownership == BufferOwnership::Imported || ownedBuffers.contains(id)) continue;
 
         void* initialData = info.initialData.empty() ? nullptr : (void*)info.initialData.data();
         Buffer buf = createBuffer(bufferUsageFlags(graph, id), info.size, 0, initialData, info.name);
@@ -119,7 +119,7 @@ size_t Engine::stage(const void* data, size_t size) {
     if (offset + size > arena.buffer.getSize()) {
         const size_t capacity = std::max(arena.buffer.getSize() * 2, size);
         destroyBuffer(arena.buffer);
-        arena.buffer = createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, "StagingBuffer");
+        arena.buffer = createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, BufferAllocMapped, nullptr, "StagingBuffer");
         offset = 0;
     }
     arena.buffer.write(device, data, size, offset);
@@ -380,7 +380,7 @@ Engine::ReusedResources Engine::takeReusableResources(CompiledRenderGraph& next)
 
     for (uint32_t nextId = 0; nextId < next.images.size(); ++nextId) {
         const ImageInfo& wanted = next.images[nextId];
-        if (wanted.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
+        if (wanted.ownership == ImageOwnership::Imported) continue;
 
         for (auto& [id, image] : ownedImages) {
             const ImageInfo& current = graph.images[id];
@@ -404,7 +404,7 @@ Engine::ReusedResources Engine::takeReusableResources(CompiledRenderGraph& next)
 
     for (uint32_t nextId = 0; nextId < next.buffers.size(); ++nextId) {
         BufferInfo& wanted = next.buffers[nextId];
-        if (wanted.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || !wanted.initialData.empty()) continue;
+        if (wanted.ownership == BufferOwnership::Imported || !wanted.initialData.empty()) continue;
 
         for (auto& [id, buffer] : ownedBuffers) {
             const BufferInfo& current = graph.buffers[id];
@@ -478,7 +478,7 @@ void Engine::destroyGraph() {
 void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
     uint32_t id = handle.id;
     ImageInfo& info = graph.images[id];
-    if (info.ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED) return;
+    if (info.ownership == ImageOwnership::Imported) return;
 
     destroySampler(ownedSamplers.at(id));
     destroyImageView(ownedViews.at(id));
@@ -666,7 +666,7 @@ Buffer& Engine::getBuffer(const BufferHandle& handle) {
 
 bool Engine::resizeBuffer(const BufferHandle& handle, size_t newSize) {
     const BufferInfo& info = graph.buffers[handle.id];
-    if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED || info.size >= newSize) return false;
+    if (info.ownership == BufferOwnership::Imported || info.size >= newSize) return false;
     replaceBuffer(handle.id, newSize, false);
     return true;
 }
@@ -674,7 +674,7 @@ bool Engine::resizeBuffer(const BufferHandle& handle, size_t newSize) {
 void Engine::writeBuffer(const BufferHandle& handle, const void* data, size_t size, size_t offset) {
     if (size == 0) return;
     const BufferInfo& info = graph.buffers[handle.id];
-    if (info.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED)
+    if (info.ownership == BufferOwnership::Imported)
         throw std::runtime_error("Cannot write to imported buffer \"" + info.name + "\"");
     if (offset + size > info.size)
         replaceBuffer(handle.id, std::max(offset + size, info.size * 2), true);
@@ -689,7 +689,7 @@ void Engine::writeBuffer(const BufferHandle& handle, const void* data, size_t si
 
 void Engine::readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset) {
     if (size == 0) return;
-    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr,
+    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr,
                                    graph.buffers[handle.id].name + "Readback");
 
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);

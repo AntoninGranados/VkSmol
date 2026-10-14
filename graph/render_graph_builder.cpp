@@ -93,7 +93,7 @@ void validateImageTimelines(const std::vector<ImageInfo>& images, const std::vec
         for (const TimelineImageAccess& timelineAccess : timeline.accesses) {
             // Transient images are created fresh (UNDEFINED layout); the executor always
             // emits an UNDEFINED→dst barrier, so reading uninitialized data is intentional.
-            if (imageInfo.ownership == VKSMOL_IMAGE_OWNERSHIP_TRANSIENT) {
+            if (imageInfo.ownership == ImageOwnership::Transient) {
                 if (timelineAccess.info.access == AccessType::Write)
                     hasPreviousContents = true;
                 continue;
@@ -280,7 +280,7 @@ std::vector<CompiledSubmissionGroup> computeCompiledSubmissionGroups(
     // Mark which group waits on imageAvailable (first write to the swapchain / Present image)
     for (const ImageTimeline& timeline : timelines) {
         const ImageInfo& info = images[timeline.image.id];
-        if (info.ownership != VKSMOL_IMAGE_OWNERSHIP_IMPORTED) continue;
+        if (info.ownership != ImageOwnership::Imported) continue;
         if (!info.finalAccess.has_value() || info.finalAccess->usage != ImageUsageType::Present) continue;
         for (const TimelineImageAccess& access : timeline.accesses) {
             if (access.info.access == AccessType::Write) {
@@ -318,14 +318,14 @@ SubmissionGroupHandle RenderGraphBuilder::addSubmissionGroup(std::string name) {
 ImageHandle RenderGraphBuilder::createImage(
     std::string name, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth,
-    VkSmolImageOwnership ownership,
+    ImageOwnership ownership,
     VkImageUsageFlags extraUsageFlags,
     std::optional<ImageAccessInfo> initialAccess,
     std::optional<ImageAccessInfo> finalAccess
 ) {
-    if (ownership == VKSMOL_IMAGE_OWNERSHIP_MANAGED && (!initialAccess.has_value() || !finalAccess.has_value()))
+    if (ownership == ImageOwnership::Managed && (!initialAccess.has_value() || !finalAccess.has_value()))
         throw std::runtime_error("Managed images require both initialAccess and finalAccess");
-    if (ownership == VKSMOL_IMAGE_OWNERSHIP_TRANSIENT && (initialAccess.has_value() || finalAccess.has_value()))
+    if (ownership == ImageOwnership::Transient && (initialAccess.has_value() || finalAccess.has_value()))
         throw std::runtime_error("Transient images must not specify initialAccess/finalAccess");
 
     if (initialAccess.has_value()) checkImageAccessInfoValid(*initialAccess);
@@ -341,7 +341,7 @@ ImageHandle RenderGraphBuilder::createImage(
         .ownership = ownership,
         .initialAccess = initialAccess,
         .finalAccess = finalAccess,
-        .extraUsageFlags = ownership == VKSMOL_IMAGE_OWNERSHIP_IMPORTED ? 0 : extraUsageFlags,
+        .extraUsageFlags = ownership == ImageOwnership::Imported ? 0 : extraUsageFlags,
     });
 
     return handle;
@@ -349,11 +349,11 @@ ImageHandle RenderGraphBuilder::createImage(
 
 BufferHandle RenderGraphBuilder::createBuffer(
     std::string name, size_t size,
-    VkSmolBufferOwnership ownership,
+    BufferOwnership ownership,
     VkBufferUsageFlags extraUsageFlags,
     const void* initialData
 ) {
-    if (initialData && ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED)
+    if (initialData && ownership == BufferOwnership::Imported)
         throw std::runtime_error("Imported buffers cannot have initial data");
 
     BufferHandle handle = { .id = static_cast<uint32_t>(buffers.size()) };

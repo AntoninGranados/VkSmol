@@ -13,9 +13,9 @@ class CommandBuffer;
 class CommandPool;
 class Queue;
 
-typedef uint32_t VkSmolBufferAllocFlags;
-enum VkSmolBufferAllocFlagBits {
-    VKSMOL_BUFFER_ALLOC_MAPPED_BIT = 1 << 0,
+using BufferAllocFlags = uint32_t;
+enum BufferAllocFlagBits : BufferAllocFlags {
+    BufferAllocMapped = 1 << 0,
 };
 
 class Buffer: public TrackedResource {

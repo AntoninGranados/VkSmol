@@ -51,10 +51,10 @@ enum class ImageUsageType : uint16_t {
     TransferDst,
 };
 
-enum VkSmolImageOwnership {
-    VKSMOL_IMAGE_OWNERSHIP_TRANSIENT,  // Executor creates it, starts UNDEFINED, first access must be a write
-    VKSMOL_IMAGE_OWNERSHIP_MANAGED,    // Executor creates it, starts in the declared initialAccess layout, can be read first
-    VKSMOL_IMAGE_OWNERSHIP_IMPORTED,   // Caller provides the VkImage/VkImageView each frame via bindImage
+enum class ImageOwnership : uint16_t {
+    Transient,  // Executor creates it, starts UNDEFINED, first access must be a write
+    Managed,    // Executor creates it, starts in the declared initialAccess layout, can be read first
+    Imported,   // Caller provides the VkImage/VkImageView each frame via bindImage
 };
 
 enum class WriteMode : uint16_t {
@@ -97,7 +97,7 @@ struct ImageInfo {
     uint32_t height = 1;
     uint32_t depth = 1;
 
-    VkSmolImageOwnership ownership = VKSMOL_IMAGE_OWNERSHIP_TRANSIENT;
+    ImageOwnership ownership = ImageOwnership::Transient;
     std::optional<ImageAccessInfo> initialAccess = {};
     std::optional<ImageAccessInfo> finalAccess = {};
 
@@ -121,9 +121,9 @@ enum class BufferUsageType : uint16_t {
     Indirect,
 };
 
-enum VkSmolBufferOwnership {
-    VKSMOL_BUFFER_OWNERSHIP_MANAGED,
-    VKSMOL_BUFFER_OWNERSHIP_IMPORTED,  // Caller provides the VkBuffer each frame via bindBuffer
+enum class BufferOwnership : uint16_t {
+    Managed,
+    Imported,  // Caller provides the VkBuffer each frame via bindBuffer
 };
 
 struct BufferAccessInfo {
@@ -139,7 +139,7 @@ struct BufferAccess {
 struct BufferInfo {
     std::string name;
     size_t size = 0;
-    VkSmolBufferOwnership ownership = VKSMOL_BUFFER_OWNERSHIP_MANAGED;
+    BufferOwnership ownership = BufferOwnership::Managed;
     // Additional VkBufferUsageFlags ORed on top of the flags inferred from declared pass accesses
     VkBufferUsageFlags extraUsageFlags = 0;
     // Non-empty → device-local buffer uploaded once via staging at init; not CPU-writable after that.

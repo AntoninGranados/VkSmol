@@ -25,7 +25,7 @@ public:
     ImageHandle createImage(
         std::string name, VkFormat format,
         uint32_t width, uint32_t height, uint32_t depth = 1,
-        VkSmolImageOwnership ownership = VKSMOL_IMAGE_OWNERSHIP_TRANSIENT,
+        ImageOwnership ownership = ImageOwnership::Transient,
         VkImageUsageFlags extraUsageFlags = 0,
         std::optional<ImageAccessInfo> initialAccess = {},
         std::optional<ImageAccessInfo> finalAccess = {}
@@ -33,7 +33,7 @@ public:
 
     BufferHandle createBuffer(
         std::string name, size_t size,
-        VkSmolBufferOwnership ownership = VKSMOL_BUFFER_OWNERSHIP_MANAGED,
+        BufferOwnership ownership = BufferOwnership::Managed,
         VkBufferUsageFlags extraUsageFlags = 0,
         const void* initialData = nullptr
     );

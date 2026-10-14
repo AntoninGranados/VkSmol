@@ -330,11 +330,11 @@ void Engine::destroyDescriptorSetGroup(DescriptorSetGroup& group) {
 
 // ——— Buffers ————————————————————————————————————————————————————————————————
 
-Buffer Engine::createBuffer(VkBufferUsageFlags usage, size_t size, VkSmolBufferAllocFlags flags, void* data, std::string name) {
+Buffer Engine::createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags, void* data, std::string name) {
     Buffer buf;
     buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
 
-    if (flags & VKSMOL_BUFFER_ALLOC_MAPPED_BIT) {
+    if (flags & BufferAllocMapped) {
         buf.init(device, usage, size, true);
         buf.alloc(device, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         if (data) buf.fill(device, data);
@@ -363,7 +363,7 @@ void Engine::fillImage(Image& image, const void* data, size_t size) {
 }
 
 void Engine::readImage(Image& image, void* out, size_t size) {
-    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, VKSMOL_BUFFER_ALLOC_MAPPED_BIT, nullptr, "ImageReadback");
+    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr, "ImageReadback");
 
     CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
     emitMemoryBarrier(commandBuffer,
