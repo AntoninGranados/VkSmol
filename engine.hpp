@@ -12,8 +12,8 @@
 #include <array>
 #include <cstddef>
 #include <functional>
-#include <map>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <type_traits>
@@ -21,16 +21,9 @@
 #include <variant>
 #include <vector>
 
-#include "./platform/platform.hpp"
+#include "./device/device.hpp"
 
-#include "./instance/instance.hpp"
-#include "./instance/debug_messenger.hpp"
-#include "./present/surface.hpp"
-
-#include "./device/physical_device.hpp"
-#include "./device/logical_device.hpp"
-#include "./device/queue.hpp"
-
+#include "./present/window.hpp"
 #include "./present/swapchain.hpp"
 #include "./render/dynamic_renderer.hpp"
 
@@ -74,18 +67,29 @@ struct AttachmentInfo {
     VkImageView        view;
     VkImageLayout      layout;
     VkAttachmentLoadOp loadOp;
+    VkExtent2D         extent;
 };
 
 class RenderGraphBuilder;
 
 class Engine {
 public:
-    void init(std::string appName, uint32_t appVersion, Platform& platform);
+    Engine(const std::string& appName, uint32_t appVersion, std::optional<Window&> window = std::nullopt);
+    ~Engine();
 
-    bool isHeadless() const { return platform->isHeadless(); }
+    Engine(const Engine&) = delete;
+    Engine& operator=(const Engine&) = delete;
+    Engine(Engine&&) = delete;
+    Engine& operator=(Engine&&) = delete;
 
-    void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
-    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {});
+    bool isHeadless() const { return !window.has_value(); }
+
+    Device& getDevice() { return device; }
+
+    void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { device.setShaderFileSystem(std::move(fileSystem)); }
+    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {}) {
+        return device.getShaderLocation(shaderPath, parameterName, defines);
+    }
 
     void setGraph(RenderGraphBuilder& builder);
     [[nodiscard]] std::vector<std::string> initGraph(std::string pipelineCachePath = {});
@@ -145,9 +149,6 @@ public:
 
     void bindDescriptors(const CommandBuffer& commandBuffer, const PassHandle& pass);
 
-    CommandBuffer allocCommandBuffer();
-    void freeCommandBuffer(CommandBuffer& commandBuffer);
-
     void submit(
         CommandBuffer& commandBuffer,
         Fence& fence,
@@ -156,10 +157,7 @@ public:
         const std::vector<const Semaphore*>& signalSemaphores
     );
 
-    const LogicalDevice& getDevice() const { return device; }
-
-    void waitIdle();
-    void terminate();
+    void waitIdle() { device.waitIdle(); }
 
     void destroyGraphicsPipeline(GraphicsPipeline& graphicsPipeline);
     void destroyComputePipeline(ComputePipeline& computePipeline);
@@ -168,80 +166,36 @@ public:
         const CommandBuffer& commandBuffer, 
         VkImageView imageView, VkImageLayout imageLayout,
         VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+        VkExtent2D extent,
         VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }}
     );
     void endDynamicRenderer(const CommandBuffer& commandBuffer);
 
-    VkExtent2D& getExtent() {
-        return platform->isHeadless() ?
-            std::get<HeadlessState>(displayState).extent :
-            std::get<WindowedState>(displayState).swapchain.getExtent();
-    };
-    const VkExtent2D& getExtent() const {
-        return platform->isHeadless() ?
-            std::get<HeadlessState>(displayState).extent :
-            std::get<WindowedState>(displayState).swapchain.getExtent();
-    };
+    VkExtent2D getExtent() const { return swapchain ? swapchain->getExtent() : VkExtent2D{}; }
     uint32_t getFrame() { return currentFrame; }
-    bool shouldTerminate();
 
     Image& getSwapchainImage(size_t imageIndex);
     ImageView& getSwapchainImageView(size_t imageIndex);
-
-    void destroyBuffer(Buffer& buffer);
-    void fillImage(Image& image, const void* data, size_t size);
-    void readImage(Image& image, void* out, size_t size);
-
-    Image createImageFromPath(std::string path, std::string name = {});
-    Image createImageFromData(const void* data, size_t size, VkFormat format, uint32_t width, uint32_t height, std::string name = {});
-    Image createEmptyImage(VkFormat format, uint32_t width, uint32_t height, std::string name = {});
-    void copyImage(Image& src, Image& dst);
-    ImageView createImageView(Image& image, std::string name = {});
-    void destroyImage(Image& image);
-    void destroyImageView(ImageView& imageView);
 
     std::string dumpGraph() const;
 
 
 private:
-    struct WindowedState {
-        Surface surface;
+    std::optional<Window&> window;
+    Device device;
+    const LogicalDevice& logicalDevice;
+    std::optional<Swapchain> swapchain;
 
-        Swapchain swapchain;
-        uint64_t  swapchainGeneration = 0;
-        std::vector<Semaphore> imageAvailableSemaphores;
-
-        Queue presentQueue;
-    };
-
-    struct HeadlessState {
-        VkExtent2D extent;
-    };
-
-    Platform* platform = nullptr;
-    std::variant<WindowedState, HeadlessState> displayState;
-
-    Instance instance;
-    DebugMessenger debugMessenger;
-    
-    DynamicRenderer dynamicRenderer;
-
-    PhysicalDevice physicalDevice;
-    LogicalDevice device;
-    Queue graphicsQueue, transferQueue;
-
-    DescriptorPool uiDescriptorPool;
-
-    CommandPool graphicsCommandPool, transferCommandPool, immediateCommandPool;
-
-    uint32_t currentFrame = 0, imageIndex;
-
+    std::vector<Semaphore> imageAvailableSemaphores;
+    uint64_t swapchainGeneration = 0;
     bool framebufferResized = false;
 
-    uint32_t currentRetirementFrame = 0;
-    std::array<std::vector<std::function<void(const LogicalDevice&)>>, MAX_FRAME_IN_FLIGHT> retirementQueue;
+    DynamicRenderer dynamicRenderer;
 
-    void flushAll();
+    DescriptorPool uiDescriptorPool;
+    VkFormat uiColorFormat = VK_FORMAT_UNDEFINED;
+
+    uint32_t currentFrame = 0, imageIndex;
 
     void initDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
     void destroyDescriptorSetLayout(DescriptorSetLayout& descriptorSetLayout);
@@ -249,12 +203,6 @@ private:
     DescriptorSetGroup createDescriptorSetGroup(DescriptorSetLayout& layout, std::string name = {});
     void updateDescriptorSetGroup(DescriptorSetGroup& group, uint32_t frameIndex, const DescriptorWriter& writer);
     void destroyDescriptorSetGroup(DescriptorSetGroup& group);
-
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags = 0, void* data = nullptr, std::string name = {});
-
-    Image createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {});
-    Sampler createSampler(std::string name = {});
-    void destroySampler(Sampler& sampler);
 
     GraphicsPipeline initGraphicsPipeline(
         VkPipelineVertexInputStateCreateInfo vertexInputInfo,
@@ -269,14 +217,6 @@ private:
         ComputePipeline other = {}
     );
 
-    struct CompiledShader {
-        ShaderCompilation compilation;
-        std::string error;
-        bool checked = false;
-    };
-    std::map<std::pair<std::string, ShaderDefines>, CompiledShader> compiledShaders;
-    std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
-    const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines);
     const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors);
 
     // Graph state
@@ -346,11 +286,6 @@ private:
     size_t stage(const void* data, size_t size);
     void flushBufferTransfers(const CommandBuffer& commandBuffer);
     void discardBufferTransfers();
-    void emitMemoryBarrier(
-        const CommandBuffer& commandBuffer,
-        VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-        VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess
-    ) const;
     
     void initDescriptorSets();
     void destroyDescriptorSets();
@@ -368,10 +303,6 @@ private:
 
     void initImgui();
     void recreateSwapchain();
-
-    std::vector<const char*> getRequiredInstanceExtensions();
-    std::vector<const char*> getRequiredDeviceExtensions();
-    int scoreDevice(const PhysicalDevice& device);
 };
 
 }

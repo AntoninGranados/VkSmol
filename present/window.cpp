@@ -1,4 +1,4 @@
-#include "glfw_platform.hpp"
+#include "window.hpp"
 
 #include "imgui/imgui_impl_glfw.h"
 
@@ -6,7 +6,7 @@
 
 namespace VkSmol {
 
-GLFWPlatform::GLFWPlatform(const std::string& title, uint32_t width, uint32_t height) {
+Window::Window(const std::string& title, uint32_t width, uint32_t height) {
     if (!glfwInit()) throw std::runtime_error("Failed to initialize GLFW");
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -23,7 +23,7 @@ GLFWPlatform::GLFWPlatform(const std::string& title, uint32_t width, uint32_t he
     glfwSetScrollCallback(window, scrollBridge);
 }
 
-GLFWPlatform::~GLFWPlatform() {
+Window::~Window() {
     if (window) {
         glfwDestroyWindow(window);
         window = nullptr;
@@ -31,42 +31,38 @@ GLFWPlatform::~GLFWPlatform() {
     glfwTerminate();
 }
 
-std::vector<const char*> GLFWPlatform::getRequiredInstanceExtensions() const {
+std::vector<const char*> Window::getRequiredInstanceExtensions() const {
     uint32_t count = 0;
     const char** exts = glfwGetRequiredInstanceExtensions(&count);
     return std::vector<const char*>(exts, exts + count);
 }
 
-VkSurfaceKHR GLFWPlatform::createSurface(VkInstance instance) {
+VkSurfaceKHR Window::createSurface(VkInstance instance) const {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
         throw std::runtime_error("Failed to create window surface");
     return surface;
 }
 
-std::vector<const char*> GLFWPlatform::getRequiredDeviceExtensions() const {
-    return { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-}
-
-VkExtent2D GLFWPlatform::getExtent() const {
+VkExtent2D Window::getExtent() const {
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
     return { (uint32_t)w, (uint32_t)h };
 }
 
-bool GLFWPlatform::shouldClose() const {
+bool Window::shouldClose() const {
     return glfwWindowShouldClose(window);
 }
 
-void GLFWPlatform::pollEvents() {
+void Window::pollEvents() {
     glfwPollEvents();
 }
 
-void GLFWPlatform::waitEvents() {
+void Window::waitEvents() {
     glfwWaitEvents();
 }
 
-void GLFWPlatform::pauseWhileMinimized() {
+void Window::pauseWhileMinimized() {
     int w = 0, h = 0;
     glfwGetFramebufferSize(window, &w, &h);
     while (w == 0 || h == 0) {
@@ -75,66 +71,66 @@ void GLFWPlatform::pauseWhileMinimized() {
     }
 }
 
-void GLFWPlatform::setResizeCallback(std::function<void(int, int)> cb) {
+void Window::setResizeCallback(std::function<void(int, int)> cb) {
     resizeCallback = std::move(cb);
 }
 
-void GLFWPlatform::setCursorPosCallback(std::function<void(double, double)> cb) {
+void Window::setCursorPosCallback(std::function<void(double, double)> cb) {
     cursorPosCallback = std::move(cb);
 }
 
-void GLFWPlatform::setScrollCallback(std::function<void(double, double)> cb) {
+void Window::setScrollCallback(std::function<void(double, double)> cb) {
     scrollCallback = std::move(cb);
 }
 
-bool GLFWPlatform::getKey(int key) const {
+bool Window::getKey(int key) const {
     return glfwGetKey(window, key) == GLFW_PRESS;
 }
 
-bool GLFWPlatform::getMouseButton(int btn) const {
+bool Window::getMouseButton(int btn) const {
     return glfwGetMouseButton(window, btn) == GLFW_PRESS;
 }
 
-void GLFWPlatform::getCursorPos(double& x, double& y) const {
+void Window::getCursorPos(double& x, double& y) const {
     glfwGetCursorPos(window, &x, &y);
 }
 
-void GLFWPlatform::getWindowSize(int& w, int& h) const {
+void Window::getWindowSize(int& w, int& h) const {
     glfwGetWindowSize(window, &w, &h);
 }
 
-void GLFWPlatform::setCursorMode(int mode) {
+void Window::setCursorMode(int mode) {
     glfwSetInputMode(window, GLFW_CURSOR, mode);
 }
 
-double GLFWPlatform::getTime() const {
+double Window::getTime() const {
     return glfwGetTime();
 }
 
-void GLFWPlatform::imguiInitGlfwBackend() {
+void Window::imguiInitGlfwBackend() {
     ImGui_ImplGlfw_InitForVulkan(window, true);
 }
 
-void GLFWPlatform::imguiGlfwNewFrame() {
+void Window::imguiGlfwNewFrame() {
     ImGui_ImplGlfw_NewFrame();
 }
 
-void GLFWPlatform::imguiGlfwShutdown() {
+void Window::imguiGlfwShutdown() {
     ImGui_ImplGlfw_Shutdown();
 }
 
-void GLFWPlatform::framebufferResizeBridge(GLFWwindow* w, int width, int height) {
-    auto* self = static_cast<GLFWPlatform*>(glfwGetWindowUserPointer(w));
+void Window::framebufferResizeBridge(GLFWwindow* w, int width, int height) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
     if (self && self->resizeCallback) self->resizeCallback(width, height);
 }
 
-void GLFWPlatform::cursorPosBridge(GLFWwindow* w, double x, double y) {
-    auto* self = static_cast<GLFWPlatform*>(glfwGetWindowUserPointer(w));
+void Window::cursorPosBridge(GLFWwindow* w, double x, double y) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
     if (self && self->cursorPosCallback) self->cursorPosCallback(x, y);
 }
 
-void GLFWPlatform::scrollBridge(GLFWwindow* w, double xoff, double yoff) {
-    auto* self = static_cast<GLFWPlatform*>(glfwGetWindowUserPointer(w));
+void Window::scrollBridge(GLFWwindow* w, double xoff, double yoff) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
     if (self && self->scrollCallback) self->scrollCallback(xoff, yoff);
 }
 

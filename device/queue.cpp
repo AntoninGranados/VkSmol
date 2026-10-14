@@ -11,7 +11,7 @@
 
 namespace VkSmol {
 
-QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface* surface) {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
@@ -19,54 +19,28 @@ QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const
     std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, queueFamilies.data());
 
-    int i = 0;
-    for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
+    for (uint32_t i = 0; i < queueFamilyCount; i++) {
         // Graphics family
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.graphicsFamily = i;
-        
+
         // Present family
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.get(), i, surface.get(), &presentSupport);
-        if (presentSupport)
-            indices.presentFamily = i;
+        if (surface) {
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.get(), i, surface->get(), &presentSupport);
+            if (presentSupport)
+                indices.presentFamily = i;
+        }
 
         // Transfer family
-        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
+        if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
             indices.transferFamily = i;
 
-        if (indices.isComplete()) break;
-        i++;
+        if (indices.isComplete(surface == nullptr)) break;
     }
 
     return indices;
 }
-
-QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice) {
-    QueueFamilyIndices indices;
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, queueFamilies.data());
-
-    int i = 0;
-    for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
-        // Graphics family
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.graphicsFamily = i;
-
-        // Transfer family
-        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
-            indices.transferFamily = i;
-
-        if (indices.isComplete(true)) break;
-        i++;
-    }
-
-    return indices;
-}
-
 
 void Queue::init(const LogicalDevice& device, uint32_t queueFamilyIndex) {
     vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &rawHandle());

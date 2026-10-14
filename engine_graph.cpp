@@ -30,9 +30,9 @@ void Engine::initImages() {
         const ImageInfo& info = graph.images[id];
         if (info.ownership == ImageOwnership::Imported || ownedImages.contains(id)) continue;
 
-        Image img  = createImage(info.width, info.height, info.format, imageUsageFlags(graph, id), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
-        ImageView view = createImageView(img, info.name + "View");
-        Sampler   smp  = createSampler(info.name + "Sampler");
+        Image img  = device.createImage(info.width, info.height, info.format, imageUsageFlags(graph, id), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
+        ImageView view = device.createImageView(img, info.name + "View");
+        Sampler   smp  = device.createSampler(info.name + "Sampler");
 
         ImageHandle handle = { .id = id };
         bindImage(handle, img.get(), view.get());
@@ -44,9 +44,9 @@ void Engine::initImages() {
 
 void Engine::destroyImages() {
     for (auto& [id, img] : ownedImages) {
-        destroySampler(ownedSamplers.at(id));
-        destroyImageView(ownedViews.at(id));
-        destroyImage(img);
+        device.destroySampler(ownedSamplers.at(id));
+        device.destroyImageView(ownedViews.at(id));
+        device.destroyImage(img);
         bindings.erase(id);
     }
     ownedSamplers.clear();
@@ -71,7 +71,7 @@ void Engine::initBuffers() {
         if (info.ownership == BufferOwnership::Imported || ownedBuffers.contains(id)) continue;
 
         void* initialData = info.initialData.empty() ? nullptr : (void*)info.initialData.data();
-        Buffer buf = createBuffer(bufferUsageFlags(graph, id), info.size, 0, initialData, info.name);
+        Buffer buf = device.createBuffer(bufferUsageFlags(graph, id), info.size, 0, initialData, info.name);
         bufferBindings[id] = buf.get();
         ownedBuffers.emplace(id, std::move(buf));
     }
@@ -79,7 +79,7 @@ void Engine::initBuffers() {
 
 void Engine::destroyBuffers() {
     for (auto& [id, buf] : ownedBuffers) {
-        destroyBuffer(buf);
+        device.destroyBuffer(buf);
         bufferBindings.erase(id);
     }
     ownedBuffers.clear();
@@ -97,7 +97,7 @@ VkBufferUsageFlags Engine::bufferUsageFlags(const CompiledRenderGraph& compiled,
 
 void Engine::replaceBuffer(uint32_t bufferId, size_t newSize, bool preserve) {
     BufferInfo& info = graph.buffers[bufferId];
-    Buffer next = createBuffer(bufferUsageFlags(graph, bufferId), newSize, 0, nullptr, info.name);
+    Buffer next = device.createBuffer(bufferUsageFlags(graph, bufferId), newSize, 0, nullptr, info.name);
 
     auto previous = ownedBuffers.find(bufferId);
     pendingBufferTransfers.push_back(PendingBufferReplace{
@@ -118,11 +118,11 @@ size_t Engine::stage(const void* data, size_t size) {
     size_t offset = (arena.used + 15) & ~size_t(15);
     if (offset + size > arena.buffer.getSize()) {
         const size_t capacity = std::max(arena.buffer.getSize() * 2, size);
-        destroyBuffer(arena.buffer);
-        arena.buffer = createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, BufferAllocMapped, nullptr, "StagingBuffer");
+        device.destroyBuffer(arena.buffer);
+        arena.buffer = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, BufferAllocMapped, nullptr, "StagingBuffer");
         offset = 0;
     }
-    arena.buffer.write(device, data, size, offset);
+    arena.buffer.write(logicalDevice, data, size, offset);
     arena.used = offset + size;
     return offset;
 }
@@ -131,14 +131,14 @@ void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
     if (pendingBufferTransfers.empty()) return;
 
     constexpr VkAccessFlags2 transferAccess = VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    emitMemoryBarrier(commandBuffer,
+    device.emitMemoryBarrier(commandBuffer,
         VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT, transferAccess);
 
     struct WrittenRange { VkBuffer buffer; size_t begin, end; };
     std::vector<WrittenRange> written;
     auto serializeTransfers = [&] {
-        emitMemoryBarrier(commandBuffer,
+        device.emitMemoryBarrier(commandBuffer,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
             VK_PIPELINE_STAGE_2_TRANSFER_BIT, transferAccess);
         written.clear();
@@ -165,12 +165,12 @@ void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
                 vkCmdCopyBuffer(commandBuffer.get(), replace.previous.get(), replace.next, 1, &region);
                 serializeTransfers();
             }
-            destroyBuffer(replace.previous);
+            device.destroyBuffer(replace.previous);
         }
     }
     pendingBufferTransfers.clear();
 
-    emitMemoryBarrier(commandBuffer,
+    device.emitMemoryBarrier(commandBuffer,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
 }
@@ -178,28 +178,8 @@ void Engine::flushBufferTransfers(const CommandBuffer& commandBuffer) {
 void Engine::discardBufferTransfers() {
     for (auto& transfer : pendingBufferTransfers)
         if (auto* replace = std::get_if<PendingBufferReplace>(&transfer))
-            destroyBuffer(replace->previous);
+            device.destroyBuffer(replace->previous);
     pendingBufferTransfers.clear();
-}
-
-void Engine::emitMemoryBarrier(
-    const CommandBuffer& commandBuffer,
-    VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-    VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess
-) const {
-    const VkMemoryBarrier2 barrier{
-        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-        .srcStageMask  = srcStage,
-        .srcAccessMask = srcAccess,
-        .dstStageMask  = dstStage,
-        .dstAccessMask = dstAccess,
-    };
-    const VkDependencyInfo dependency{
-        .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .memoryBarrierCount = 1,
-        .pMemoryBarriers    = &barrier,
-    };
-    device.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
 }
 
 // ——— Descriptor sets —————————————————————————————————————————————————————————
@@ -259,9 +239,9 @@ std::vector<std::string> Engine::initPipelines() {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         Shader shader;
-        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, errors));
+        shader.init(logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, errors));
         ownedComputePipelines[id] = initComputePipeline(shader, layoutsOf(info.passId));
-        shader.destroy(device);
+        shader.destroy(logicalDevice);
     }
 
     for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
@@ -278,11 +258,11 @@ std::vector<std::string> Engine::initPipelines() {
         std::vector<const Shader*> shaderPointers;
         for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
             const auto& [stage, path] = info.shaderPaths[i];
-            shaders[i].init(device, stage, compilePassShader(graph.compiledPasses[info.passId], stage, path, info.shaderDefines, errors));
+            shaders[i].init(logicalDevice, stage, compilePassShader(graph.compiledPasses[info.passId], stage, path, info.shaderDefines, errors));
             shaderPointers.push_back(&shaders[i]);
         }
         ownedGraphicsPipelines[id] = initGraphicsPipeline(vi, shaderPointers, layoutsOf(info.passId));
-        for (Shader& shader : shaders) shader.destroy(device);
+        for (Shader& shader : shaders) shader.destroy(logicalDevice);
     }
 
     return errors;
@@ -302,7 +282,6 @@ void Engine::destroyPipelines() {
 void Engine::initSync() {
     const uint32_t numGroups = static_cast<uint32_t>(graph.submissionGroups.size());
 
-    if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
     groupSemaphores.resize(numGroups);
     groupFences.resize(numGroups);
     groupCommandBuffers.resize(numGroups);
@@ -313,25 +292,22 @@ void Engine::initSync() {
     }
 
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
-        if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores[f].init(device);
         for (uint32_t g = 0; g < numGroups; ++g) {
-            groupSemaphores[g][f].init(device);
-            groupFences[g][f].init(device, true);
-            groupCommandBuffers[g][f] = allocCommandBuffer();
+            groupSemaphores[g][f].init(logicalDevice);
+            groupFences[g][f].init(logicalDevice, true);
+            groupCommandBuffers[g][f] = device.allocCommandBuffer();
         }
     }
 }
 
 void Engine::destroySync() {
     for (uint32_t f = 0; f < MAX_FRAME_IN_FLIGHT; ++f) {
-        if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores[f].destroy(device);
         for (uint32_t g = 0; g < groupSemaphores.size(); ++g) {
-            groupSemaphores[g][f].destroy(device);
-            groupFences[g][f].destroy(device);
-            freeCommandBuffer(groupCommandBuffers[g][f]);
+            groupSemaphores[g][f].destroy(logicalDevice);
+            groupFences[g][f].destroy(logicalDevice);
+            device.freeCommandBuffer(groupCommandBuffers[g][f]);
         }
     }
-    if (!platform->isHeadless()) std::get<WindowedState>(displayState).imageAvailableSemaphores.clear();
     groupSemaphores.clear();
     groupFences.clear();
     groupCommandBuffers.clear();
@@ -353,9 +329,7 @@ std::vector<std::string> Engine::rebuildGraph(RenderGraphBuilder& builder, std::
 
     waitIdle();
     if (!pendingBufferTransfers.empty()) {
-        CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
-        flushBufferTransfers(commandBuffer);
-        CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
+        device.immediateSubmit([this](const CommandBuffer& commandBuffer) { flushBufferTransfers(commandBuffer); });
     }
 
     ReusedResources reused = takeReusableResources(next);
@@ -432,13 +406,12 @@ Engine::ReusedResources Engine::takeReusableResources(CompiledRenderGraph& next)
 
 std::vector<std::string> Engine::initGraphState(std::string pipelineCachePath) {
     dirtyDescriptors.clear();
-    pipelineCache.init(device, pipelineCachePath);
+    pipelineCache.init(logicalDevice, pipelineCachePath);
     initImages();
     initBuffers();
     initDescriptorSets();
     std::vector<std::string> errors = initPipelines();
-    for (auto& [key, compiled] : compiledShaders)
-        compiled.checked = false;
+    device.markShadersStale();
     initSync();
     for (const CompiledPass& pass : graph.compiledPasses)
         if (passDescriptorGroups.count(pass.pass.id))
@@ -446,7 +419,7 @@ std::vector<std::string> Engine::initGraphState(std::string pipelineCachePath) {
                 updateDescriptors(pass.pass, f);
 
     VkPhysicalDeviceProperties props{};
-    vkGetPhysicalDeviceProperties(physicalDevice.get(), &props);
+    vkGetPhysicalDeviceProperties(device.getPhysicalDevice().get(), &props);
     timestampPeriod = props.limits.timestampPeriod;
 
     numTimestamps = 0;
@@ -459,7 +432,7 @@ std::vector<std::string> Engine::initGraphState(std::string pipelineCachePath) {
         info.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         info.queryType  = VK_QUERY_TYPE_TIMESTAMP;
         info.queryCount = numTimestamps * 2 * MAX_FRAME_IN_FLIGHT;
-        vkCheck(vkCreateQueryPool(device.get(), &info, nullptr, &timestampPool), "Failed to create timestamp query pool");
+        vkCheck(vkCreateQueryPool(logicalDevice.get(), &info, nullptr, &timestampPool), "Failed to create timestamp query pool");
     }
     graphInitialized = true;
     return errors;
@@ -468,14 +441,14 @@ std::vector<std::string> Engine::initGraphState(std::string pipelineCachePath) {
 void Engine::destroyGraph() {
     graphInitialized = false;
     if (timestampPool != VK_NULL_HANDLE) {
-        vkDestroyQueryPool(device.get(), timestampPool, nullptr);
+        vkDestroyQueryPool(logicalDevice.get(), timestampPool, nullptr);
         timestampPool = VK_NULL_HANDLE;
     }
     numTimestamps = 0;
     dirtyDescriptors.clear();
     destroySync();
     destroyPipelines();
-    pipelineCache.destroy(device);
+    pipelineCache.destroy(logicalDevice);
     destroyDescriptorSets();
     discardBufferTransfers();
     destroyBuffers();
@@ -487,9 +460,9 @@ void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
     ImageInfo& info = graph.images[id];
     if (info.ownership == ImageOwnership::Imported) return;
 
-    destroySampler(ownedSamplers.at(id));
-    destroyImageView(ownedViews.at(id));
-    destroyImage(ownedImages.at(id));
+    device.destroySampler(ownedSamplers.at(id));
+    device.destroyImageView(ownedViews.at(id));
+    device.destroyImage(ownedImages.at(id));
     ownedSamplers.erase(id);
     ownedViews.erase(id);
     ownedImages.erase(id);
@@ -504,9 +477,9 @@ void Engine::resizeImage(ImageHandle handle, uint32_t width, uint32_t height) {
             if (access.image.id == id)
                 usageFlags |= imageUsageTypeToVkFlags(access.info.usage);
 
-    Image     img  = createImage(width, height, info.format, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
-    ImageView view = createImageView(img, info.name + "View");
-    Sampler   smp  = createSampler(info.name + "Sampler");
+    Image     img  = device.createImage(width, height, info.format, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, info.name);
+    ImageView view = device.createImageView(img, info.name + "View");
+    Sampler   smp  = device.createSampler(info.name + "Sampler");
 
     bindImage(handle, img.get(), view.get());
     ownedImages.emplace(id, std::move(img));
@@ -524,7 +497,7 @@ std::optional<FrameContext> Engine::beginFrame() {
     for (auto& groupFenceRow : groupFences)
         fences.push_back(&groupFenceRow[currentFrame]);
 
-    Fence::wait(fences, device);
+    Fence::wait(fences, logicalDevice);
 
     if (timestampPool && numTimestamps > 0) {
         cachedTimestamps.resize(numTimestamps, -1.0);
@@ -532,7 +505,7 @@ std::optional<FrameContext> Engine::beginFrame() {
             uint32_t base = (currentFrame * numTimestamps + i) * 2;
             uint64_t data[4] = {};
             vkGetQueryPoolResults(
-                device.get(), timestampPool, base, 2,
+                logicalDevice.get(), timestampPool, base, 2,
                 sizeof(data), data, 2 * sizeof(uint64_t),
                 VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
             );
@@ -542,31 +515,27 @@ std::optional<FrameContext> Engine::beginFrame() {
         }
     }
 
-    for (auto& payload : retirementQueue[currentFrame]) payload(device);
-    retirementQueue[currentFrame].clear();
-    currentRetirementFrame = currentFrame;
+    device.collectRetired(currentFrame);
     stagingArenas[currentFrame].used = 0;
 
-    if (!platform->isHeadless()) {
-        const std::optional<uint32_t> result = std::get<WindowedState>(displayState).swapchain.getNextImageIndex(
-            device,
-            std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
+    if (swapchain) {
+        const std::optional<uint32_t> result = swapchain->acquire(imageAvailableSemaphores[currentFrame]);
         if (!result) {
             recreateSwapchain();
             return {};
         }
 
-        Fence::reset(fences, device);
+        Fence::reset(fences, logicalDevice);
         imageIndex = *result;
 
         return FrameContext{
             .extent              = getExtent(),
             .currentFrame        = currentFrame,
             .imageIndex          = imageIndex,
-            .swapchainGeneration = std::get<WindowedState>(displayState).swapchainGeneration,
+            .swapchainGeneration = swapchainGeneration,
         };
     } else {
-        Fence::reset(fences, device);
+        Fence::reset(fences, logicalDevice);
         return FrameContext{
             .extent       = getExtent(),
             .currentFrame = currentFrame,
@@ -575,14 +544,13 @@ std::optional<FrameContext> Engine::beginFrame() {
 }
 
 void Engine::present() {
-    assert(!platform->isHeadless());
+    assert(swapchain);
 
     uint32_t presentGroupId = 0;
     for (const CompiledSubmissionGroup& group : graph.submissionGroups)
         if (group.signalsPresentSemaphore) { presentGroupId = group.handle.id; break; }
 
-    const bool outOfDate = std::get<WindowedState>(displayState).presentQueue.present(
-        { &std::get<WindowedState>(displayState).swapchain }, { imageIndex }, { &groupSemaphores[presentGroupId][currentFrame] });
+    const bool outOfDate = swapchain->present(imageIndex, groupSemaphores[presentGroupId][currentFrame]);
     if (outOfDate || framebufferResized) {
         recreateSwapchain();
     }
@@ -609,8 +577,8 @@ void Engine::endRecording(const SubmissionGroupHandle& group) {
     std::vector<const Semaphore*> waitSemaphores;
     std::vector<VkPipelineStageFlags2> waitStages;
 
-    if (!platform->isHeadless() && compiled.waitsOnImageAvailable) {
-        waitSemaphores.push_back(&std::get<WindowedState>(displayState).imageAvailableSemaphores[currentFrame]);
+    if (swapchain && compiled.waitsOnImageAvailable) {
+        waitSemaphores.push_back(&imageAvailableSemaphores[currentFrame]);
         waitStages.push_back(compiled.imageAvailableWaitStage);
     }
     for (const SubmissionGroupHandle& dep : compiled.dependencies) {
@@ -696,24 +664,24 @@ void Engine::writeBuffer(const BufferHandle& handle, const void* data, size_t si
 
 void Engine::readBuffer(const BufferHandle& handle, void* out, size_t size, size_t offset) {
     if (size == 0) return;
-    Buffer readback = createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr,
+    Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, nullptr,
                                    graph.buffers[handle.id].name + "Readback");
 
-    CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, immediateCommandPool);
-    flushBufferTransfers(commandBuffer);
-    emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
-    const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
-    vkCmdCopyBuffer(commandBuffer.get(), bufferBindings.at(handle.id), readback.get(), 1, &region);
-    emitMemoryBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
-    CommandBuffer::endSingleTimeCommands(device, immediateCommandPool, graphicsQueue, commandBuffer);
+    device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
+        flushBufferTransfers(commandBuffer);
+        device.emitMemoryBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+        const VkBufferCopy region{ .srcOffset = offset, .dstOffset = 0, .size = size };
+        vkCmdCopyBuffer(commandBuffer.get(), bufferBindings.at(handle.id), readback.get(), 1, &region);
+        device.emitMemoryBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
+    });
 
-    readback.read(device, out, size);
-    readback.free(device);
-    readback.destroy(device);
+    readback.read(logicalDevice, out, size);
+    readback.free(logicalDevice);
+    readback.destroy(logicalDevice);
 }
 
 // ——— Pipelines (runtime) —————————————————————————————————————————————————————
@@ -732,7 +700,7 @@ void Engine::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
         vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
-        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
+        logicalDevice.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
     }
     emitBarriers(cmd, passHandle);
     bindDescriptors(cmd, passHandle);
@@ -741,7 +709,7 @@ void Engine::dispatch(const CommandBuffer& cmd, const PassHandle& passHandle, ui
     pipeline.dispatch(cmd, x, y);
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
-        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+        logicalDevice.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
     }
 }
 
@@ -751,14 +719,14 @@ void Engine::beginGraphics(const CommandBuffer& cmd, const PassHandle& passHandl
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
         vkCmdResetQueryPool(cmd.get(), timestampPool, base, 2);
-        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
+        logicalDevice.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
     }
     emitBarriers(cmd, passHandle);
     std::vector<AttachmentInfo> attachments = getColorAttachment(passHandle);
     assert(attachments.size() == 1);
     VkClearColorValue vkClear = {};
     if (clearColor) memcpy(vkClear.float32, clearColor, 4 * sizeof(float));
-    beginDynamicRenderer(cmd, attachments[0].view, attachments[0].layout, attachments[0].loadOp, VK_ATTACHMENT_STORE_OP_STORE, vkClear);
+    beginDynamicRenderer(cmd, attachments[0].view, attachments[0].layout, attachments[0].loadOp, VK_ATTACHMENT_STORE_OP_STORE, attachments[0].extent, vkClear);
 }
 
 void Engine::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle) {
@@ -766,7 +734,7 @@ void Engine::endGraphics(const CommandBuffer& cmd, const PassHandle& passHandle)
     const CompiledPass& compiled = graph.compiledPasses[passHandle.id];
     if (compiled.timestampIndex.has_value()) {
         uint32_t base = (currentFrame * numTimestamps + *compiled.timestampIndex) * 2;
-        device.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
+        logicalDevice.functions().cmdWriteTimestamp2(cmd.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
     }
 }
 
@@ -888,7 +856,7 @@ void Engine::emitBarriers(const CommandBuffer& commandBuffer, const PassHandle& 
             .bufferMemoryBarrierCount = 1,
             .pBufferMemoryBarriers    = &barrier,
         };
-        device.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
+        logicalDevice.functions().cmdPipelineBarrier2(commandBuffer.get(), &dependency);
     }
 }
 
@@ -902,7 +870,7 @@ void Engine::emitBarrier(const CommandBuffer& commandBuffer, const PassImageBarr
     VulkanImageState src = imageAccessToVk(barrier.srcAccess);
     VulkanImageState dst = imageAccessToVk(barrier.dstAccess);
     ImageBarrier b;
-    b.call(device, commandBuffer, binding.image,
+    b.call(logicalDevice, commandBuffer, binding.image,
            src.layout, dst.layout,
            src.access, dst.access,
            src.stage, dst.stage,
@@ -916,11 +884,13 @@ std::vector<AttachmentInfo> Engine::getColorAttachment(const PassHandle& passHan
     for (const ImageAccess& access : graph.compiledPasses[passHandle.id].imageAccesses) {
         if (access.info.usage == ImageUsageType::ColorAttachment) {
             const ImageBinding& binding = bindings.at(access.image.id);
+            const ImageInfo& info = graph.images[access.image.id];
             VulkanImageState state = imageAccessToVk(access.info);
             attachments.push_back({
                 .view   = binding.view,
                 .layout = state.layout,
                 .loadOp = attachmentLoadToVk(access.info.attachmentLoad),
+                .extent = info.ownership == ImageOwnership::Imported ? getExtent() : VkExtent2D{ info.width, info.height },
             });
         }
     }

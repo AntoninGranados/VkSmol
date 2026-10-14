@@ -41,8 +41,7 @@ struct QueueFamilyIndices {
     }
 };
 
-QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface);
-QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice);
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface* surface);
 
 class Queue: public BorrowedHandle<VkQueue, VK_NULL_HANDLE> {
 public:
