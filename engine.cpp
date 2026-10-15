@@ -12,9 +12,9 @@
 
 namespace VkSmol {
 
-Engine::Engine(const std::string& appName, uint32_t appVersion, std::optional<Window&> window)
-    : window(window), device(appName, appVersion, window), logicalDevice(device.getLogicalDevice()), resources(device),
-      pendingTransfers(device, resources) {
+Engine::Engine(const std::string& appName, uint32_t appVersion, std::optional<Window&> window, EngineFeatures features)
+    : window(window), device(appName, appVersion, window, features), logicalDevice(device.getLogicalDevice()),
+      resources(device), pendingTransfers(device, resources) {
     if (!window) return;
 
     swapchain.emplace(device, window->getExtent());

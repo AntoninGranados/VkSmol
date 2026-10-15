@@ -9,6 +9,7 @@
 namespace VkSmol {
 
 class PhysicalDevice;
+class DeviceFeatureChain;
 
 struct DeviceFunctions {
     PFN_vkCmdBeginRenderingKHR   cmdBeginRendering   = nullptr;
@@ -20,12 +21,8 @@ struct DeviceFunctions {
 
 class LogicalDevice: public UniqueHandle<VkDevice, VK_NULL_HANDLE> {
 public:
-    void init(
-        PhysicalDevice physicalDevice,
-        std::vector<uint32_t> queueFamilyIndices,
-        std::vector<const char*> extensions,
-        std::vector<const char*> validationLayers
-    );
+    void
+    init(PhysicalDevice physicalDevice, std::vector<uint32_t> queueFamilyIndices, const DeviceFeatureChain& features);
     void destroy();
 
     void waitIdle() const;

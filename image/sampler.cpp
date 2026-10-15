@@ -6,7 +6,7 @@
 
 namespace VkSmol {
 
-void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice) {
+void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice, bool anisotropy) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -19,8 +19,8 @@ void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice) {
 
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(physicalDevice.get(), &properties);
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerInfo.anisotropyEnable = anisotropy ? VK_TRUE : VK_FALSE;
+    samplerInfo.maxAnisotropy = anisotropy ? properties.limits.maxSamplerAnisotropy : 1.0f;
 
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
 

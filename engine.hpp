@@ -39,7 +39,10 @@ namespace VkSmol {
 
 class Engine {
 public:
-    Engine(const std::string& appName, uint32_t appVersion, std::optional<Window&> window = std::nullopt);
+    Engine(
+        const std::string& appName, uint32_t appVersion, std::optional<Window&> window = std::nullopt,
+        EngineFeatures features = {}
+    );
     ~Engine();
 
     Engine(const Engine&) = delete;
@@ -48,6 +51,7 @@ public:
     Engine& operator=(Engine&&) = delete;
 
     bool isHeadless() const { return !window.has_value(); }
+    const EngineFeatures& getFeatures() const { return device.getFeatures(); }
 
     Device& getDevice() { return device; }
     ResourceRegistry& getResources() { return resources; }

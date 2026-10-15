@@ -14,27 +14,13 @@ namespace VkSmol {
 const std::vector<const char*> instanceExtensions = {
 #ifdef __APPLE__
     VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-#endif
-#ifndef NDEBUG
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
 };
 
-const std::vector<const char*> deviceExtensions = {
-    // VK_KHR_SWAPCHAIN_EXTENSION_NAME, // added automatically when not in headless mode
-    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-#ifdef __APPLE__
-    "VK_KHR_portability_subset",
-#endif
-};
-
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation",
-};
-
-Device::Device(const std::string& appName, uint32_t appVersion, std::optional<const Window&> window): headless(!window.has_value()) {
+Device::Device(
+    const std::string& appName, uint32_t appVersion, std::optional<const Window&> window, EngineFeatures features
+)
+    : headless(!window.has_value()), features(features) {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = appName.c_str();
@@ -43,14 +29,15 @@ Device::Device(const std::string& appName, uint32_t appVersion, std::optional<co
     appInfo.engineVersion = VK_SMOL_VERSION;
     appInfo.apiVersion = VK_API_VERSION_1_4;
 
-    instance.init(appInfo, getRequiredInstanceExtensions(window), validationLayers);
-    debugMessenger.init(instance);
+    instance.init(appInfo, getRequiredInstanceExtensions(window), features.validation);
+    if (features.validation) debugMessenger.init(instance);
     if (window) surface.init(instance, *window);
 
-    physicalDevice.init(instance, [this](const PhysicalDevice& device) { return scoreDevice(device); });
+    const DeviceFeatureChain requested(features, !headless);
+    selectPhysicalDevice(requested);
     queueFamilies = findQueueFamilies(physicalDevice, headless ? nullptr : &surface);
 
-    logicalDevice.init(physicalDevice, queueFamilies.getIndices(headless), getRequiredDeviceExtensions(), validationLayers);
+    logicalDevice.init(physicalDevice, queueFamilies.getIndices(headless), requested);
 
     graphicsQueue.init(logicalDevice, queueFamilies.graphicsFamily.value());
     transferQueue.init(logicalDevice, queueFamilies.transferFamily.value());
@@ -182,7 +169,7 @@ void Device::destroyImageView(ImageView& view) {
 Sampler Device::createSampler(std::string name) {
     Sampler smp;
     smp.setResourceName(name.empty() ? "Sampler" : std::move(name));
-    smp.init(logicalDevice, physicalDevice);
+    smp.init(logicalDevice, physicalDevice, features.samplerAnisotropy);
     return smp;
 }
 
@@ -251,59 +238,39 @@ std::vector<const char*> Device::getRequiredInstanceExtensions(std::optional<con
     return requiredExtensions;
 }
 
-std::vector<const char*> Device::getRequiredDeviceExtensions() const {
-    std::vector<const char*> requiredExtensions = deviceExtensions;
-    if (!headless) requiredExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    return requiredExtensions;
-}
-
-int Device::scoreDevice(const PhysicalDevice& device) const {
-    QueueFamilyIndices indices = findQueueFamilies(device, headless ? nullptr : &surface);
-    if (!indices.isComplete(headless)) return 0;
-
-    // Check if all extensions are supported by the GPU
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, nullptr);
-    std::vector<VkExtensionProperties> supportedExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device.get(), nullptr, &extensionCount, supportedExtensions.data());
-
-    for (const char* extension : getRequiredDeviceExtensions()) {
-        if (!std::any_of(
-            supportedExtensions.begin(),
-            supportedExtensions.end(),
-            [&](VkExtensionProperties& properties) { return strcmp(extension, properties.extensionName) == 0; })
-        )
+void Device::selectPhysicalDevice(const DeviceFeatureChain& requested) {
+    std::vector<std::string> rejections;
+    try {
+        physicalDevice.init(instance, [&](const PhysicalDevice& device) {
+            const std::vector<std::string> missing = findMissingRequirements(device, requested);
+            if (missing.empty()) return 1;
+            VkPhysicalDeviceProperties properties;
+            vkGetPhysicalDeviceProperties(device.get(), &properties);
+            std::string list;
+            for (const std::string& requirement : missing) list += (list.empty() ? "" : ", ") + requirement;
+            rejections.push_back(std::format("{} lacks {}", properties.deviceName, list));
             return 0;
+        });
+    } catch (const std::runtime_error&) {
+        if (rejections.empty()) throw;
+        std::string message = "Failed to locate a suitable GPU:";
+        for (const std::string& rejection : rejections) message += "\n  " + rejection;
+        throw std::runtime_error(message);
     }
-
-    VkPhysicalDeviceFeatures supportedFeatures;
-    vkGetPhysicalDeviceFeatures(device.get(), &supportedFeatures);
-    if (!supportedFeatures.samplerAnisotropy) return 0;
-
-    if (!supportedFeatures.fragmentStoresAndAtomics) return 0;
-
-    VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParametersFeatures{};
-    shaderDrawParametersFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
-    VkPhysicalDeviceSynchronization2Features synchronization2Features{};
-    synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-    synchronization2Features.pNext = &shaderDrawParametersFeatures;
-    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
-    dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-    dynamicRenderingFeatures.pNext = &synchronization2Features;
-    VkPhysicalDeviceFeatures2 features2{};
-    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features2.pNext = &dynamicRenderingFeatures;
-    vkGetPhysicalDeviceFeatures2(device.get(), &features2);
-    if (!dynamicRenderingFeatures.dynamicRendering || !synchronization2Features.synchronization2) return 0;
-    if (!shaderDrawParametersFeatures.shaderDrawParameters) return 0;
-
-    // Check swap chain support
-    if (!headless) {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
-        if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty()) return 0;
-    }
-
-    return 1;
 }
 
+std::vector<std::string>
+Device::findMissingRequirements(const PhysicalDevice& device, const DeviceFeatureChain& requested) const {
+    const DeviceFeatureChain supported(device.get());
+    std::vector<std::string> missing = requested.findMissing(supported);
+
+    if (!findQueueFamilies(device, headless ? nullptr : &surface).isComplete(headless))
+        missing.emplace_back(headless ? "graphics and transfer queues" : "graphics, transfer and present queues");
+    if (!headless && missing.empty()) {
+        const SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
+        if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty())
+            missing.emplace_back("surface formats and present modes");
+    }
+    return missing;
+}
 }

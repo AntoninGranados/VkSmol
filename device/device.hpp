@@ -13,6 +13,8 @@
 
 #include "../instance/instance.hpp"
 #include "../instance/debug_messenger.hpp"
+#include "device_features.hpp"
+#include "engine_features.hpp"
 #include "physical_device.hpp"
 #include "logical_device.hpp"
 #include "queue.hpp"
@@ -39,7 +41,10 @@ public:
         bool checked = false;
     };
 
-    Device(const std::string& appName, uint32_t appVersion, std::optional<const Window&> window = std::nullopt);
+    Device(
+        const std::string& appName, uint32_t appVersion, std::optional<const Window&> window = std::nullopt,
+        EngineFeatures features = {}
+    );
     ~Device();
 
     Device(const Device&) = delete;
@@ -48,6 +53,7 @@ public:
     Device& operator=(Device&&) = delete;
 
     bool isHeadless() const { return headless; }
+    const EngineFeatures& getFeatures() const { return features; }
 
     const Instance&           getInstance() const { return instance; }
     const PhysicalDevice&     getPhysicalDevice() const { return physicalDevice; }
@@ -93,6 +99,7 @@ public:
 
 private:
     bool headless;
+    EngineFeatures features;
 
     Instance       instance;
     DebugMessenger debugMessenger;
@@ -113,8 +120,9 @@ private:
     void flushRetired();
 
     std::vector<const char*> getRequiredInstanceExtensions(std::optional<const Window&> window) const;
-    std::vector<const char*> getRequiredDeviceExtensions() const;
-    int scoreDevice(const PhysicalDevice& device) const;
+    void selectPhysicalDevice(const DeviceFeatureChain& requested);
+    std::vector<std::string>
+    findMissingRequirements(const PhysicalDevice& device, const DeviceFeatureChain& requested) const;
 };
 
 }
