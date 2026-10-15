@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include "graphics_state.hpp"
+
 namespace VkSmol {
 
 class LogicalDevice;
@@ -17,14 +19,10 @@ public:
     GraphicsPipeline() {};
 
     void init(
-        const LogicalDevice& device,
-        VkPipelineRenderingCreateInfoKHR pipelineCreate,
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        const std::vector<const Shader*>& shaders,
-        const std::vector<const DescriptorSetLayout*>& setLayouts,
-        uint32_t pushConstantSize,
-        VkShaderStageFlags pushConstantStages,
-        const PipelineCache& pipelineCache,
+        const LogicalDevice& device, VkPipelineRenderingCreateInfoKHR pipelineCreate,
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo, const std::vector<const Shader*>& shaders,
+        const std::vector<const DescriptorSetLayout*>& setLayouts, uint32_t pushConstantSize,
+        VkShaderStageFlags pushConstantStages, const GraphicsState& state, const PipelineCache& pipelineCache,
         GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,
     );

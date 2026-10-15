@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "builder_resource.hpp"
 
@@ -38,7 +39,8 @@ VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage);
 VkDescriptorType   bufferUsageTypeToDescriptorType(BufferUsageType usage);
 VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
 
-std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass);
+std::vector<ImageAccess> findColorAttachments(const std::vector<ImageAccess>& accesses);
+std::optional<ImageAccess> findDepthAttachment(const std::vector<ImageAccess>& accesses);
 
 std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine);
 

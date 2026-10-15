@@ -31,6 +31,7 @@ public:
 
     void fillBuffer(BufferHandle buffer, uint32_t value, size_t offset = 0, size_t size = VK_WHOLE_SIZE);
     void clearImage(ImageRange image, VkClearColorValue color);
+    void clearImage(ImageRange image, VkClearDepthStencilValue value);
     void copyBuffer(
         BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset = 0,
         size_t destinationOffset = 0

@@ -3,19 +3,30 @@
 #include "../graph_utils.hpp"
 #include "../render_graph_builder.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace VkSmol {
 
-GraphicsPassBuilder& GraphicsPassBuilder::pipeline(std::string vertexShaderPath, std::string fragmentShaderPath, ShaderDefines shaderDefines) {
-    return pipeline({ { VK_SHADER_STAGE_VERTEX_BIT, std::move(vertexShaderPath) }, { VK_SHADER_STAGE_FRAGMENT_BIT, std::move(fragmentShaderPath) } }, std::move(shaderDefines));
+GraphicsPassBuilder& GraphicsPassBuilder::pipeline(
+    std::string vertexShaderPath, std::string fragmentShaderPath, ShaderDefines shaderDefines, GraphicsState state
+) {
+    return pipeline(
+        {{VK_SHADER_STAGE_VERTEX_BIT, std::move(vertexShaderPath)},
+         {VK_SHADER_STAGE_FRAGMENT_BIT, std::move(fragmentShaderPath)}},
+        std::move(shaderDefines), std::move(state)
+    );
 }
 
-GraphicsPassBuilder& GraphicsPassBuilder::pipeline(std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines) {
+GraphicsPassBuilder& GraphicsPassBuilder::pipeline(
+    std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines,
+    GraphicsState state
+) {
     GraphicsPipelineInfo info;
     info.name          = graph->passes[handle.id].name + "Pipeline";
     info.shaderPaths   = std::move(shaderPaths);
     info.shaderDefines = std::move(shaderDefines);
+    info.state = std::move(state);
     info.passId        = handle.id;
     graph->graphicsPipelines.push_back(std::move(info));
     return *this;
@@ -52,10 +63,32 @@ GraphicsPassBuilder::colorAttachment(ImageRange image, AttachmentLoad load, std:
         .attachmentLoad = load,
     };
     checkImageAccessInfoValid(info);
+    VkClearValue clearValue = {};
+    std::copy(clearColor.begin(), clearColor.end(), clearValue.color.float32);
     graph->passes[handle.id].imageAccesses.push_back(
-        {.image = image.image, .subresources = image.subresources, .info = info}
+        {.image = image.image, .subresources = image.subresources, .info = info, .clearValue = clearValue}
     );
-    graph->passes[handle.id].clearColor = clearColor;
     return *this;
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::depthAttachment(ImageRange image, AttachmentLoad load, float clearDepth) {
+    const ImageAccessInfo info{
+        .usage = ImageUsageType::DepthAttachment,
+        .access = AccessType::Write,
+        .writeMode = load == AttachmentLoad::Load ? WriteMode::Preserve : WriteMode::Overwrite,
+        .attachmentLoad = load,
+    };
+    checkImageAccessInfoValid(info);
+    graph->passes[handle.id].imageAccesses.push_back({
+        .image = image.image,
+        .subresources = image.subresources,
+        .info = info,
+        .clearValue = {.depthStencil = {.depth = clearDepth, .stencil = 0}},
+    });
+    return *this;
+}
+
+GraphicsPassBuilder& GraphicsPassBuilder::readOnlyDepthAttachment(ImageRange image) {
+    return access(image, ImageUsageType::DepthAttachment, AccessType::Read);
 }
 }

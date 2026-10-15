@@ -117,12 +117,20 @@ static VkImageViewType reflectViewType(slang::TypeLayoutReflection* type) {
     }
 }
 
-ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& defines, ShaderFileSystem& fileSystem) {
+ShaderCompilation
+Shader::compile(const std::vector<std::string>& paths, const ShaderDefines& defines, ShaderFileSystem& fileSystem) {
     ShaderCompilation compilation;
+    std::string programName;
+    for (const std::string& path : paths) programName += (programName.empty() ? "" : ", ") + path;
+    if (paths.empty()) throw std::runtime_error("Cannot compile a shader program without any shader");
+
     SlangFileSystem slangFileSystem(fileSystem, compilation.dependencies);
-    const std::optional<std::string> code = slangFileSystem.readFile(path);
-    if (!code) {
-        throw std::runtime_error(std::format("Failed to open the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
+    std::vector<std::string> codes;
+    for (const std::string& path : paths) {
+        std::optional<std::string> code = slangFileSystem.readFile(path);
+        if (!code)
+            throw std::runtime_error(std::format("Failed to open the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
+        codes.push_back(std::move(*code));
     }
 
     static const Slang::ComPtr<slang::IGlobalSession> globalSession = [] {
@@ -150,44 +158,87 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
 
     Slang::ComPtr<slang::ISession> session;
     if (SLANG_FAILED(globalSession->createSession(sessionDesc, session.writeRef()))) {
-        throw std::runtime_error(std::format("Failed to create the Slang session for the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
+        throw std::runtime_error(
+            std::format(
+                "Failed to create the Slang session for the shaders [{}{}{}]", MSG_RED_B, programName, MSG_RESET
+            )
+        );
     }
 
     Slang::ComPtr<slang::IBlob> diagnostics;
     const auto fail = [&] {
         const std::string message = diagnostics ? std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize()) : std::string();
-        return std::runtime_error(std::format("Failed to compile the shader [{}{}{}]: {}", MSG_RED_B, path, MSG_RESET, message));
+        return std::runtime_error(
+            std::format("Failed to compile the shaders [{}{}{}]: {}", MSG_RED_B, programName, MSG_RESET, message)
+        );
     };
 
-    const std::string moduleName = std::filesystem::path(path).stem().string();
-    slang::IModule* module = session->loadModuleFromSourceString(moduleName.c_str(), path.c_str(), code->c_str(), diagnostics.writeRef());
-    if (!module) throw fail();
-
-    Slang::ComPtr<slang::IEntryPoint> entryPoint;
-    if (SLANG_FAILED(module->findEntryPointByName("main", entryPoint.writeRef()))) {
-        throw std::runtime_error(std::format("The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, path, MSG_RESET));
+    std::vector<slang::IComponentType*> components;
+    std::vector<Slang::ComPtr<slang::IEntryPoint>> entryPoints(paths.size());
+    for (size_t i = 0; i < paths.size(); ++i) {
+        const std::string moduleName = std::format("{}_{}", std::filesystem::path(paths[i]).stem().string(), i);
+        slang::IModule* module = session->loadModuleFromSourceString(
+            moduleName.c_str(), paths[i].c_str(), codes[i].c_str(), diagnostics.writeRef()
+        );
+        if (!module) throw fail();
+        if (SLANG_FAILED(module->findEntryPointByName("main", entryPoints[i].writeRef())))
+            throw std::runtime_error(
+                std::format(
+                    "The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, paths[i], MSG_RESET
+                )
+            );
+        components.push_back(module);
     }
+    for (const Slang::ComPtr<slang::IEntryPoint>& entryPoint : entryPoints) components.push_back(entryPoint.get());
 
-    slang::IComponentType* components[] = { module, entryPoint.get() };
     Slang::ComPtr<slang::IComponentType> program;
-    if (SLANG_FAILED(session->createCompositeComponentType(components, 2, program.writeRef(), diagnostics.writeRef()))) throw fail();
+    if (SLANG_FAILED(session->createCompositeComponentType(
+            components.data(), static_cast<SlangInt>(components.size()), program.writeRef(), diagnostics.writeRef()
+        )))
+        throw fail();
 
     Slang::ComPtr<slang::IComponentType> linkedProgram;
     if (SLANG_FAILED(program->link(linkedProgram.writeRef(), diagnostics.writeRef()))) throw fail();
 
-    Slang::ComPtr<slang::IBlob> spirv;
-    if (SLANG_FAILED(linkedProgram->getEntryPointCode(0, 0, spirv.writeRef(), diagnostics.writeRef()))) throw fail();
-
-    Slang::ComPtr<slang::IMetadata> metadata;
-    if (SLANG_FAILED(linkedProgram->getEntryPointMetadata(0, 0, metadata.writeRef(), diagnostics.writeRef()))) throw fail();
-
     slang::ProgramLayout* layout = linkedProgram->getLayout();
-    switch (layout->getEntryPointByIndex(0)->getStage()) {
-        case SLANG_STAGE_VERTEX:   compilation.stage = VK_SHADER_STAGE_VERTEX_BIT; break;
-        case SLANG_STAGE_FRAGMENT: compilation.stage = VK_SHADER_STAGE_FRAGMENT_BIT; break;
-        case SLANG_STAGE_COMPUTE:  compilation.stage = VK_SHADER_STAGE_COMPUTE_BIT; break;
+    std::vector<Slang::ComPtr<slang::IMetadata>> metadata(paths.size());
+    for (size_t i = 0; i < paths.size(); ++i) {
+        const SlangInt index = static_cast<SlangInt>(i);
+        Slang::ComPtr<slang::IBlob> spirv;
+        if (SLANG_FAILED(linkedProgram->getEntryPointCode(index, 0, spirv.writeRef(), diagnostics.writeRef())))
+            throw fail();
+        if (SLANG_FAILED(
+                linkedProgram->getEntryPointMetadata(index, 0, metadata[i].writeRef(), diagnostics.writeRef())
+            ))
+            throw fail();
+
+        VkShaderStageFlagBits stage;
+        switch (layout->getEntryPointByIndex(i)->getStage()) {
+        case SLANG_STAGE_VERTEX:
+            stage = VK_SHADER_STAGE_VERTEX_BIT;
+            break;
+        case SLANG_STAGE_FRAGMENT:
+            stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            break;
+        case SLANG_STAGE_COMPUTE:
+            stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            break;
         default:
-            throw std::runtime_error(std::format("The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, path, MSG_RESET));
+            throw std::runtime_error(
+                std::format(
+                    "The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, paths[i],
+                    MSG_RESET
+                )
+            );
+        }
+        compilation.stages.push_back({
+            .path = paths[i],
+            .stage = stage,
+            .spirv = optimize(
+                static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t),
+                paths[i]
+            ),
+        });
     }
 
     const auto collectParameters = [&](this const auto& self, slang::VariableLayoutReflection* variable, const std::string& prefix, uint32_t set, uint32_t binding) -> void {
@@ -218,27 +269,36 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
         if (!descriptor) return;
 
         bool used = false;
-        metadata->isParameterLocationUsed(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, used);
+        for (const Slang::ComPtr<slang::IMetadata>& stageMetadata : metadata) {
+            bool stageUsed = false;
+            stageMetadata->isParameterLocationUsed(
+                SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, stageUsed
+            );
+            used |= stageUsed;
+        }
         compilation.parameters.push_back(
             {name, ShaderLocation(set, binding), descriptor->first, reflectViewType(type), descriptor->second, used}
         );
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
 
-    slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(0);
-    if (compilation.stage == VK_SHADER_STAGE_COMPUTE_BIT) {
-        SlangUInt size[3];
-        entryPointLayout->getComputeThreadGroupSize(3, size);
-        compilation.threadGroupSize = { static_cast<uint32_t>(size[0]), static_cast<uint32_t>(size[1]), static_cast<uint32_t>(size[2]) };
+    for (size_t index = 0; index < paths.size(); ++index) {
+        slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(index);
+        if (compilation.stages[index].stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+            SlangUInt size[3];
+            entryPointLayout->getComputeThreadGroupSize(3, size);
+            compilation.threadGroupSize = {
+                static_cast<uint32_t>(size[0]), static_cast<uint32_t>(size[1]), static_cast<uint32_t>(size[2])
+            };
+        }
+        for (unsigned int i = 0; i < entryPointLayout->getParameterCount(); i++) {
+            slang::VariableLayoutReflection* parameter = entryPointLayout->getParameterByIndex(i);
+            if (parameter->getCategory() != slang::ParameterCategory::Uniform) continue;
+            const size_t end =
+                parameter->getOffset(SLANG_PARAMETER_CATEGORY_UNIFORM) + parameter->getTypeLayout()->getSize();
+            compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>(end));
+        }
     }
-    for (unsigned int i = 0; i < entryPointLayout->getParameterCount(); i++) {
-        slang::VariableLayoutReflection* parameter = entryPointLayout->getParameterByIndex(i);
-        if (parameter->getCategory() != slang::ParameterCategory::Uniform) continue;
-        const size_t end = parameter->getOffset(SLANG_PARAMETER_CATEGORY_UNIFORM) + parameter->getTypeLayout()->getSize();
-        compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>(end));
-    }
-
-    compilation.spirv = optimize(static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t), path);
     return compilation;
 }
 

@@ -40,6 +40,7 @@ public:
 
     void fillBuffer(BufferHandle buffer, uint32_t value, size_t offset, size_t size);
     void clearImage(ImageRange image, VkClearColorValue color);
+    void clearImage(ImageRange image, VkClearDepthStencilValue value);
 
     void copyBuffer(
         BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset, size_t destinationOffset

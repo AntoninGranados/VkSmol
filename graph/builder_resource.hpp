@@ -2,7 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -11,6 +10,7 @@
 #include <utility>
 
 #include "../image/image_subresource.hpp"
+#include "../render/pipeline/graphics_state.hpp"
 #include "../render/shader.hpp"
 
 namespace VkSmol {
@@ -117,6 +117,7 @@ struct ImageAccess {
     ImageHandle image;
     ImageSubresourceRange subresources;
     ImageAccessInfo info;
+    VkClearValue clearValue = {};
 };
 
 // ================
@@ -178,6 +179,7 @@ struct GraphicsPipelineInfo {
     std::vector<VkVertexInputAttributeDescription>             attributeDescriptions;
     std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths;
     ShaderDefines shaderDefines;
+    GraphicsState state;
     uint32_t    passId = InvalidHandle;
 };
 
@@ -200,7 +202,6 @@ struct PassInfo {
     std::vector<BufferAccess>          bufferAccesses     = {};
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
     std::vector<NamedBinding>          namedBindings      = {};
-    std::array<float, 4>               clearColor         = { 0.0f, 0.0f, 0.0f, 1.0f };
     VkIndexType                        indexType          = VK_INDEX_TYPE_UINT32;
     std::function<void(PassContext&)>  execute;
 };

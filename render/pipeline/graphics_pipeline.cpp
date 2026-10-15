@@ -10,21 +10,17 @@
 namespace VkSmol {
 
 void GraphicsPipeline::init(
-    const LogicalDevice& device,
-    VkPipelineRenderingCreateInfoKHR pipelineCreate,
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-    const std::vector<const Shader*>& shaders,
-    const std::vector<const DescriptorSetLayout*>& setLayouts,
-    uint32_t pushConstantSize,
-    VkShaderStageFlags pushConstantStages,
-    const PipelineCache& pipelineCache,
+    const LogicalDevice& device, VkPipelineRenderingCreateInfoKHR pipelineCreate,
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo, const std::vector<const Shader*>& shaders,
+    const std::vector<const DescriptorSetLayout*>& setLayouts, uint32_t pushConstantSize,
+    VkShaderStageFlags pushConstantStages, const GraphicsState& state, const PipelineCache& pipelineCache,
     GraphicsPipeline other
     // VkViewport viewport, VkRect2D scissor
 ) {
     // Input Assembly State
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.topology = state.primitive.topology;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     // Dynamic State
@@ -52,8 +48,8 @@ void GraphicsPipeline::init(
     rasterizer.rasterizerDiscardEnable = VK_FALSE;  // `VK_TRUE` disable the rasterizer
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;  // Needs a special feature enabled if we don't use fill
     rasterizer.lineWidth = 1.0f;                    // Needs the wideLine feature if > 1.0f
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.cullMode = state.primitive.cullMode;
+    rasterizer.frontFace = state.primitive.frontFace;
     rasterizer.depthBiasEnable = VK_FALSE;          // `VK_TRUE` for shadow maping
 
     // Multisampling
@@ -62,18 +58,35 @@ void GraphicsPipeline::init(
     multisampling.sampleShadingEnable = VK_FALSE;
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    // Color Blending
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-        VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT |
-        VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    const DepthState depth = state.depth.value_or(DepthState{.test = false, .write = false});
+    const VkPipelineDepthStencilStateCreateInfo depthStencil{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = depth.test ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = depth.write ? VK_TRUE : VK_FALSE,
+        .depthCompareOp = depth.compare,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+        .minDepthBounds = 0.0f,
+        .maxDepthBounds = 1.0f,
+    };
+
+    std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+    for (const BlendState& blend : state.blend)
+        colorBlendAttachments.push_back({
+            .blendEnable = blend.enable ? VK_TRUE : VK_FALSE,
+            .srcColorBlendFactor = blend.sourceColor,
+            .dstColorBlendFactor = blend.destinationColor,
+            .colorBlendOp = blend.colorOperation,
+            .srcAlphaBlendFactor = blend.sourceAlpha,
+            .dstAlphaBlendFactor = blend.destinationAlpha,
+            .alphaBlendOp = blend.alphaOperation,
+            .colorWriteMask = blend.writeMask,
+        });
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
+    colorBlending.pAttachments = colorBlendAttachments.data();
 
     // Pipeline layout
     std::vector<VkDescriptorSetLayout> vkSetLayouts;
@@ -108,6 +121,7 @@ void GraphicsPipeline::init(
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout;
@@ -124,7 +138,6 @@ void GraphicsPipeline::init(
     }
 
     vkCheck(vkCreateGraphicsPipelines(device.get(), pipelineCache.get(), 1, &pipelineInfo, nullptr, &pipeline), "Failed to create graphic pipeline");
-
 }
 
 void GraphicsPipeline::destroy(const LogicalDevice& device) {

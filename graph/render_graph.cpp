@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
+#include <cmath>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -42,6 +42,34 @@ ImageHandle RenderGraph::createImage(
     return ownedImages.emplace_back(engine.createImage(std::move(name), format, width, height, layers, mips));
 }
 
+ImageHandle
+RenderGraph::createImage(std::string name, VkFormat format, SwapchainRelative size, uint32_t layers, uint32_t mips) {
+    assert(!baked);
+    if (engine.isHeadless())
+        throw std::runtime_error(std::format("The image [{}] is sized relative to a swapchain the engine lacks", name));
+    if (!(size.scale > 0.0f))
+        throw std::runtime_error(std::format("The image [{}] needs a positive swapchain scale", name));
+    const VkExtent2D extent = relativeExtent(size);
+    const ImageHandle image = createImage(std::move(name), format, extent.width, extent.height, layers, mips);
+    relativeImages.emplace_back(image, size);
+    return image;
+}
+
+VkExtent2D RenderGraph::relativeExtent(SwapchainRelative size) const {
+    const VkExtent2D extent = engine.getExtent();
+    const auto scaled = [&](uint32_t value) {
+        return std::max(1u, static_cast<uint32_t>(std::lround(static_cast<float>(value) * size.scale)));
+    };
+    return {scaled(extent.width), scaled(extent.height)};
+}
+
+void RenderGraph::resizeRelativeImages() {
+    for (const auto& [image, size] : relativeImages) {
+        const VkExtent2D extent = relativeExtent(size);
+        engine.resizeImage(image, extent.width, extent.height);
+    }
+}
+
 BufferHandle RenderGraph::createBuffer(std::string name, size_t size) {
     assert(!baked);
     return ownedBuffers.emplace_back(engine.createBuffer(std::move(name), size));
@@ -78,6 +106,7 @@ void RenderGraph::bake(std::string pipelineCachePath) {
         builder.passes, builder.computePipelines, builder.graphicsPipelines, device, engine.getResources(), errors
     );
     checkImageAccesses(builder.passes, engine.getResources(), errors);
+    if (errors.empty()) checkAttachments(builder.passes, builder.graphicsPipelines, engine.getResources(), errors);
     if (!errors.empty()) {
         std::string message = errors.front();
         for (size_t i = 1; i < errors.size(); ++i) message += "\n" + errors[i];
@@ -174,6 +203,7 @@ void RenderGraph::execute() {
         imageIndex = engine.acquireImage();
         if (!imageIndex) return;
     }
+    resizeRelativeImages();
 
     Fence::reset({ &fences[frame] }, logicalDevice);
 
@@ -235,23 +265,42 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
 void RenderGraph::recordGraphicsPass(
     const CommandBuffer& commandBuffer, const CompiledPass& pass, const PassInfo& info
 ) {
-    const std::optional<ImageAccess> attachment = findColorAttachment(pass);
-    if (!attachment) throw std::runtime_error(std::format("The graphics pass [{}] has no color attachment", pass.name));
-
     ResourceRegistry& resources = engine.getResources();
-    const ImageRange target(attachment->image, attachment->subresources);
-    const VkExtent2D extent = engine.getImageExtent(attachment->image, resources.resolve(target).baseMip);
-    VkClearColorValue clearColor = {};
-    std::memcpy(clearColor.float32, info.clearColor.data(), sizeof(clearColor.float32));
-    dynamicRenderer.begin(
-        commandBuffer, resources.getImageView(target, VK_IMAGE_VIEW_TYPE_2D), imageAccessToVk(attachment->info).layout,
-        attachmentLoadToVk(attachment->info.attachmentLoad), VK_ATTACHMENT_STORE_OP_STORE, clearColor,
-        VkRect2D{{}, extent}
-    );
+    const std::vector<ImageAccess> colors = findColorAttachments(pass.imageAccesses);
+    const std::optional<ImageAccess> depth = findDepthAttachment(pass.imageAccesses);
+
+    std::optional<VkExtent2D> extent;
+    const auto attach = [&](const ImageAccess& access) {
+        const ImageRange range(access.image, access.subresources);
+        const VkExtent2D size = engine.getImageExtent(access.image, resources.resolve(range).baseMip);
+        if (extent && (extent->width != size.width || extent->height != size.height))
+            throw std::runtime_error(
+                std::format(
+                    "The graphics pass [{}] attaches [{}] of {}x{} to a render area of {}x{}", pass.name,
+                    resources.getImage(access.image).name, size.width, size.height, extent->width, extent->height
+                )
+            );
+        extent = size;
+        const bool readOnly = access.info.access == AccessType::Read;
+        return VkRenderingAttachmentInfo{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = resources.getImageView(range, VK_IMAGE_VIEW_TYPE_2D),
+            .imageLayout = imageAccessToVk(access.info).layout,
+            .loadOp = readOnly ? VK_ATTACHMENT_LOAD_OP_LOAD : attachmentLoadToVk(access.info.attachmentLoad),
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = access.clearValue,
+        };
+    };
+
+    std::vector<VkRenderingAttachmentInfo> colorInfos;
+    for (const ImageAccess& access : colors) colorInfos.push_back(attach(access));
+    const std::optional<VkRenderingAttachmentInfo> depthInfo = depth ? std::optional(attach(*depth)) : std::nullopt;
+    if (!extent) throw std::runtime_error(std::format("The graphics pass [{}] has no attachment", pass.name));
+    dynamicRenderer.begin(commandBuffer, colorInfos, depthInfo ? &*depthInfo : nullptr, VkRect2D{{}, *extent});
 
     if (pass.pipelineId) {
         pipelines.bind(commandBuffer, pass);
-        pipelines.setRenderArea(commandBuffer, pass, extent);
+        pipelines.setRenderArea(commandBuffer, pass, *extent);
         descriptors.bind(commandBuffer, pass, frame, pipelines.getLayout(pass));
 
         std::vector<VkBuffer> vertexBuffers;
@@ -269,7 +318,7 @@ void RenderGraph::recordGraphicsPass(
             );
         }
     }
-    PassContext context(*this, commandBuffer, pass, extent);
+    PassContext context(*this, commandBuffer, pass, *extent);
     if (info.execute) info.execute(context);
 
     dynamicRenderer.end(commandBuffer);

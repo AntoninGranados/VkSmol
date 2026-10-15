@@ -39,9 +39,14 @@ struct ShaderDependency {
     size_t      hash;
 };
 
+struct ShaderStageCompilation {
+    std::string path;
+    VkShaderStageFlagBits stage;
+    std::vector<uint32_t> spirv;
+};
+
 struct ShaderCompilation {
-    std::vector<uint32_t>         spirv;
-    VkShaderStageFlagBits         stage;
+    std::vector<ShaderStageCompilation> stages;
     std::vector<ShaderParameter>  parameters;
     uint32_t                      pushConstantSize = 0;
     VkExtent3D                    threadGroupSize = { 1, 1, 1 };
@@ -54,7 +59,8 @@ public:
     void destroy(const LogicalDevice& device);
     VkPipelineShaderStageCreateInfo getShaderStageCreateInfo() const;
 
-    static ShaderCompilation compile(const std::string& path, const ShaderDefines& defines, ShaderFileSystem& fileSystem);
+    static ShaderCompilation
+    compile(const std::vector<std::string>& paths, const ShaderDefines& defines, ShaderFileSystem& fileSystem);
     static bool isUpToDate(const std::vector<ShaderDependency>& dependencies, ShaderFileSystem& fileSystem);
 
 private:

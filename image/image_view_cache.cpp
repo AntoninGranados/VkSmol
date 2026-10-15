@@ -5,6 +5,7 @@
 
 #include "../device/device.hpp"
 #include "image.hpp"
+#include "image_format.hpp"
 
 namespace VkSmol {
 
@@ -28,7 +29,7 @@ ImageViewCache::getOrCreate(Device& device, Image& image, VkImageViewType type, 
         Entry{
             .type = type,
             .range = range,
-            .view = device.createImageView(image, type, range.toVk()),
+            .view = device.createImageView(image, type, range.toVk(formatViewAspect(image.getFormat()))),
         }
     );
     return entry.view.get();

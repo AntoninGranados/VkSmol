@@ -30,6 +30,10 @@ class Engine;
 class Device;
 class LogicalDevice;
 
+struct SwapchainRelative {
+    float scale = 1.0f;
+};
+
 class RenderGraph {
 public:
     explicit RenderGraph(Engine& engine);
@@ -43,6 +47,8 @@ public:
     ImageHandle createImage(
         std::string name, VkFormat format, uint32_t width, uint32_t height, uint32_t layers = 1, uint32_t mips = 1
     );
+    ImageHandle
+    createImage(std::string name, VkFormat format, SwapchainRelative size, uint32_t layers = 1, uint32_t mips = 1);
     BufferHandle createBuffer(std::string name, size_t size);
 
     ComputePassBuilder  addComputePass(std::string name);
@@ -67,6 +73,7 @@ private:
 
     std::vector<ImageHandle>  ownedImages;
     std::vector<BufferHandle> ownedBuffers;
+    std::vector<std::pair<ImageHandle, SwapchainRelative>> relativeImages;
 
     std::optional<ImageHandle> presentedImage;
     VkPipelineStageFlags2 acquireWaitStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -85,6 +92,8 @@ private:
     float                timestampPeriod  = 1.0f;
     std::vector<double>  cachedTimestamps;
 
+    VkExtent2D relativeExtent(SwapchainRelative size) const;
+    void resizeRelativeImages();
     void initSync();
     void destroySync();
     void initTimestamps();

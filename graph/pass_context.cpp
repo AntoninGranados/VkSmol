@@ -69,6 +69,12 @@ void PassContext::clearImage(ImageRange image, VkClearColorValue color) {
     TransferCommands(resources(), commandBuffer).clearImage(image, color);
 }
 
+void PassContext::clearImage(ImageRange image, VkClearDepthStencilValue value) {
+    requireOutsideRendering("clearImage");
+    requireImageAccess(image, ImageUsageType::TransferDst, "clearImage");
+    TransferCommands(resources(), commandBuffer).clearImage(image, value);
+}
+
 void PassContext::copyBuffer(
     BufferHandle source, BufferHandle destination, size_t size, size_t sourceOffset, size_t destinationOffset
 ) {

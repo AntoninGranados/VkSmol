@@ -171,15 +171,14 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                 .layout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .access = VK_ACCESS_2_NONE,
                 .stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::Sampled:
             return {
                 .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .access = VK_ACCESS_2_SHADER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .stage = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             };
 
         case ImageUsageType::Storage:
@@ -189,24 +188,25 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                     ? VK_ACCESS_2_SHADER_READ_BIT
                     : VK_ACCESS_2_SHADER_WRITE_BIT,
                 .stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::ColorAttachment:
             return {
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                 .stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::DepthAttachment:
             return {
-                .layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                .aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .layout = (info.access == AccessType::Read) ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                                            : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                .access = (info.access == AccessType::Read) ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                                                            : VkAccessFlags2(
+                                                                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                                                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                                                              ),
+                .stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
             };
 
         case ImageUsageType::TransferSrc:
@@ -214,7 +214,6 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 .access = VK_ACCESS_2_TRANSFER_READ_BIT,
                 .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::TransferDst:
@@ -222,7 +221,6 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 .access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
 
         case ImageUsageType::Present:
@@ -230,7 +228,6 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
                 .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                 .access = VK_ACCESS_2_NONE,
                 .stage = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             };
     }
 }
@@ -248,9 +245,16 @@ VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage) {
     }
 }
 
-std::optional<ImageAccess> findColorAttachment(const CompiledPass& pass) {
-    for (const ImageAccess& access : pass.imageAccesses)
-        if (access.info.usage == ImageUsageType::ColorAttachment) return access;
+std::vector<ImageAccess> findColorAttachments(const std::vector<ImageAccess>& accesses) {
+    std::vector<ImageAccess> attachments;
+    for (const ImageAccess& access : accesses)
+        if (access.info.usage == ImageUsageType::ColorAttachment) attachments.push_back(access);
+    return attachments;
+}
+
+std::optional<ImageAccess> findDepthAttachment(const std::vector<ImageAccess>& accesses) {
+    for (const ImageAccess& access : accesses)
+        if (access.info.usage == ImageUsageType::DepthAttachment) return access;
     return std::nullopt;
 }
 
@@ -327,8 +331,8 @@ std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine)
             const ImageUsageType u = a.info.usage;
             if (u == ImageUsageType::ColorAttachment || u == ImageUsageType::DepthAttachment)
                 out += std::format(
-                    "      Attachment: \"{}\"  {}  load:{}\n", imageName(a.image.id) + rangeSuffix(a.subresources),
-                    imageUsageToStr(u), attachmentLoadToStr(a.info.attachmentLoad)
+                    "      Attachment: \"{}\"  {}/{}  load:{}\n", imageName(a.image.id) + rangeSuffix(a.subresources),
+                    imageUsageToStr(u), accessTypeToStr(a.info.access), attachmentLoadToStr(a.info.attachmentLoad)
                 );
             else if (u == ImageUsageType::Present || u == ImageUsageType::TransferSrc || u == ImageUsageType::TransferDst)
                 out += std::format(
@@ -362,7 +366,8 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
         case ImageUsageType::ColorAttachment:
             isValid = access == AccessType::Write; break;
         case ImageUsageType::DepthAttachment:
-            isValid = access == AccessType::Write; break;
+            isValid = access == AccessType::Read || access == AccessType::Write;
+            break;
         case ImageUsageType::TransferSrc:
             isValid = access == AccessType::Read; break;
         case ImageUsageType::TransferDst:

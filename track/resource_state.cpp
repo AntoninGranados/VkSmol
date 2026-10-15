@@ -16,11 +16,9 @@ template <class AccessInfo> bool needsBarrier(const AccessInfo& from, const Acce
 
 } // namespace
 
-VkImageMemoryBarrier2 ImageTransition::toVk(VkImage image) const {
+VkImageMemoryBarrier2 ImageTransition::toVk(VkImage image, VkImageAspectFlags aspect) const {
     const VulkanImageState src = imageAccessToVk(from);
     const VulkanImageState dst = imageAccessToVk(to);
-    VkImageSubresourceRange range = subresources.toVk();
-    range.aspectMask = dst.aspect;
     return {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .srcStageMask = src.stage,
@@ -32,7 +30,7 @@ VkImageMemoryBarrier2 ImageTransition::toVk(VkImage image) const {
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = image,
-        .subresourceRange = range,
+        .subresourceRange = subresources.toVk(aspect),
     };
 }
 

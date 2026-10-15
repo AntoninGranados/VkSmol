@@ -58,7 +58,7 @@ public:
     Queue&                    getPresentQueue() { return presentQueue; }
 
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
-    const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines);
+    const CompiledShader& compileShader(const std::vector<std::string>& paths, const ShaderDefines& defines);
     void markShadersStale();
 
     CommandBuffer allocCommandBuffer();
@@ -107,7 +107,7 @@ private:
     uint32_t currentRetirementFrame = 0;
     std::array<std::vector<std::function<void(const LogicalDevice&)>>, MAX_FRAME_IN_FLIGHT> retirementQueue;
 
-    std::map<std::pair<std::string, ShaderDefines>, CompiledShader> compiledShaders;
+    std::map<std::pair<std::vector<std::string>, ShaderDefines>, CompiledShader> compiledShaders;
     std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
 
     void flushRetired();

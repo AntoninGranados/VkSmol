@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "../device/device.hpp"
+#include "../image/image_format.hpp"
 #include "../resource/resource_registry.hpp"
 #include "../utils.hpp"
 #include "graph_utils.hpp"
@@ -47,27 +48,29 @@ void resolveBindings(
         PassInfo& pass = passes[passId];
         if (pass.namedBindings.empty()) continue;
 
-        std::vector<std::pair<std::string, ShaderDefines>> shaders;
+        std::vector<std::pair<std::vector<std::string>, ShaderDefines>> programs;
         VkShaderStageFlags stageFlags = 0;
         for (const ComputePipelineInfo& info : computePipelines)
             if (info.passId == passId) {
-                shaders.emplace_back(info.shaderPath, info.shaderDefines);
+                programs.emplace_back(std::vector{info.shaderPath}, info.shaderDefines);
                 stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
             }
         for (const GraphicsPipelineInfo& info : graphicsPipelines)
             if (info.passId == passId) {
-                for (const auto& [stage, path] : info.shaderPaths) shaders.emplace_back(path, info.shaderDefines);
+                std::vector<std::string> paths;
+                for (const auto& [stage, path] : info.shaderPaths) paths.push_back(path);
+                programs.emplace_back(std::move(paths), info.shaderDefines);
                 stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
             }
-        if (shaders.empty()) {
+        if (programs.empty()) {
             errors.push_back(std::format("The pass [{}] binds shader parameters but has no pipeline", pass.name));
             continue;
         }
 
         std::vector<const ShaderParameter*> parameters;
         try {
-            for (const auto& [path, defines] : shaders)
-                for (const ShaderParameter& parameter : device.compileShader(path, defines).compilation.parameters)
+            for (const auto& [paths, defines] : programs)
+                for (const ShaderParameter& parameter : device.compileShader(paths, defines).compilation.parameters)
                     parameters.push_back(&parameter);
         } catch (const std::exception& e) {
             errors.push_back(e.what());
@@ -75,9 +78,10 @@ void resolveBindings(
         }
 
         for (const NamedBinding& binding : pass.namedBindings) {
-            const auto found =
-                std::ranges::find_if(parameters, [&](const ShaderParameter* p) { return p->name == binding.name; });
-            if (found == parameters.end()) {
+            std::vector<const ShaderParameter*> matches;
+            for (const ShaderParameter* parameter : parameters)
+                if (parameter->name == binding.name) matches.push_back(parameter);
+            if (matches.empty()) {
                 errors.push_back(
                     std::format(
                         "The shaders of the pass [{}] have no parameter named [{}{}{}]", pass.name, MSG_RED_B,
@@ -86,74 +90,89 @@ void resolveBindings(
                 );
                 continue;
             }
-            const ShaderParameter& parameter = **found;
-            if (binding.access == AccessType::Write && !parameter.writable) {
-                errors.push_back(
-                    std::format(
-                        "The pass [{}] writes [{}{}{}] but the shader declares it read-only", pass.name, MSG_RED_B,
-                        binding.name, MSG_RESET
-                    )
-                );
-                continue;
-            }
+            for (const ShaderParameter* match : matches) {
+                const ShaderParameter& parameter = *match;
+                if (binding.access == AccessType::Write && !parameter.writable) {
+                    errors.push_back(
+                        std::format(
+                            "The pass [{}] writes [{}{}{}] but the shader declares it read-only", pass.name, MSG_RED_B,
+                            binding.name, MSG_RESET
+                        )
+                    );
+                    continue;
+                }
 
-            if (binding.isImage) {
-                std::optional<ImageUsageType> usage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) usage = ImageUsageType::Storage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    usage = ImageUsageType::Sampled;
-                if (!usage) {
-                    errors.push_back(
-                        std::format(
-                            "The parameter [{}{}{}] of the pass [{}] is not an image the graph can bind", MSG_RED_B,
-                            binding.name, MSG_RESET, pass.name
-                        )
-                    );
-                    continue;
+                if (binding.isImage) {
+                    std::optional<ImageUsageType> usage;
+                    if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) usage = ImageUsageType::Storage;
+                    if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        usage = ImageUsageType::Sampled;
+                    if (!usage) {
+                        errors.push_back(
+                            std::format(
+                                "The parameter [{}{}{}] of the pass [{}] is not an image the graph can bind", MSG_RED_B,
+                                binding.name, MSG_RESET, pass.name
+                            )
+                        );
+                        continue;
+                    }
+                    if (const std::optional<std::string> error =
+                            checkImageBinding(resources, binding, parameter, *usage)) {
+                        errors.push_back(
+                            std::format(
+                                "The pass [{}] binds [{}{}{}]: {}", pass.name, MSG_RED_B, binding.name, MSG_RESET,
+                                *error
+                            )
+                        );
+                        continue;
+                    }
+                    pass.imageAccesses.push_back({
+                        .image = {.id = binding.handleId},
+                        .subresources = binding.subresources,
+                        .info = {.usage = *usage, .access = binding.access},
+                    });
+                } else {
+                    std::optional<BufferUsageType> usage;
+                    if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) usage = BufferUsageType::Storage;
+                    if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) usage = BufferUsageType::Uniform;
+                    if (!usage) {
+                        errors.push_back(
+                            std::format(
+                                "The parameter [{}{}{}] of the pass [{}] is not a buffer the graph can bind", MSG_RED_B,
+                                binding.name, MSG_RESET, pass.name
+                            )
+                        );
+                        continue;
+                    }
+                    pass.bufferAccesses.push_back({
+                        .buffer = {.id = binding.handleId},
+                        .info = {.usage = *usage, .access = binding.access},
+                    });
                 }
-                if (const std::optional<std::string> error = checkImageBinding(resources, binding, parameter, *usage)) {
-                    errors.push_back(
-                        std::format(
-                            "The pass [{}] binds [{}{}{}]: {}", pass.name, MSG_RED_B, binding.name, MSG_RESET, *error
-                        )
-                    );
-                    continue;
-                }
-                pass.imageAccesses.push_back({
-                    .image = {.id = binding.handleId},
+
+                pass.descriptorBindings.push_back({
+                    .set = parameter.location.set,
+                    .binding = parameter.location.binding,
+                    .isImage = binding.isImage,
+                    .handleId = binding.handleId,
                     .subresources = binding.subresources,
-                    .info = {.usage = *usage, .access = binding.access},
-                });
-            } else {
-                std::optional<BufferUsageType> usage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) usage = BufferUsageType::Storage;
-                if (parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) usage = BufferUsageType::Uniform;
-                if (!usage) {
-                    errors.push_back(
-                        std::format(
-                            "The parameter [{}{}{}] of the pass [{}] is not a buffer the graph can bind", MSG_RED_B,
-                            binding.name, MSG_RESET, pass.name
-                        )
-                    );
-                    continue;
-                }
-                pass.bufferAccesses.push_back({
-                    .buffer = {.id = binding.handleId},
-                    .info = {.usage = *usage, .access = binding.access},
+                    .viewType = parameter.viewType,
+                    .descriptorType = parameter.descriptorType,
+                    .stageFlags = stageFlags,
                 });
             }
-
-            pass.descriptorBindings.push_back({
-                .set = parameter.location.set,
-                .binding = parameter.location.binding,
-                .isImage = binding.isImage,
-                .handleId = binding.handleId,
-                .subresources = binding.subresources,
-                .viewType = parameter.viewType,
-                .descriptorType = parameter.descriptorType,
-                .stageFlags = stageFlags,
-            });
         }
+
+        const std::vector<DescriptorBindingDecl>& decls = pass.descriptorBindings;
+        for (size_t i = 0; i < decls.size(); ++i)
+            for (size_t j = i + 1; j < decls.size(); ++j)
+                if (decls[i].set == decls[j].set && decls[i].binding == decls[j].binding)
+                    errors.push_back(
+                        std::format(
+                            "The pass [{}] binds two resources to set {}, binding {}", pass.name, decls[i].set,
+                            decls[i].binding
+                        )
+                    );
     }
 }
 
@@ -195,6 +214,91 @@ void checkImageAccesses(
                     )
                 );
             }
+        }
+    }
+}
+
+void checkAttachments(
+    const std::vector<PassInfo>& passes, const std::vector<GraphicsPipelineInfo>& graphicsPipelines,
+    const ResourceRegistry& resources, std::vector<std::string>& errors
+) {
+    for (uint32_t passId = 0; passId < passes.size(); ++passId) {
+        const PassInfo& pass = passes[passId];
+        const std::vector<ImageAccess> colors = findColorAttachments(pass.imageAccesses);
+        const std::optional<ImageAccess> depth = findDepthAttachment(pass.imageAccesses);
+        const auto imageName = [&](const ImageAccess& access) { return resources.getImage(access.image).name; };
+        const auto formatAspect = [&](const ImageAccess& access) {
+            return formatAspects(resources.getImage(access.image).format);
+        };
+
+        if (pass.type != PassType::Graphics) {
+            if (!colors.empty() || depth)
+                errors.push_back(std::format("The pass [{}] attaches images but is not a graphics pass", pass.name));
+            continue;
+        }
+        if (colors.empty() && !depth)
+            errors.push_back(std::format("The graphics pass [{}] has no attachment", pass.name));
+
+        const size_t depthCount = std::ranges::count_if(pass.imageAccesses, [](const ImageAccess& access) {
+            return access.info.usage == ImageUsageType::DepthAttachment;
+        });
+        if (depthCount > 1)
+            errors.push_back(
+                std::format("The graphics pass [{}] has {} depth attachments, at most one", pass.name, depthCount)
+            );
+
+        for (const ImageAccess& color : colors)
+            if (formatAspect(color) != VK_IMAGE_ASPECT_COLOR_BIT)
+                errors.push_back(
+                    std::format(
+                        "The graphics pass [{}] uses the depth or stencil image [{}] as a color attachment", pass.name,
+                        imageName(color)
+                    )
+                );
+        if (depth && !(formatAspect(*depth) & VK_IMAGE_ASPECT_DEPTH_BIT))
+            errors.push_back(
+                std::format(
+                    "The graphics pass [{}] uses the image [{}] without depth as a depth attachment", pass.name,
+                    imageName(*depth)
+                )
+            );
+
+        for (size_t i = 0; i < colors.size(); ++i)
+            for (size_t j = i + 1; j < colors.size(); ++j) {
+                if (colors[i].image != colors[j].image) continue;
+                const ImageSubresourceRange first =
+                    resources.resolve(ImageRange(colors[i].image, colors[i].subresources));
+                const ImageSubresourceRange second =
+                    resources.resolve(ImageRange(colors[j].image, colors[j].subresources));
+                if (first.overlaps(second))
+                    errors.push_back(
+                        std::format(
+                            "The graphics pass [{}] attaches [{}] of the image [{}] twice", pass.name, first.toString(),
+                            imageName(colors[i])
+                        )
+                    );
+            }
+
+        for (const GraphicsPipelineInfo& pipeline : graphicsPipelines) {
+            if (pipeline.passId != passId) continue;
+            const std::optional<DepthState>& depthState = pipeline.state.depth;
+            if (depthState && (depthState->test || depthState->write) && !depth)
+                errors.push_back(
+                    std::format(
+                        "The pipeline of the pass [{}] tests or writes depth without a depth attachment", pass.name
+                    )
+                );
+            if (depthState && depthState->write && depth && depth->info.access == AccessType::Read)
+                errors.push_back(
+                    std::format("The pipeline of the pass [{}] writes its read-only depth attachment", pass.name)
+                );
+            if (!pipeline.state.blend.empty() && pipeline.state.blend.size() != colors.size())
+                errors.push_back(
+                    std::format(
+                        "The pipeline of the pass [{}] has {} blend states for {} color attachments", pass.name,
+                        pipeline.state.blend.size(), colors.size()
+                    )
+                );
         }
     }
 }

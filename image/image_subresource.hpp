@@ -23,7 +23,7 @@ struct ImageSubresourceRange {
 
     bool overlaps(const ImageSubresourceRange& other) const;
     bool contains(const ImageSubresourceRange& other) const;
-    VkImageSubresourceRange toVk() const;
+    VkImageSubresourceRange toVk(VkImageAspectFlags aspect) const;
     std::string toString() const;
 };
 
@@ -40,10 +40,13 @@ uint32_t maxMipCount(VkExtent2D extent);
 VkExtent2D mipExtent(VkExtent2D extent, uint32_t mip);
 size_t texelCount(VkExtent2D extent, const ImageSubresourceRange& range);
 
-std::vector<VkBufferImageCopy>
-bufferImageCopyRegions(VkExtent2D extent, const ImageSubresourceRange& range, size_t bufferOffset, size_t texelSize);
+std::vector<VkBufferImageCopy> bufferImageCopyRegions(
+    VkExtent2D extent, const ImageSubresourceRange& range, VkImageAspectFlags aspect, size_t bufferOffset,
+    size_t texelSize
+);
 std::vector<VkImageCopy> imageCopyRegions(
-    VkExtent2D sourceExtent, const ImageSubresourceRange& source, const ImageSubresourceRange& destination
+    VkExtent2D sourceExtent, const ImageSubresourceRange& source, const ImageSubresourceRange& destination,
+    VkImageAspectFlags aspect
 );
 
 } // namespace VkSmol

@@ -13,7 +13,6 @@ struct VulkanImageState {
     VkImageLayout layout;
     VkAccessFlags2 access;
     VkPipelineStageFlags2 stage;
-    VkImageAspectFlags aspect;
 };
 
 struct VulkanBufferState {

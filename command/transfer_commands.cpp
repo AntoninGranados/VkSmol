@@ -4,11 +4,28 @@
 #include <stdexcept>
 #include <vector>
 
+#include "../image/image_format.hpp"
 #include "../memory/buffer.hpp"
 #include "../resource/resource_registry.hpp"
 #include "command_buffer.hpp"
 
 namespace VkSmol {
+
+namespace {
+
+VkImageAspectFlags transferAspect(const ImageResource& image) {
+    const VkImageAspectFlags aspects = formatAspects(image.format);
+    if (aspects == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+        throw std::runtime_error(
+            std::format(
+                "Cannot transfer the combined depth and stencil image [{}] through a buffer, use separate formats",
+                image.name
+            )
+        );
+    return aspects;
+}
+
+} // namespace
 
 // ——— Validation ——————————————————————————————————————————————————————————————
 
@@ -78,6 +95,13 @@ void checkImageCopy(const ResourceRegistry& resources, ImageRange source, ImageR
                 from.mipCount, from.layerCount, sourceImage.name, to.mipCount, to.layerCount, destinationImage.name
             )
         );
+    if (formatAspects(sourceImage.format) != formatAspects(destinationImage.format))
+        throw std::runtime_error(
+            std::format(
+                "Cannot copy the image [{}] into the image [{}] as their formats have different aspects",
+                sourceImage.name, destinationImage.name
+            )
+        );
     if (source.image == destination.image && from.overlaps(to))
         throw std::runtime_error(
             std::format("Cannot copy overlapping subresources of the image [{}]", sourceImage.name)
@@ -105,10 +129,25 @@ void TransferCommands::fillBuffer(BufferHandle buffer, uint32_t value, size_t of
 }
 
 void TransferCommands::clearImage(ImageRange image, VkClearColorValue color) {
-    const VkImageSubresourceRange range = resources.resolve(image).toVk();
-    vkCmdClearColorImage(
-        commandBuffer.get(), resources.getImage(image.image).image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1,
-        &range
+    const ImageResource& resource = resources.getImage(image.image);
+    if (formatAspects(resource.format) != VK_IMAGE_ASPECT_COLOR_BIT)
+        throw std::runtime_error(
+            std::format("Cannot clear the depth or stencil image [{}] with a color", resource.name)
+        );
+    const VkImageSubresourceRange range = resources.resolve(image).toVk(VK_IMAGE_ASPECT_COLOR_BIT);
+    vkCmdClearColorImage(commandBuffer.get(), resource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1, &range);
+}
+
+void TransferCommands::clearImage(ImageRange image, VkClearDepthStencilValue value) {
+    const ImageResource& resource = resources.getImage(image.image);
+    const VkImageAspectFlags aspects = formatAspects(resource.format);
+    if (aspects == VK_IMAGE_ASPECT_COLOR_BIT)
+        throw std::runtime_error(
+            std::format("Cannot clear the color image [{}] with a depth and stencil value", resource.name)
+        );
+    const VkImageSubresourceRange range = resources.resolve(image).toVk(aspects);
+    vkCmdClearDepthStencilImage(
+        commandBuffer.get(), resource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &value, 1, &range
     );
 }
 
@@ -125,8 +164,10 @@ void TransferCommands::copyBuffer(
 
 void TransferCommands::copyImage(ImageRange source, ImageRange destination) {
     checkImageCopy(resources, source, destination);
+    const ImageResource& sourceImage = resources.getImage(source.image);
     const std::vector<VkImageCopy> regions = imageCopyRegions(
-        resources.getImage(source.image).getExtent(), resources.resolve(source), resources.resolve(destination)
+        sourceImage.getExtent(), resources.resolve(source), resources.resolve(destination),
+        formatAspects(sourceImage.format)
     );
     vkCmdCopyImage(
         commandBuffer.get(), resources.getImage(source.image).image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -146,8 +187,9 @@ void TransferCommands::uploadBuffer(
 void TransferCommands::uploadImage(const Buffer& staging, size_t stagingOffset, ImageRange destination, size_t size) {
     const size_t texelSize = checkImageTransfer(resources, destination, size);
     const ImageResource& image = resources.getImage(destination.image);
-    const std::vector<VkBufferImageCopy> regions =
-        bufferImageCopyRegions(image.getExtent(), resources.resolve(destination), stagingOffset, texelSize);
+    const std::vector<VkBufferImageCopy> regions = bufferImageCopyRegions(
+        image.getExtent(), resources.resolve(destination), transferAspect(image), stagingOffset, texelSize
+    );
     vkCmdCopyBufferToImage(
         commandBuffer.get(), staging.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         static_cast<uint32_t>(regions.size()), regions.data()
@@ -164,7 +206,7 @@ void TransferCommands::downloadImage(ImageRange source, size_t size, const Buffe
     const size_t texelSize = checkImageTransfer(resources, source, size);
     const ImageResource& image = resources.getImage(source.image);
     const std::vector<VkBufferImageCopy> regions =
-        bufferImageCopyRegions(image.getExtent(), resources.resolve(source), 0, texelSize);
+        bufferImageCopyRegions(image.getExtent(), resources.resolve(source), transferAspect(image), 0, texelSize);
     vkCmdCopyImageToBuffer(
         commandBuffer.get(), image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.get(),
         static_cast<uint32_t>(regions.size()), regions.data()

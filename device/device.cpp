@@ -76,18 +76,19 @@ Device::~Device() {
 
 // ——— Shaders ————————————————————————————————————————————————————————————————
 
-const Device::CompiledShader& Device::compileShader(const std::string& path, const ShaderDefines& defines) {
-    CompiledShader& compiled = compiledShaders[{path, defines}];
+const Device::CompiledShader&
+Device::compileShader(const std::vector<std::string>& paths, const ShaderDefines& defines) {
+    CompiledShader& compiled = compiledShaders[{paths, defines}];
     if (compiled.checked)
         return compiled;
 
     compiled.error.clear();
-    if (compiled.compilation.spirv.empty() || !Shader::isUpToDate(compiled.compilation.dependencies, *shaderFileSystem)) {
+    if (compiled.compilation.stages.empty() ||
+        !Shader::isUpToDate(compiled.compilation.dependencies, *shaderFileSystem)) {
         try {
-            compiled.compilation = Shader::compile(path, defines, *shaderFileSystem);
+            compiled.compilation = Shader::compile(paths, defines, *shaderFileSystem);
         } catch (const std::exception& e) {
-            if (compiled.compilation.spirv.empty())
-                throw;
+            if (compiled.compilation.stages.empty()) throw;
             compiled.error = e.what();
         }
     }

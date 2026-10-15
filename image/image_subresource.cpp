@@ -18,9 +18,9 @@ bool ImageSubresourceRange::contains(const ImageSubresourceRange& other) const {
     return mips && layers;
 }
 
-VkImageSubresourceRange ImageSubresourceRange::toVk() const {
+VkImageSubresourceRange ImageSubresourceRange::toVk(VkImageAspectFlags aspect) const {
     return {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .aspectMask = aspect,
         .baseMipLevel = baseMip,
         .levelCount = mipCount,
         .baseArrayLayer = baseLayer,
@@ -66,15 +66,17 @@ size_t texelCount(VkExtent2D extent, const ImageSubresourceRange& range) {
     return count;
 }
 
-std::vector<VkBufferImageCopy>
-bufferImageCopyRegions(VkExtent2D extent, const ImageSubresourceRange& range, size_t bufferOffset, size_t texelSize) {
+std::vector<VkBufferImageCopy> bufferImageCopyRegions(
+    VkExtent2D extent, const ImageSubresourceRange& range, VkImageAspectFlags aspect, size_t bufferOffset,
+    size_t texelSize
+) {
     std::vector<VkBufferImageCopy> regions;
     for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount; ++mip) {
         const VkExtent2D size = mipExtent(extent, mip);
         regions.push_back({
             .bufferOffset = bufferOffset,
             .imageSubresource =
-                {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                {.aspectMask = aspect,
                  .mipLevel = mip,
                  .baseArrayLayer = range.baseLayer,
                  .layerCount = range.layerCount},
@@ -86,19 +88,20 @@ bufferImageCopyRegions(VkExtent2D extent, const ImageSubresourceRange& range, si
 }
 
 std::vector<VkImageCopy> imageCopyRegions(
-    VkExtent2D sourceExtent, const ImageSubresourceRange& source, const ImageSubresourceRange& destination
+    VkExtent2D sourceExtent, const ImageSubresourceRange& source, const ImageSubresourceRange& destination,
+    VkImageAspectFlags aspect
 ) {
     std::vector<VkImageCopy> regions;
     for (uint32_t i = 0; i < source.mipCount; ++i) {
         const VkExtent2D size = mipExtent(sourceExtent, source.baseMip + i);
         regions.push_back({
             .srcSubresource =
-                {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                {.aspectMask = aspect,
                  .mipLevel = source.baseMip + i,
                  .baseArrayLayer = source.baseLayer,
                  .layerCount = source.layerCount},
             .dstSubresource =
-                {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                {.aspectMask = aspect,
                  .mipLevel = destination.baseMip + i,
                  .baseArrayLayer = destination.baseLayer,
                  .layerCount = destination.layerCount},

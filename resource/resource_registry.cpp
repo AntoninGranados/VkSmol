@@ -7,6 +7,7 @@
 
 #include "../command/command_buffer.hpp"
 #include "../device/device.hpp"
+#include "../image/image_format.hpp"
 
 namespace VkSmol {
 
@@ -26,6 +27,7 @@ VkImageUsageFlags supportedImageUsage(const PhysicalDevice& physicalDevice, VkFo
     if (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
     if (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     if (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     if (features & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     if (features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     return usage;
@@ -193,7 +195,8 @@ void ResourceRegistry::transitionImage(
     if (transitions.empty()) return;
 
     std::vector<VkImageMemoryBarrier2> barriers;
-    for (const ImageTransition& transition : transitions) barriers.push_back(transition.toVk(image.image));
+    for (const ImageTransition& transition : transitions)
+        barriers.push_back(transition.toVk(image.image, formatAspects(image.format)));
     const VkDependencyInfo dependency{
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),

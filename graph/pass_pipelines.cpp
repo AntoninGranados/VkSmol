@@ -98,12 +98,10 @@ void PassPipelines::createComputePipelines(const CompiledRenderGraph& graph, con
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         const CompiledPass& pass = graph.compiledPasses[info.passId];
+        const ShaderCompilation& compilation =
+            compileProgram(pass, {{VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath}}, info.shaderDefines);
         Shader shader;
-        shader.init(
-            logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT,
-            compileShader(pass, VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines)
-        );
-        const ShaderCompilation& compilation = device.compileShader(info.shaderPath, info.shaderDefines).compilation;
+        shader.init(logicalDevice, VK_SHADER_STAGE_COMPUTE_BIT, compilation.stages.front().spirv);
 
         Compute compute{
             .pushConstantSize = compilation.pushConstantSize, .threadGroupSize = compilation.threadGroupSize
@@ -120,12 +118,6 @@ void PassPipelines::createGraphicsPipelines(const CompiledRenderGraph& graph, co
     for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
         const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
         const CompiledPass& pass = graph.compiledPasses[info.passId];
-        const std::optional<ImageAccess> attachment = findColorAttachment(pass);
-        if (!attachment)
-            throw std::runtime_error(
-                std::format("The graphics pass [{}] has a pipeline but no color attachment", pass.name)
-            );
-
         const bool hasVertexInput = !info.attributeDescriptions.empty();
         const VkPipelineVertexInputStateCreateInfo vertexInput{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -135,47 +127,58 @@ void PassPipelines::createGraphicsPipelines(const CompiledRenderGraph& graph, co
             .pVertexAttributeDescriptions = info.attributeDescriptions.data(),
         };
 
-        std::vector<Shader> shaders(info.shaderPaths.size());
+        const ShaderCompilation& compilation = compileProgram(pass, info.shaderPaths, info.shaderDefines);
+        std::vector<Shader> shaders(compilation.stages.size());
         std::vector<const Shader*> shaderPointers;
-        Graphics graphic;
-        for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
-            const auto& [stage, path] = info.shaderPaths[i];
-            graphic.pushConstantStages |= stage;
-            shaders[i].init(logicalDevice, stage, compileShader(pass, stage, path, info.shaderDefines));
+        Graphics graphic{.pushConstantSize = compilation.pushConstantSize};
+        for (size_t i = 0; i < compilation.stages.size(); ++i) {
+            const ShaderStageCompilation& stage = compilation.stages[i];
+            graphic.pushConstantStages |= stage.stage;
+            shaders[i].init(logicalDevice, stage.stage, stage.spirv);
             shaderPointers.push_back(&shaders[i]);
-            graphic.pushConstantSize = std::max(
-                graphic.pushConstantSize, device.compileShader(path, info.shaderDefines).compilation.pushConstantSize
-            );
         }
 
-        const VkFormat format = resources.getImage(attachment->image).format;
-        VkPipelineRenderingCreateInfoKHR rendering{};
-        rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        rendering.colorAttachmentCount = 1;
-        rendering.pColorAttachmentFormats = &format;
+        std::vector<VkFormat> colorFormats;
+        for (const ImageAccess& access : findColorAttachments(pass.imageAccesses))
+            colorFormats.push_back(resources.getImage(access.image).format);
+        const std::optional<ImageAccess> depth = findDepthAttachment(pass.imageAccesses);
+        const VkPipelineRenderingCreateInfo rendering{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = static_cast<uint32_t>(colorFormats.size()),
+            .pColorAttachmentFormats = colorFormats.data(),
+            .depthAttachmentFormat = depth ? resources.getImage(depth->image).format : VK_FORMAT_UNDEFINED,
+        };
+
+        GraphicsState state = info.state;
+        if (!state.depth && depth) state.depth = DepthState{.write = depth->info.access == AccessType::Write};
+        if (state.blend.empty()) state.blend.assign(colorFormats.size(), BlendState::opaque());
 
         graphic.pipeline.init(
             logicalDevice, rendering, vertexInput, shaderPointers, descriptors.getLayouts(info.passId),
-            graphic.pushConstantSize, graphic.pushConstantStages, cache
+            graphic.pushConstantSize, graphic.pushConstantStages, state, cache
         );
         graphics[id] = std::move(graphic);
         for (Shader& shader : shaders) shader.destroy(logicalDevice);
     }
 }
 
-const std::vector<uint32_t>& PassPipelines::compileShader(
-    const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines
+const ShaderCompilation& PassPipelines::compileProgram(
+    const CompiledPass& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
+    const ShaderDefines& defines
 ) {
-    const Device::CompiledShader& compiled = device.compileShader(path, defines);
+    std::vector<std::string> paths;
+    for (const auto& [stage, path] : stages) paths.push_back(path);
+    const Device::CompiledShader& compiled = device.compileShader(paths, defines);
     if (!compiled.error.empty()) std::println(stderr, "{}", compiled.error);
 
-    if (compiled.compilation.stage != stage)
-        throw std::runtime_error(
-            std::format(
-                "The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, path, MSG_RESET,
-                pass.name
-            )
-        );
+    for (size_t i = 0; i < stages.size(); ++i)
+        if (compiled.compilation.stages[i].stage != stages[i].first)
+            throw std::runtime_error(
+                std::format(
+                    "The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, paths[i],
+                    MSG_RESET, pass.name
+                )
+            );
 
     for (const ShaderParameter& parameter : compiled.compilation.parameters) {
         if (!parameter.used) continue;
@@ -185,13 +188,12 @@ const std::vector<uint32_t>& PassPipelines::compileShader(
         if (!bound)
             throw std::runtime_error(
                 std::format(
-                    "The pass [{}] does not bind the parameter [{}{}{}] (set {}, binding {}) used by the shader [{}]",
-                    pass.name, MSG_RED_B, parameter.name, MSG_RESET, parameter.location.set, parameter.location.binding,
-                    path
+                    "The pass [{}] does not bind the parameter [{}{}{}] (set {}, binding {}) used by its shaders",
+                    pass.name, MSG_RED_B, parameter.name, MSG_RESET, parameter.location.set, parameter.location.binding
                 )
             );
     }
-    return compiled.compilation.spirv;
+    return compiled.compilation;
 }
 
 } // namespace VkSmol

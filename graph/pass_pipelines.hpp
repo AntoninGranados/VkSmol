@@ -58,8 +58,9 @@ private:
 
     void createComputePipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors);
     void createGraphicsPipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors);
-    const std::vector<uint32_t>& compileShader(
-        const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines
+    const ShaderCompilation& compileProgram(
+        const CompiledPass& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
+        const ShaderDefines& defines
     );
 };
 

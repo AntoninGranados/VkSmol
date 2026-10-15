@@ -18,5 +18,9 @@ void resolveBindings(
 void checkImageAccesses(
     const std::vector<PassInfo>& passes, const ResourceRegistry& resources, std::vector<std::string>& errors
 );
+void checkAttachments(
+    const std::vector<PassInfo>& passes, const std::vector<GraphicsPipelineInfo>& graphicsPipelines,
+    const ResourceRegistry& resources, std::vector<std::string>& errors
+);
 
 } // namespace VkSmol

@@ -15,7 +15,7 @@ struct ImageTransition {
     ImageAccessInfo from;
     ImageAccessInfo to;
 
-    VkImageMemoryBarrier2 toVk(VkImage image) const;
+    VkImageMemoryBarrier2 toVk(VkImage image, VkImageAspectFlags aspect) const;
 };
 
 struct BufferTransition {
