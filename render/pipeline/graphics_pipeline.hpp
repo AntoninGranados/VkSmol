@@ -1,9 +1,12 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <vector>
+
+#include "graphics_state.hpp"
+
+namespace VkSmol {
 
 class LogicalDevice;
 class Shader;
@@ -16,12 +19,10 @@ public:
     GraphicsPipeline() {};
 
     void init(
-        const LogicalDevice& device,
-        VkPipelineRenderingCreateInfoKHR pipelineCreate,
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo,
-        const std::vector<const Shader*>& shaders,
-        const std::vector<const DescriptorSetLayout*>& setLayouts,
-        const PipelineCache& pipelineCache,
+        const LogicalDevice& device, VkPipelineRenderingCreateInfoKHR pipelineCreate,
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo, const std::vector<const Shader*>& shaders,
+        const std::vector<const DescriptorSetLayout*>& setLayouts, uint32_t pushConstantSize,
+        VkShaderStageFlags pushConstantStages, const GraphicsState& state, const PipelineCache& pipelineCache,
         GraphicsPipeline other = GraphicsPipeline()
         // VkViewport viewport, VkRect2D scissor,
     );
@@ -40,3 +41,5 @@ private:
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 };
+
+}

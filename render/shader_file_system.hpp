@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+namespace VkSmol {
+
 class ShaderFileSystem {
 public:
     virtual ~ShaderFileSystem() = default;
@@ -22,3 +24,5 @@ public:
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 };
+
+}

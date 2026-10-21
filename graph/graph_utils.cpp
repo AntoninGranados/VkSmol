@@ -6,6 +6,9 @@
 
 #include "compiled_resource.hpp"
 #include "builder_resource.hpp"
+#include "../engine.hpp"
+
+namespace VkSmol {
 
 namespace {
 
@@ -48,41 +51,41 @@ VulkanBufferState bufferAccessToVk(const BufferAccessInfo& info) {
             return {
                 // Storage shaders often both read and write — be conservative with the write flag
                 .access = (info.access == AccessType::Read)
-                    ? VK_ACCESS_SHADER_READ_BIT
-                    : VkAccessFlags(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
-                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-                         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT  |
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    ? VK_ACCESS_2_SHADER_READ_BIT
+                    : VkAccessFlags2(VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT),
+                .stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                         VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT  |
+                         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
             };
         case BufferUsageType::Uniform:
             return {
-                .access = VK_ACCESS_UNIFORM_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                .access = VK_ACCESS_2_UNIFORM_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             };
         case BufferUsageType::TransferSrc:
             return {
-                .access = VK_ACCESS_TRANSFER_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
         case BufferUsageType::TransferDst:
             return {
-                .access = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .stage  = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
         case BufferUsageType::Vertex:
             return {
-                .access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                .access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
             };
         case BufferUsageType::Index:
             return {
-                .access = VK_ACCESS_INDEX_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                .access = VK_ACCESS_2_INDEX_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
             };
         case BufferUsageType::Indirect:
             return {
-                .access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-                .stage  = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                .access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                .stage  = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
             };
     }
 }
@@ -166,68 +169,65 @@ VulkanImageState imageAccessToVk(const ImageAccessInfo& info) {
         case ImageUsageType::Undefined:
             return {
                 .layout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .access = 0,
-                .stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_NONE,
+                .stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             };
 
         case ImageUsageType::Sampled:
             return {
                 .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .access = VK_ACCESS_SHADER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_SHADER_READ_BIT,
+                .stage = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             };
 
         case ImageUsageType::Storage:
             return {
                 .layout = VK_IMAGE_LAYOUT_GENERAL,
                 .access = (info.access == AccessType::Read)
-                    ? VK_ACCESS_SHADER_READ_BIT
-                    : VK_ACCESS_SHADER_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                    ? VK_ACCESS_2_SHADER_READ_BIT
+                    : VK_ACCESS_2_SHADER_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             };
 
         case ImageUsageType::ColorAttachment:
             return {
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             };
 
         case ImageUsageType::DepthAttachment:
             return {
-                .layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                .aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .layout = (info.access == AccessType::Read) ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                                            : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                .access = (info.access == AccessType::Read) ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                                                            : VkAccessFlags2(
+                                                                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                                                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                                                              ),
+                .stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
             };
 
         case ImageUsageType::TransferSrc:
             return {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .access = VK_ACCESS_TRANSFER_READ_BIT,
-                .stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
 
         case ImageUsageType::TransferDst:
             return {
                 .layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .access = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             };
 
         case ImageUsageType::Present:
             return {
                 .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                .access = 0,
-                .stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .access = VK_ACCESS_2_NONE,
+                .stage = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             };
     }
 }
@@ -243,6 +243,19 @@ VkImageUsageFlags imageUsageTypeToVkFlags(ImageUsageType usage) {
         case ImageUsageType::Present:
         case ImageUsageType::Undefined:       return 0;
     }
+}
+
+std::vector<ImageAccess> findColorAttachments(const std::vector<ImageAccess>& accesses) {
+    std::vector<ImageAccess> attachments;
+    for (const ImageAccess& access : accesses)
+        if (access.info.usage == ImageUsageType::ColorAttachment) attachments.push_back(access);
+    return attachments;
+}
+
+std::optional<ImageAccess> findDepthAttachment(const std::vector<ImageAccess>& accesses) {
+    for (const ImageAccess& access : accesses)
+        if (access.info.usage == ImageUsageType::DepthAttachment) return access;
+    return std::nullopt;
 }
 
 VkAttachmentLoadOp attachmentLoadToVk(const AttachmentLoad& attachmentLoad) {
@@ -266,19 +279,8 @@ std::string passTypeToStr(PassType type) {
     return "";
 }
 
-std::string imageOwnershipToStr(VkSmolImageOwnership o) {
-    switch (o) {
-        case VKSMOL_IMAGE_OWNERSHIP_TRANSIENT: return "Transient";
-        case VKSMOL_IMAGE_OWNERSHIP_MANAGED:   return "Managed";
-        case VKSMOL_IMAGE_OWNERSHIP_IMPORTED:  return "Imported";
-    }
-    return "";
-}
-
-std::string formatSize(size_t bytes) {
-    if (bytes < 1024)         return std::format("{} B", bytes);
-    if (bytes < 1024 * 1024)  return std::format("{:.1f} KB", bytes / 1024.0);
-    return                           std::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
+std::string rangeSuffix(const ImageSubresourceRange& subresources) {
+    return subresources == ImageSubresourceRange{} ? "" : " (" + subresources.toString() + ")";
 }
 
 std::string descriptorTypeToStr(VkDescriptorType type) {
@@ -293,52 +295,15 @@ std::string descriptorTypeToStr(VkDescriptorType type) {
 
 } // namespace
 
-std::string dumpGraph(const CompiledRenderGraph& compiled) {
-    std::string out;
-    const auto& images  = compiled.images;
-    const auto& buffers = compiled.buffers;
+std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine) {
+    const auto imageName  = [&](uint32_t id) { return engine.getImageName({ .id = id }); };
+    const auto bufferName = [&](uint32_t id) { return engine.getBufferName({ .id = id }); };
 
-    // ——— Images ——————————————————————————————————————————————————————————————
-    out += std::format("Images ({}):\n", images.size());
-    for (size_t i = 0; i < images.size(); ++i) {
-        const ImageInfo& img = images[i];
-        out += std::format("  [{:2}] {:40}  {:9}  {}x{}  {}\n",
-            i, '"' + img.name + '"',
-            imageOwnershipToStr(img.ownership),
-            img.width, img.height,
-            imageFormatToStr(img.format));
-        if (img.initialAccess)
-            out += std::format("        initial: {}\n", imageAccessInfoToStr(*img.initialAccess));
-        if (img.finalAccess)
-            out += std::format("        final:   {}\n", imageAccessInfoToStr(*img.finalAccess));
-    }
-    out += '\n';
-
-    // ——— Buffers —————————————————————————————————————————————————————————————
-    out += std::format("Buffers ({}):\n", buffers.size());
-    for (size_t i = 0; i < buffers.size(); ++i) {
-        const BufferInfo& buf = buffers[i];
-        std::string flags;
-        if (buf.ownership == VKSMOL_BUFFER_OWNERSHIP_IMPORTED) flags += "  imported";
-        if (!buf.initialData.empty()) flags += "  static";
-        out += std::format("  [{:2}] {:40}  {}{}\n",
-            i, '"' + buf.name + '"', formatSize(buf.size), flags);
-    }
-    out += '\n';
-
-    // ——— Build pass→group name lookup ————————————————————————————————————————
-    std::vector<std::string> passGroup(compiled.compiledPasses.size());
-    for (const CompiledSubmissionGroup& g : compiled.submissionGroups)
-        for (const PassHandle& ph : g.passes)
-            passGroup[ph.id] = g.name;
-
-    // ——— Passes ——————————————————————————————————————————————————————————————
-    out += std::format("Passes ({}):\n", compiled.compiledPasses.size());
+    std::string out = std::format("Passes ({}):\n", compiled.compiledPasses.size());
     for (const CompiledPass& pass : compiled.compiledPasses) {
-        out += std::format("  [{}] {}  {}  (group: {})\n",
-            pass.pass.id, pass.name, passTypeToStr(pass.type), passGroup[pass.pass.id]);
+        out += std::format("  [{}] {}  {}\n",
+            pass.pass.id, pass.name, passTypeToStr(pass.type));
 
-        // Descriptor bindings sorted by slot
         if (!pass.descriptorBindings.empty()) {
             auto decls = pass.descriptorBindings;
             std::sort(decls.begin(), decls.end(),
@@ -347,9 +312,8 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
                 });
             out += "      Bindings:\n";
             for (const DescriptorBindingDecl& d : decls) {
-                const std::string& name = d.isImage
-                    ? images[d.handleId].name
-                    : buffers[d.handleId].name;
+                const std::string name =
+                    d.isImage ? imageName(d.handleId) + rangeSuffix(d.subresources) : bufferName(d.handleId);
                 out += std::format("        {}.{:<2}  {:6}  {:36}  {}\n",
                     d.set, d.binding, d.isImage ? "image" : "buffer",
                     '"' + name + '"',
@@ -357,25 +321,25 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
             }
         }
 
-        // Fixed-function and attachment accesses
         for (const BufferAccess& a : pass.bufferAccesses) {
             if (a.info.usage == BufferUsageType::Vertex)
-                out += std::format("      Vertex:     \"{}\"\n", buffers[a.buffer.id].name);
+                out += std::format("      Vertex:     \"{}\"\n", bufferName(a.buffer.id));
             else if (a.info.usage == BufferUsageType::Index)
-                out += std::format("      Index:      \"{}\"\n", buffers[a.buffer.id].name);
+                out += std::format("      Index:      \"{}\"\n", bufferName(a.buffer.id));
         }
         for (const ImageAccess& a : pass.imageAccesses) {
             const ImageUsageType u = a.info.usage;
             if (u == ImageUsageType::ColorAttachment || u == ImageUsageType::DepthAttachment)
-                out += std::format("      Attachment: \"{}\"  {}  load:{}\n",
-                    images[a.image.id].name,
-                    imageUsageToStr(u),
-                    attachmentLoadToStr(a.info.attachmentLoad));
+                out += std::format(
+                    "      Attachment: \"{}\"  {}/{}  load:{}\n", imageName(a.image.id) + rangeSuffix(a.subresources),
+                    imageUsageToStr(u), accessTypeToStr(a.info.access), attachmentLoadToStr(a.info.attachmentLoad)
+                );
             else if (u == ImageUsageType::Present || u == ImageUsageType::TransferSrc || u == ImageUsageType::TransferDst)
-                out += std::format("      {}:  \"{}\"\n", imageUsageToStr(u), images[a.image.id].name);
+                out += std::format(
+                    "      {}:  \"{}\"\n", imageUsageToStr(u), imageName(a.image.id) + rangeSuffix(a.subresources)
+                );
         }
 
-        // Pipeline
         if (pass.pipelineId) {
             if (pass.type == PassType::Compute)
                 out += std::format("      Pipeline:   {}\n", compiled.computePipelines[*pass.pipelineId].name);
@@ -383,49 +347,7 @@ std::string dumpGraph(const CompiledRenderGraph& compiled) {
                 out += std::format("      Pipeline:   {}\n", compiled.graphicsPipelines[*pass.pipelineId].name);
         }
 
-        // Barriers before this pass
-        if (!pass.barriersBefore.empty() || !pass.bufferBarriersBefore.empty()) {
-            out += "      Barriers:\n";
-            for (const PassImageBarrier& b : pass.barriersBefore)
-                out += std::format("        image  \"{}\"  {} -> {}\n",
-                    images[b.image.id].name,
-                    imageAccessInfoToStr(b.srcAccess),
-                    imageAccessInfoToStr(b.dstAccess));
-            for (const PassBufferBarrier& b : pass.bufferBarriersBefore)
-                out += std::format("        buffer \"{}\"  {}/{} -> {}/{}\n",
-                    buffers[b.buffer.id].name,
-                    bufferUsageToStr(b.srcAccess.usage), accessTypeToStr(b.srcAccess.access),
-                    bufferUsageToStr(b.dstAccess.usage), accessTypeToStr(b.dstAccess.access));
-        }
-
         out += '\n';
-    }
-
-    // ——— Submission groups ———————————————————————————————————————————————————
-    out += std::format("Submission Groups ({}):\n", compiled.submissionGroups.size());
-    for (const CompiledSubmissionGroup& g : compiled.submissionGroups) {
-        out += std::format("  [{}] \"{}\"\n", g.handle.id, g.name);
-        out += "      Passes: ";
-        for (size_t i = 0; i < g.passes.size(); ++i) {
-            if (i) out += " -> ";
-            out += compiled.compiledPasses[g.passes[i].id].name;
-        }
-        out += '\n';
-        if (g.waitsOnImageAvailable) out += "      Waits:   imageAvailable\n";
-        for (const SubmissionGroupHandle& dep : g.dependencies)
-            out += std::format("      Waits:   group \"{}\"\n", compiled.submissionGroups[dep.id].name);
-        if (g.signalsPresentSemaphore) out += "      Signals: present semaphore\n";
-    }
-    out += '\n';
-
-    // ——— Output barriers —————————————————————————————————————————————————————
-    if (!compiled.outputBarriers.empty()) {
-        out += "Output Barriers:\n";
-        for (const PassImageBarrier& b : compiled.outputBarriers)
-            out += std::format("  image \"{}\"  {} -> {}\n",
-                images[b.image.id].name,
-                imageAccessInfoToStr(b.srcAccess),
-                imageAccessInfoToStr(b.dstAccess));
     }
 
     return out;
@@ -444,7 +366,8 @@ void checkUsageValidForAccess(ImageUsageType usage, AccessType access) {
         case ImageUsageType::ColorAttachment:
             isValid = access == AccessType::Write; break;
         case ImageUsageType::DepthAttachment:
-            isValid = access == AccessType::Write; break;
+            isValid = access == AccessType::Read || access == AccessType::Write;
+            break;
         case ImageUsageType::TransferSrc:
             isValid = access == AccessType::Read; break;
         case ImageUsageType::TransferDst:
@@ -492,4 +415,6 @@ void checkImageAccessInfoValid(const ImageAccessInfo& info) {
             imageAccessInfoToStr(info)
         ));
     }
+}
+
 }

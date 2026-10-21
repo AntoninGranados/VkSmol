@@ -1,11 +1,12 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <string>
 
 #include "../../base/unique_handle.hpp"
+
+namespace VkSmol {
 
 class LogicalDevice;
 
@@ -17,3 +18,5 @@ public:
 private:
     std::string filePath;
 };
+
+}

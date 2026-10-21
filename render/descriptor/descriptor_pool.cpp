@@ -3,6 +3,7 @@
 #include "../../device/logical_device.hpp"
 #include "../../utils.hpp"
 
+namespace VkSmol {
 
 DescriptorPool::DescriptorPool(DescriptorPool&& other) noexcept
     : descriptorPool(other.descriptorPool),
@@ -45,4 +46,6 @@ void DescriptorPool::addPoolSize(VkDescriptorType descriptorType, uint32_t descr
     poolSize.descriptorCount = descriptorCount;
 
     poolSizes.emplace_back(poolSize);
+}
+
 }

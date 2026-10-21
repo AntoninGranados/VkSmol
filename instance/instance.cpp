@@ -5,16 +5,13 @@
 #include "./debug_messenger.hpp"
 #include "../utils.hpp"
 
-void Instance::init(
-    VkApplicationInfo appInfo,
-    std::vector<const char*> extensions,
-    std::vector<const char*> validationLayers
-) {
-    // Extra checks in debug mode
-    #ifndef NDEBUG
-        Instance::checkExtensionSupport(extensions);
-        Instance::checkValidationLayerSupport(validationLayers);
-    #endif
+namespace VkSmol {
+
+void Instance::init(VkApplicationInfo appInfo, std::vector<const char*> extensions, bool validation) {
+    const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+    if (validation) extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    Instance::checkExtensionSupport(extensions);
+    if (validation) Instance::checkValidationLayerSupport(validationLayers);
 
     // Fill the creation info struct
     VkInstanceCreateInfo createInfo{};
@@ -22,21 +19,17 @@ void Instance::init(
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
-    #ifndef NDEBUG
+
+    VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
+    if (validation) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
-
-        // to debug the `vkCreateInstance` and `vkDestroyInstance` functions
-        VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
         DebugMessenger::populateCreateInfo(debugMessengerCreateInfo);
         createInfo.pNext = &debugMessengerCreateInfo;
-    #else
-        createInfo.enabledLayerCount = 0;
-        createInfo.pNext = nullptr;
-    #endif
-    #ifdef __APPLE__
-        createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    #endif
+    }
+#ifdef __APPLE__
+    createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
     vkCheck(vkCreateInstance(&createInfo, nullptr, &rawHandle()), "Failed to create instance");
 }
@@ -86,4 +79,6 @@ void Instance::checkValidationLayerSupport(std::vector<const char*> validationLa
             throw std::runtime_error(buf);
         }
     }
+}
+
 }

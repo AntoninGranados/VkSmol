@@ -8,6 +8,8 @@
 
 #include "../base/borrowed_handle.hpp"
 
+namespace VkSmol {
+
 class Surface;
 class PhysicalDevice;
 class LogicalDevice;
@@ -39,8 +41,7 @@ struct QueueFamilyIndices {
     }
 };
 
-QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface);
-QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice);
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface* surface);
 
 class Queue: public BorrowedHandle<VkQueue, VK_NULL_HANDLE> {
 public:
@@ -50,16 +51,24 @@ public:
     void submit(
         const std::vector<const CommandBuffer*>& commandBuffers,
         const Fence& fence,
-        const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+        const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags2>& waitStages,
         const std::vector<const Semaphore*>& signalSemaphores
     );
     void submit(const std::vector<const CommandBuffer*>& commandBuffers);
-    // Returns SMOL_RECREATE_SWAPCHAIN if we need to recreate the swapchain
-    uint32_t present(
+    // Returns true if we need to recreate the swapchain
+    bool present(
         const std::vector<const Swapchain*>& swapchains,
         const std::vector<uint32_t>& frameIndices,
         const std::vector<const Semaphore*>& waitSemaphores
     );
 
     void wait();
+
+private:
+    PFN_vkQueueSubmit2KHR queueSubmit2 = nullptr;
+
+    void submit(const std::vector<const CommandBuffer*>& commandBuffers, VkFence fence,
+                const std::vector<VkSemaphoreSubmitInfo>& waits, const std::vector<VkSemaphoreSubmitInfo>& signals);
 };
+
+}

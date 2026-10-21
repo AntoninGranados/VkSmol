@@ -7,10 +7,13 @@
 #include "../../utils.hpp"
 #include "./pipeline_cache.hpp"
 
+namespace VkSmol {
+
 void ComputePipeline::init(
     const LogicalDevice& device,
     const Shader& shader,
     const std::vector<const DescriptorSetLayout*>& setLayouts,
+    uint32_t pushConstantSize,
     const PipelineCache& pipelineCache,
     ComputePipeline other
 ) {
@@ -22,6 +25,15 @@ void ComputePipeline::init(
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
     pipelineLayoutInfo.pSetLayouts = vkSetLayouts.data();
+    const VkPushConstantRange pushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset     = 0,
+        .size       = pushConstantSize,
+    };
+    if (pushConstantSize > 0) {
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+    }
     vkCheck(vkCreatePipelineLayout(device.get(), &pipelineLayoutInfo, nullptr, &pipelineLayout), "Failed to create compute pipeline layout");
 
     VkComputePipelineCreateInfo pipelineInfo{};
@@ -49,4 +61,6 @@ void ComputePipeline::bind(const CommandBuffer& commandBuffer) const {
 
 void ComputePipeline::dispatch(const CommandBuffer& commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) const {
     vkCmdDispatch(commandBuffer.get(), groupCountX, groupCountY, groupCountZ);
+}
+
 }

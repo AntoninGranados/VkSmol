@@ -3,6 +3,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Semaphore::init(const LogicalDevice& device) {
     VkSemaphoreCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -14,4 +16,6 @@ void Semaphore::destroy(const LogicalDevice& device) {
         vkDestroySemaphore(device.get(), rawHandle(), nullptr);
     }
     resetHandle();
+}
+
 }

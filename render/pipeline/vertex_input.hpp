@@ -1,9 +1,10 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <vector>
+
+namespace VkSmol {
 
 // TODO: Only support one binding now
 template <typename T>
@@ -61,4 +62,6 @@ VkPipelineVertexInputStateCreateInfo VertexInput<T>::get(uint32_t binding) {
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     return vertexInputInfo;
+}
+
 }

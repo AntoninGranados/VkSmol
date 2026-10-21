@@ -3,13 +3,19 @@
 #include "pass_builder.hpp"
 #include "../builder_resource.hpp"
 
-class TransferPassBuilder: public PassBuilder {
+namespace VkSmol {
+
+class TransferPassBuilder: public PassBuilder<TransferPassBuilder> {
 public:
-    void copyFrom(ImageHandle imageHandle);
-    void copyTo(ImageHandle imageHandle);
+    TransferPassBuilder& copyFrom(ImageRange image);
+    TransferPassBuilder& copyFrom(BufferHandle buffer);
+    TransferPassBuilder& copyTo(ImageRange image);
+    TransferPassBuilder& copyTo(BufferHandle buffer);
 
 private:
     TransferPassBuilder(PassHandle handle, RenderGraphBuilder* graph): PassBuilder(handle, graph) {}
 
     friend class RenderGraphBuilder;
 };
+
+}

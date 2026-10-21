@@ -5,11 +5,15 @@
 #include "../base/unique_handle.hpp"
 #include "../base/tracked_resource.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class PhysicalDevice;
 
 class Sampler: public UniqueHandle<VkSampler, VK_NULL_HANDLE>, public TrackedResource {
 public:
-    void init(const LogicalDevice& device, PhysicalDevice physicalDevice);
+    void init(const LogicalDevice& device, PhysicalDevice physicalDevice, bool anisotropy);
     void destroy(const LogicalDevice& device);
 };
+
+}

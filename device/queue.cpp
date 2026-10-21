@@ -9,7 +9,9 @@
 #include "../sync/fence.hpp"
 #include "../utils.hpp"
 
-QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface& surface) {
+namespace VkSmol {
+
+QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface* surface) {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
@@ -17,102 +19,86 @@ QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const
     std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, queueFamilies.data());
 
-    int i = 0;
-    for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
+    for (uint32_t i = 0; i < queueFamilyCount; i++) {
         // Graphics family
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.graphicsFamily = i;
-        
+
         // Present family
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.get(), i, surface.get(), &presentSupport);
-        if (presentSupport)
-            indices.presentFamily = i;
+        if (surface) {
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.get(), i, surface->get(), &presentSupport);
+            if (presentSupport)
+                indices.presentFamily = i;
+        }
 
         // Transfer family
-        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
+        if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
             indices.transferFamily = i;
 
-        if (indices.isComplete()) break;
-        i++;
+        if (indices.isComplete(surface == nullptr)) break;
     }
 
     return indices;
 }
-
-QueueFamilyIndices findQueueFamiliesHeadless(const PhysicalDevice& physicalDevice) {
-    QueueFamilyIndices indices;
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice.get(), &queueFamilyCount, queueFamilies.data());
-
-    int i = 0;
-    for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
-        // Graphics family
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.graphicsFamily = i;
-
-        // Transfer family
-        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
-            indices.transferFamily = i;
-
-        if (indices.isComplete(true)) break;
-        i++;
-    }
-
-    return indices;
-}
-
 
 void Queue::init(const LogicalDevice& device, uint32_t queueFamilyIndex) {
     vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &rawHandle());
+    queueSubmit2 = device.functions().queueSubmit2;
 }
 
 void Queue::submit(
     const std::vector<const CommandBuffer*>& commandBuffers,
     const Fence& fence,
-    const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitStages,
+    const std::vector<const Semaphore*>& waitSemaphores, const std::vector<VkPipelineStageFlags2>& waitStages,
     const std::vector<const Semaphore*>& signalSemaphores
 ) {
-    std::vector<VkSemaphore> waitVkSemaphore, signalVkSemaphore;
-    for (const Semaphore* waitSemaphore: waitSemaphores)
-        waitVkSemaphore.emplace_back(waitSemaphore->get());
+    std::vector<VkSemaphoreSubmitInfo> waits, signals;
+    for (size_t i = 0; i < waitSemaphores.size(); ++i)
+        waits.push_back({
+            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = waitSemaphores[i]->get(),
+            .stageMask = waitStages[i],
+        });
     for (const Semaphore* signalSemaphore: signalSemaphores)
-        signalVkSemaphore.emplace_back(signalSemaphore->get());
+        signals.push_back({
+            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = signalSemaphore->get(),
+            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        });
 
-    std::vector<VkCommandBuffer> vkCommandBuffers;
-    for (const CommandBuffer* commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer->get());
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitVkSemaphore.size());
-    submitInfo.pWaitSemaphores = waitVkSemaphore.data();
-    submitInfo.pWaitDstStageMask = waitStages.data();
-    submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
-    submitInfo.pCommandBuffers = vkCommandBuffers.data();
-    submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalVkSemaphore.size());
-    submitInfo.pSignalSemaphores = signalVkSemaphore.data();
-
-    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, fence.get()), "Failed to submit queue");
+    submit(commandBuffers, fence.get(), waits, signals);
 }
 
 void Queue::submit(const std::vector<const CommandBuffer*>& commandBuffers) {
-    std::vector<VkCommandBuffer> vkCommandBuffers;
-    for (const CommandBuffer* commandBuffer: commandBuffers)
-        vkCommandBuffers.emplace_back(commandBuffer->get());
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = static_cast<uint32_t>(vkCommandBuffers.size());
-    submitInfo.pCommandBuffers = vkCommandBuffers.data();
-
-    vkCheck(vkQueueSubmit(rawHandle(), 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit queue");
+    submit(commandBuffers, VK_NULL_HANDLE, {}, {});
 }
 
-uint32_t Queue::present(
+void Queue::submit(
+    const std::vector<const CommandBuffer*>& commandBuffers, VkFence fence,
+    const std::vector<VkSemaphoreSubmitInfo>& waits, const std::vector<VkSemaphoreSubmitInfo>& signals
+) {
+    std::vector<VkCommandBufferSubmitInfo> commandBufferInfos;
+    for (const CommandBuffer* commandBuffer: commandBuffers)
+        commandBufferInfos.push_back({
+            .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = commandBuffer->get(),
+        });
+
+    const VkSubmitInfo2 submitInfo{
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount   = static_cast<uint32_t>(waits.size()),
+        .pWaitSemaphoreInfos      = waits.data(),
+        .commandBufferInfoCount   = static_cast<uint32_t>(commandBufferInfos.size()),
+        .pCommandBufferInfos      = commandBufferInfos.data(),
+        .signalSemaphoreInfoCount = static_cast<uint32_t>(signals.size()),
+        .pSignalSemaphoreInfos    = signals.data(),
+    };
+
+    vkCheck(queueSubmit2(rawHandle(), 1, &submitInfo, fence), "Failed to submit queue");
+}
+
+bool Queue::present(
     const std::vector<const Swapchain*>& swapchains,
     const std::vector<uint32_t>& frameIndices,
     const std::vector<const Semaphore*>& waitSemaphores
@@ -135,13 +121,15 @@ uint32_t Queue::present(
 
     VkResult result = vkQueuePresentKHR(rawHandle(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-        return SMOL_RECREATE_SWAPCHAIN;
+        return true;
     else if (result != VK_SUCCESS)
         throw std::runtime_error("Failed to present the queue");
 
-    return 0;
+    return false;
 }
 
 void Queue::wait() {
     vkQueueWaitIdle(rawHandle());
+}
+
 }

@@ -4,6 +4,8 @@
 #include "../device/queue.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void CommandPool::init(const LogicalDevice& device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) {
     VkCommandPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -15,4 +17,6 @@ void CommandPool::init(const LogicalDevice& device, uint32_t queueFamilyIndex, V
 
 void CommandPool::destroy(const LogicalDevice& device) {
     vkDestroyCommandPool(device.get(), rawHandle(), nullptr);
+}
+
 }

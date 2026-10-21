@@ -4,21 +4,23 @@
 #include "../device/physical_device.hpp"
 #include "../utils.hpp"
 
-void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice) {
+namespace VkSmol {
+
+void Sampler::init(const LogicalDevice& device, PhysicalDevice physicalDevice, bool anisotropy) {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
     samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(physicalDevice.get(), &properties);
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerInfo.anisotropyEnable = anisotropy ? VK_TRUE : VK_FALSE;
+    samplerInfo.maxAnisotropy = anisotropy ? properties.limits.maxSamplerAnisotropy : 1.0f;
 
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
@@ -38,4 +40,6 @@ void Sampler::destroy(const LogicalDevice& device) {
         vkDestroySampler(device.get(), rawHandle(), nullptr);
     }
     resetHandle();
+}
+
 }

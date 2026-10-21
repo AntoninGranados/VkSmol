@@ -16,6 +16,8 @@
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void Shader::init(const LogicalDevice& device, VkShaderStageFlagBits stage_, const std::vector<uint32_t>& spirv) {
     stage = stage_;
 
@@ -86,7 +88,8 @@ bool Shader::isUpToDate(const std::vector<ShaderDependency>& dependencies, Shade
 
 class Shader::SlangContext {
 public:
-    SlangContext(const ShaderDefines& defines, ShaderFileSystem& fileSystem, std::vector<ShaderDependency>& dependencies): slangFileSystem(fileSystem, dependencies) {
+    SlangContext(const ShaderDefines& defines, ShaderFileSystem& fileSystem, std::vector<ShaderDependency>& dependencies)
+        : slangFileSystem(fileSystem, dependencies) {
         static const Slang::ComPtr<slang::IGlobalSession> globalSession = [] {
             SlangGlobalSessionDesc globalSessionDesc{};
 
@@ -121,9 +124,11 @@ public:
         }
     }
 
-    std::runtime_error fail(const std::string& path) const {
+    std::runtime_error fail(const std::string& name) const {
         const std::string message = diagnostics ? std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize()) : std::string();
-        return std::runtime_error(std::format("Failed to compile the shader [{}{}{}]: {}", MSG_RED_B, path, MSG_RESET, message));
+        return std::runtime_error(
+            std::format("Failed to compile the shaders [{}{}{}]: {}", MSG_RED_B, name, MSG_RESET, message)
+        );
     }
 
     slang::IModule* loadModule(const std::string& path, const std::string& name) {
@@ -131,11 +136,11 @@ public:
         if (loaded != modules.end()) return loaded->second;
 
         const std::optional<std::string> code = slangFileSystem.readFile(path);
-        if (!code) {
+        if (!code)
             throw std::runtime_error(std::format("Failed to open the shader [{}{}{}]", MSG_RED_B, path, MSG_RESET));
-        }
 
-        slang::IModule* module = session->loadModuleFromSourceString(name.c_str(), path.c_str(), code->c_str(), diagnostics.writeRef());
+        slang::IModule* module =
+            session->loadModuleFromSourceString(name.c_str(), path.c_str(), code->c_str(), diagnostics.writeRef());
         if (!module) throw fail(path);
 
         modules[path] = module;
@@ -147,14 +152,14 @@ public:
         if (!layout) throw fail(path);
 
         slang::TypeReflection* type = layout->findTypeByName(name.c_str());
-        if (!type) {
-            throw std::runtime_error(std::format("The shader [{}{}{}] has no type named [{}]", MSG_RED_B, path, MSG_RESET, name));
-        }
+        if (!type)
+            throw std::runtime_error(
+                std::format("The shader [{}{}{}] has no type named [{}]", MSG_RED_B, path, MSG_RESET, name)
+            );
         return type;
     }
 
-    template <typename Reflection>
-    std::vector<ShaderAttribute> reflectAttributes(Reflection* reflection) {
+    template <typename Reflection> std::vector<ShaderAttribute> reflectAttributes(Reflection* reflection) {
         std::vector<ShaderAttribute> attributes;
         for (unsigned int i = 0; i < reflection->getUserAttributeCount(); i++) {
             auto* attribute = reflection->getUserAttributeByIndex(i);
@@ -231,7 +236,8 @@ public:
     std::map<std::string, slang::IModule*> modules;
 };
 
-std::vector<ShaderStruct> Shader::reflect(const std::string& path, const std::string& interfaceName, ShaderFileSystem& fileSystem) {
+std::vector<ShaderStruct>
+Shader::reflect(const std::string& path, const std::string& interfaceName, ShaderFileSystem& fileSystem) {
     std::vector<ShaderDependency> dependencies;
     SlangContext context({}, fileSystem, dependencies);
 
@@ -251,54 +257,135 @@ std::vector<ShaderStruct> Shader::reflect(const std::string& path, const std::st
     return structs;
 }
 
-ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances, ShaderFileSystem& fileSystem) {
+static std::optional<std::pair<VkDescriptorType, bool>> reflectDescriptorType(slang::TypeLayoutReflection* type) {
+    if (type->getBindingRangeCount() == 0) return std::nullopt;
+    switch (type->getBindingRangeType(0)) {
+        case slang::BindingType::CombinedTextureSampler: return std::pair{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, false };
+        case slang::BindingType::Texture:                return std::pair{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, false };
+        case slang::BindingType::MutableTexture:         return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true };
+        case slang::BindingType::Sampler:                return std::pair{ VK_DESCRIPTOR_TYPE_SAMPLER, false };
+        case slang::BindingType::ConstantBuffer:         return std::pair{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, false };
+        case slang::BindingType::RawBuffer:              return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, false };
+        case slang::BindingType::MutableRawBuffer:       return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, true };
+        case slang::BindingType::TypedBuffer:            return std::pair{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, false };
+        case slang::BindingType::MutableTypedBuffer:     return std::pair{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, true };
+        default:                                         return std::nullopt;
+    }
+}
+
+static VkImageViewType reflectViewType(slang::TypeLayoutReflection* type) {
+    const SlangResourceShape shape = type->getResourceShape();
+    const bool array = (shape & SLANG_TEXTURE_ARRAY_FLAG) != 0;
+    switch (shape & SLANG_RESOURCE_BASE_SHAPE_MASK) {
+    case SLANG_TEXTURE_1D:
+        return array ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+    case SLANG_TEXTURE_2D:
+        return array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    case SLANG_TEXTURE_3D:
+        return VK_IMAGE_VIEW_TYPE_3D;
+    case SLANG_TEXTURE_CUBE:
+        return array ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_CUBE;
+    default:
+        return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    }
+}
+
+ShaderCompilation Shader::compile(
+    const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances,
+    ShaderFileSystem& fileSystem
+) {
     ShaderCompilation compilation;
+    std::string programName;
+    for (const std::string& path : paths) programName += (programName.empty() ? "" : ", ") + path;
+    if (paths.empty()) throw std::runtime_error("Cannot compile a shader program without any shader");
+
     SlangContext context(defines, fileSystem, compilation.dependencies);
     Slang::ComPtr<slang::ISession>& session = context.session;
     Slang::ComPtr<slang::IBlob>& diagnostics = context.diagnostics;
-    const auto fail = [&] { return context.fail(path); };
+    const auto fail = [&] { return context.fail(programName); };
 
-    slang::IModule* module = context.loadModule(path, std::filesystem::path(path).stem().string());
-
-    Slang::ComPtr<slang::IEntryPoint> entryPoint;
-    if (SLANG_FAILED(module->findEntryPointByName("main", entryPoint.writeRef()))) {
-        throw std::runtime_error(std::format("The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, path, MSG_RESET));
+    std::vector<slang::IComponentType*> components;
+    std::vector<Slang::ComPtr<slang::IEntryPoint>> entryPoints(paths.size());
+    for (size_t i = 0; i < paths.size(); ++i) {
+        const std::string moduleName = std::format("{}_{}", std::filesystem::path(paths[i]).stem().string(), i);
+        slang::IModule* module = context.loadModule(paths[i], moduleName);
+        if (SLANG_FAILED(module->findEntryPointByName("main", entryPoints[i].writeRef())))
+            throw std::runtime_error(
+                std::format(
+                    "The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, paths[i], MSG_RESET
+                )
+            );
+        components.push_back(module);
     }
+    for (const Slang::ComPtr<slang::IEntryPoint>& entryPoint : entryPoints) components.push_back(entryPoint.get());
 
-    std::vector<slang::IComponentType*> components = { module, entryPoint.get() };
     std::vector<Slang::ComPtr<slang::ITypeConformance>> typeConformances;
     for (const ShaderConformance& conformance : conformances) {
-        const std::string& scopePath = conformance.modulePath.empty() ? path : conformance.modulePath;
-        slang::IModule* scope = conformance.modulePath.empty() ? module : context.loadModule(scopePath, scopePath);
-        if (std::ranges::find(components, static_cast<slang::IComponentType*>(scope)) == components.end()) components.push_back(scope);
+        const std::string& scopePath = conformance.modulePath.empty() ? paths.front() : conformance.modulePath;
+        slang::IModule* scope = context.loadModule(scopePath, scopePath);
+        if (std::ranges::find(components, static_cast<slang::IComponentType*>(scope)) == components.end())
+            components.push_back(scope);
 
         slang::TypeReflection* type = context.findType(scope, scopePath, conformance.type);
         slang::TypeReflection* interfaceType = context.findType(scope, scopePath, conformance.interfaceType);
 
         Slang::ComPtr<slang::ITypeConformance>& typeConformance = typeConformances.emplace_back();
-        if (SLANG_FAILED(session->createTypeConformanceComponentType(type, interfaceType, typeConformance.writeRef(), conformance.id, diagnostics.writeRef()))) throw context.fail(scopePath);
+        if (SLANG_FAILED(session->createTypeConformanceComponentType(
+                type, interfaceType, typeConformance.writeRef(), conformance.id, diagnostics.writeRef()
+            )))
+            throw context.fail(scopePath);
     }
-    for (const Slang::ComPtr<slang::ITypeConformance>& typeConformance : typeConformances) components.push_back(typeConformance.get());
+    for (const Slang::ComPtr<slang::ITypeConformance>& typeConformance : typeConformances)
+        components.push_back(typeConformance.get());
 
     Slang::ComPtr<slang::IComponentType> program;
-    if (SLANG_FAILED(session->createCompositeComponentType(components.data(), static_cast<SlangInt>(components.size()), program.writeRef(), diagnostics.writeRef()))) throw fail();
+    if (SLANG_FAILED(session->createCompositeComponentType(
+            components.data(), static_cast<SlangInt>(components.size()), program.writeRef(), diagnostics.writeRef()
+        )))
+        throw fail();
 
     Slang::ComPtr<slang::IComponentType> linkedProgram;
     if (SLANG_FAILED(program->link(linkedProgram.writeRef(), diagnostics.writeRef()))) throw fail();
 
-    Slang::ComPtr<slang::IBlob> spirv;
-    if (SLANG_FAILED(linkedProgram->getEntryPointCode(0, 0, spirv.writeRef(), diagnostics.writeRef()))) throw fail();
-
-    Slang::ComPtr<slang::IMetadata> metadata;
-    if (SLANG_FAILED(linkedProgram->getEntryPointMetadata(0, 0, metadata.writeRef(), diagnostics.writeRef()))) throw fail();
-
     slang::ProgramLayout* layout = linkedProgram->getLayout();
-    switch (layout->getEntryPointByIndex(0)->getStage()) {
-        case SLANG_STAGE_VERTEX:   compilation.stage = VK_SHADER_STAGE_VERTEX_BIT; break;
-        case SLANG_STAGE_FRAGMENT: compilation.stage = VK_SHADER_STAGE_FRAGMENT_BIT; break;
-        case SLANG_STAGE_COMPUTE:  compilation.stage = VK_SHADER_STAGE_COMPUTE_BIT; break;
+    std::vector<Slang::ComPtr<slang::IMetadata>> metadata(paths.size());
+    for (size_t i = 0; i < paths.size(); ++i) {
+        const SlangInt index = static_cast<SlangInt>(i);
+        Slang::ComPtr<slang::IBlob> spirv;
+        if (SLANG_FAILED(linkedProgram->getEntryPointCode(index, 0, spirv.writeRef(), diagnostics.writeRef())))
+            throw fail();
+        if (SLANG_FAILED(
+                linkedProgram->getEntryPointMetadata(index, 0, metadata[i].writeRef(), diagnostics.writeRef())
+            ))
+            throw fail();
+
+        VkShaderStageFlagBits stage;
+        switch (layout->getEntryPointByIndex(i)->getStage()) {
+        case SLANG_STAGE_VERTEX:
+            stage = VK_SHADER_STAGE_VERTEX_BIT;
+            break;
+        case SLANG_STAGE_FRAGMENT:
+            stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            break;
+        case SLANG_STAGE_COMPUTE:
+            stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            break;
         default:
-            throw std::runtime_error(std::format("The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, path, MSG_RESET));
+            throw std::runtime_error(
+                std::format(
+                    "The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, paths[i],
+                    MSG_RESET
+                )
+            );
+        }
+        compilation.stages.push_back({
+            .path = paths[i],
+            .stage = stage,
+            .spirv = optimize(
+                static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t),
+                paths[i]
+            ),
+        });
     }
 
     const auto collectParameters = [&](this const auto& self, slang::VariableLayoutReflection* variable, const std::string& prefix, uint32_t set, uint32_t binding) -> void {
@@ -306,6 +393,12 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
         slang::TypeLayoutReflection* type = variable->getTypeLayout();
         set += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_SUB_ELEMENT_REGISTER_SPACE));
         binding += static_cast<uint32_t>(variable->getOffset(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
+
+        if (variable->getCategory() == slang::ParameterCategory::PushConstantBuffer) {
+            slang::TypeLayoutReflection* element = type->getElementTypeLayout();
+            compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>((element ? element : type)->getSize()));
+            return;
+        }
 
         if (type->getKind() == slang::TypeReflection::Kind::ParameterBlock) {
             slang::VariableLayoutReflection* element = type->getElementVarLayout();
@@ -319,13 +412,40 @@ ShaderCompilation Shader::compile(const std::string& path, const ShaderDefines& 
             return;
         }
 
+        const std::optional<std::pair<VkDescriptorType, bool>> descriptor = reflectDescriptorType(type);
+        if (!descriptor) return;
+
         bool used = false;
-        metadata->isParameterLocationUsed(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, used);
-        compilation.parameters.push_back({ name, ShaderLocation(set, binding), used });
+        for (const Slang::ComPtr<slang::IMetadata>& stageMetadata : metadata) {
+            bool stageUsed = false;
+            stageMetadata->isParameterLocationUsed(
+                SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT, set, binding, stageUsed
+            );
+            used |= stageUsed;
+        }
+        compilation.parameters.push_back(
+            {name, ShaderLocation(set, binding), descriptor->first, reflectViewType(type), descriptor->second, used}
+        );
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
 
-    compilation.spirv = optimize(static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t), path);
+    for (size_t index = 0; index < paths.size(); ++index) {
+        slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(index);
+        if (compilation.stages[index].stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+            SlangUInt size[3];
+            entryPointLayout->getComputeThreadGroupSize(3, size);
+            compilation.threadGroupSize = {
+                static_cast<uint32_t>(size[0]), static_cast<uint32_t>(size[1]), static_cast<uint32_t>(size[2])
+            };
+        }
+        for (unsigned int i = 0; i < entryPointLayout->getParameterCount(); i++) {
+            slang::VariableLayoutReflection* parameter = entryPointLayout->getParameterByIndex(i);
+            if (parameter->getCategory() != slang::ParameterCategory::Uniform) continue;
+            const size_t end =
+                parameter->getOffset(SLANG_PARAMETER_CATEGORY_UNIFORM) + parameter->getTypeLayout()->getSize();
+            compilation.pushConstantSize = std::max(compilation.pushConstantSize, static_cast<uint32_t>(end));
+        }
+    }
     return compilation;
 }
 
@@ -361,4 +481,6 @@ std::vector<uint32_t> Shader::optimize(const uint32_t* words, size_t wordCount, 
     }
 
     return optimized;
+}
+
 }

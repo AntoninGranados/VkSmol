@@ -3,6 +3,8 @@
 #include "../../device/logical_device.hpp"
 #include "../../utils.hpp"
 
+namespace VkSmol {
+
 void DescriptorSetLayout::init(const LogicalDevice& device) {
     VkDescriptorSetLayoutCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -32,4 +34,6 @@ void DescriptorSetLayout::addBinding(uint32_t bindingIndex, VkShaderStageFlags s
     layoutBinding.descriptorType = descriptorType;
     layoutBinding.descriptorCount = descriptorCount;
     bindings.push_back(layoutBinding);
+}
+
 }

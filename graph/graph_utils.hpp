@@ -2,8 +2,14 @@
 
 #include <vulkan/vulkan.h>
 
-#include <string>
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "builder_resource.hpp"
+
+namespace VkSmol {
 
 enum class AccessType : uint16_t;
 enum class ImageUsageType : uint16_t;
@@ -15,7 +21,9 @@ struct BufferAccessInfo;
 struct VulkanImageState;
 struct VulkanBufferState;
 
+struct CompiledPass;
 struct CompiledRenderGraph;
+class Engine;
 
 std::string accessTypeToStr(AccessType access);
 std::string imageUsageToStr(ImageUsageType usage);
@@ -31,7 +39,12 @@ VkBufferUsageFlags bufferUsageTypeToVkFlags(BufferUsageType usage);
 VkDescriptorType   bufferUsageTypeToDescriptorType(BufferUsageType usage);
 VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
 
-std::string dumpGraph(const CompiledRenderGraph& compiled);
+std::vector<ImageAccess> findColorAttachments(const std::vector<ImageAccess>& accesses);
+std::optional<ImageAccess> findDepthAttachment(const std::vector<ImageAccess>& accesses);
+
+std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine);
 
 void checkUsageValidForAccess(ImageUsageType usage, AccessType access);
 void checkImageAccessInfoValid(const ImageAccessInfo& info);
+
+}

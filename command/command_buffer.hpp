@@ -1,9 +1,10 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include "../base/unique_handle.hpp"
+
+namespace VkSmol {
 
 class LogicalDevice;
 class CommandPool;
@@ -21,3 +22,5 @@ public:
     static CommandBuffer beginSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool);
     static void endSingleTimeCommands(const LogicalDevice& device, const CommandPool& pool, Queue queue, CommandBuffer& commandBuffer);
 };
+
+}

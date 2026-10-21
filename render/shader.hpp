@@ -10,6 +10,8 @@
 
 #include "../base/unique_handle.hpp"
 
+namespace VkSmol {
+
 class LogicalDevice;
 class ShaderFileSystem;
 
@@ -64,9 +66,12 @@ struct ShaderLocation {
 };
 
 struct ShaderParameter {
-    std::string    name;
-    ShaderLocation location;
-    bool           used;
+    std::string      name;
+    ShaderLocation   location;
+    VkDescriptorType descriptorType;
+    VkImageViewType viewType;
+    bool             writable;
+    bool             used;
 };
 
 struct ShaderDependency {
@@ -74,10 +79,17 @@ struct ShaderDependency {
     size_t      hash;
 };
 
+struct ShaderStageCompilation {
+    std::string path;
+    VkShaderStageFlagBits stage;
+    std::vector<uint32_t> spirv;
+};
+
 struct ShaderCompilation {
-    std::vector<uint32_t>         spirv;
-    VkShaderStageFlagBits         stage;
+    std::vector<ShaderStageCompilation> stages;
     std::vector<ShaderParameter>  parameters;
+    uint32_t                      pushConstantSize = 0;
+    VkExtent3D                    threadGroupSize = { 1, 1, 1 };
     std::vector<ShaderDependency> dependencies;
 };
 
@@ -87,8 +99,12 @@ public:
     void destroy(const LogicalDevice& device);
     VkPipelineShaderStageCreateInfo getShaderStageCreateInfo() const;
 
-    static ShaderCompilation compile(const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances, ShaderFileSystem& fileSystem);
-    static std::vector<ShaderStruct> reflect(const std::string& path, const std::string& interfaceName, ShaderFileSystem& fileSystem);
+    static ShaderCompilation compile(
+        const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances,
+        ShaderFileSystem& fileSystem
+    );
+    static std::vector<ShaderStruct>
+    reflect(const std::string& path, const std::string& interfaceName, ShaderFileSystem& fileSystem);
     static bool isUpToDate(const std::vector<ShaderDependency>& dependencies, ShaderFileSystem& fileSystem);
 
 private:
@@ -99,3 +115,5 @@ private:
 
     VkShaderStageFlagBits stage;
 };
+
+}

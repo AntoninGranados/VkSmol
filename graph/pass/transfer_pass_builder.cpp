@@ -4,32 +4,47 @@
 #include "../builder_resource.hpp"
 #include "../render_graph_builder.hpp"
 
-void TransferPassBuilder::copyFrom(ImageHandle imageHandle) {
+namespace VkSmol {
+
+TransferPassBuilder& TransferPassBuilder::copyFrom(ImageRange image) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferSrc,
         .access = AccessType::Read,
     });
 
     graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
+        .image = image.image,
+        .subresources = image.subresources,
         .info = {
             .usage = ImageUsageType::TransferSrc,
             .access = AccessType::Read,
         },
     });
+    return *this;
 }
 
-void TransferPassBuilder::copyTo(ImageHandle imageHandle) {
+TransferPassBuilder& TransferPassBuilder::copyFrom(BufferHandle buffer) {
+    return access(buffer, BufferUsageType::TransferSrc, AccessType::Read);
+}
+
+TransferPassBuilder& TransferPassBuilder::copyTo(BufferHandle buffer) {
+    return access(buffer, BufferUsageType::TransferDst, AccessType::Write);
+}
+
+TransferPassBuilder& TransferPassBuilder::copyTo(ImageRange image) {
     checkImageAccessInfoValid({
         .usage = ImageUsageType::TransferDst,
         .access = AccessType::Write,
     });
 
     graph->passes[handle.id].imageAccesses.push_back({
-        .image = imageHandle,
+        .image = image.image,
+        .subresources = image.subresources,
         .info = {
             .usage = ImageUsageType::TransferDst,
             .access = AccessType::Write,
         },
     });
+    return *this;
+}
 }

@@ -5,11 +5,11 @@
 #include <cstdio>
 #include <stdexcept>
 
+namespace VkSmol {
+
 // TODO: use Smol/SMOL_ or something similar to start the defines and the functions
 
 const uint32_t MAX_FRAME_IN_FLIGHT = 2; // Number of frames that can be worked on in parallele by the CPU
-
-#define SMOL_RECREATE_SWAPCHAIN ~(0u)
 
 // Message formating
 #define MAX_MSG_SIZE 256u
@@ -31,4 +31,6 @@ inline void vkCheck(VkResult result, const char* msg) {
         snprintf(buf, sizeof(buf), "%s (error code %s%i%s)", msg, MSG_RED, (int)result, MSG_RESET);
         throw std::runtime_error(buf);
     }
+}
+
 }

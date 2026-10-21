@@ -5,6 +5,8 @@
 
 #include <map>
 
+namespace VkSmol {
+
 PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) {
     rawHandle() = physicalDevice;
 }
@@ -44,4 +46,6 @@ int PhysicalDevice::scoreDeviceDefault([[maybe_unused]] const PhysicalDevice& de
     // VkPhysicalDeviceFeatures deviceFeatures;
     // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
     return 1;
+}
+
 }

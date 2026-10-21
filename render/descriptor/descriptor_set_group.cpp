@@ -5,6 +5,8 @@
 
 #include "../../device/logical_device.hpp"
 
+namespace VkSmol {
+
 void DescriptorSetGroup::destroy(const LogicalDevice& device) {
     DescriptorSet::free(device, *this);
     pool.destroy(device);
@@ -18,4 +20,6 @@ DescriptorSet& DescriptorSetGroup::at(uint32_t frameIndex) {
         throw std::out_of_range(message.str());
     }
     return sets[frameIndex];
+}
+
 }

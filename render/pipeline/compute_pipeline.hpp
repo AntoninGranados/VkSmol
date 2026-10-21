@@ -1,9 +1,10 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 #include <vector>
+
+namespace VkSmol {
 
 class LogicalDevice;
 class Shader;
@@ -19,6 +20,7 @@ public:
         const LogicalDevice& device,
         const Shader& shader,
         const std::vector<const DescriptorSetLayout*>& setLayouts,
+        uint32_t pushConstantSize,
         const PipelineCache& pipelineCache,
         ComputePipeline other = {}
     );
@@ -34,3 +36,5 @@ private:
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 };
+
+}

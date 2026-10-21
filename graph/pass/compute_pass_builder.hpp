@@ -3,16 +3,14 @@
 #include "../builder_resource.hpp"
 #include "pass_builder.hpp"
 
+namespace VkSmol {
+
 class RenderGraphBuilder;
 
-class ComputePassBuilder: public PassBuilder {
+class ComputePassBuilder: public PassBuilder<ComputePassBuilder> {
 public:
-    void readImage  (ShaderLocation location, ImageHandle  imageHandle, ImageUsageType  usage);
-    void writeImage (ShaderLocation location, ImageHandle  imageHandle, ImageUsageType  usage);
-    void readBuffer (ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
-    void writeBuffer(ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
-
-    ComputePipelineHandle setPipeline(std::string shaderPath, ShaderDefines shaderDefines = {}, ShaderConformances shaderConformances = {});
+    ComputePassBuilder&
+    pipeline(std::string shaderPath, ShaderDefines shaderDefines = {}, ShaderConformances shaderConformances = {});
 
 private:
     ComputePassBuilder(PassHandle handle, RenderGraphBuilder* graph)
@@ -20,3 +18,5 @@ private:
 
     friend class RenderGraphBuilder;
 };
+
+}

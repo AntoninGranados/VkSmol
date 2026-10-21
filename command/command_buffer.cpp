@@ -5,6 +5,8 @@
 #include "../device/queue.hpp"
 #include "../utils.hpp"
 
+namespace VkSmol {
+
 void CommandBuffer::alloc(const LogicalDevice& device, const CommandPool& pool) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -49,4 +51,6 @@ void CommandBuffer::endSingleTimeCommands(const LogicalDevice& device, const Com
     queue.wait();
 
     commandBuffer.free(device, pool);
+}
+
 }
