@@ -74,12 +74,13 @@ void GraphicsPassBuilder::bindIndexBuffer(BufferHandle buffer) {
     });
 }
 
-GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines) {
+GraphicsPipelineHandle GraphicsPassBuilder::setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines, ShaderConformances shaderConformances) {
     GraphicsPipelineHandle h = { .id = static_cast<uint32_t>(graph->graphicsPipelines.size()) };
     GraphicsPipelineInfo info;
     info.name        = graph->passes[handle.id].name + "Pipeline";
     info.shaderPaths = std::move(shaderPaths);
     info.shaderDefines = std::move(shaderDefines);
+    info.shaderConformances = std::move(shaderConformances);
     info.passId      = handle.id;
     if (vi.pVertexBindingDescriptions)
         info.bindingDescription = *vi.pVertexBindingDescriptions;

@@ -216,15 +216,15 @@ void VkSmol::destroyComputePipeline(ComputePipeline& pipeline) {
     pipeline.destroy(device);
 }
 
-const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, const ShaderDefines& defines) {
-    CompiledShader& compiled = compiledShaders[{path, defines}];
+const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances) {
+    CompiledShader& compiled = compiledShaders[{path, defines, conformances}];
     if (compiled.checked)
         return compiled;
 
     compiled.error.clear();
     if (compiled.compilation.spirv.empty() || !Shader::isUpToDate(compiled.compilation.dependencies, *shaderFileSystem)) {
         try {
-            compiled.compilation = Shader::compile(path, defines, *shaderFileSystem);
+            compiled.compilation = Shader::compile(path, defines, conformances, *shaderFileSystem);
         } catch (const std::exception& e) {
             if (compiled.compilation.spirv.empty())
                 throw;
@@ -235,8 +235,8 @@ const VkSmol::CompiledShader& VkSmol::compileShader(const std::string& path, con
     return compiled;
 }
 
-const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors) {
-    const CompiledShader& compiled = compileShader(path, defines);
+const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances, std::vector<std::string>& errors) {
+    const CompiledShader& compiled = compileShader(path, defines, conformances);
     if (!compiled.error.empty())
         errors.push_back(compiled.error);
 
@@ -260,11 +260,15 @@ const std::vector<uint32_t>& VkSmol::compilePassShader(const CompiledPass& pass,
     return compiled.compilation.spirv;
 }
 
-ShaderLocation VkSmol::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines) {
-    for (const ShaderParameter& parameter : compileShader(shaderPath, defines).compilation.parameters)
+ShaderLocation VkSmol::getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines, const ShaderConformances& conformances) {
+    for (const ShaderParameter& parameter : compileShader(shaderPath, defines, conformances).compilation.parameters)
         if (parameter.name == parameterName) return parameter.location;
 
     throw std::runtime_error(std::format("The shader [{}{}{}] has no parameter named [{}]", MSG_RED_B, shaderPath, MSG_RESET, parameterName));
+}
+
+std::vector<ShaderStruct> VkSmol::getShaderStructs(const std::string& shaderPath, const std::string& interfaceName) {
+    return Shader::reflect(shaderPath, interfaceName, *shaderFileSystem);
 }
 
 // ——— Descriptor sets ————————————————————————————————————————————————————————

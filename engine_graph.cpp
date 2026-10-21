@@ -250,7 +250,7 @@ std::vector<std::string> VkSmol::initPipelines() {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
         Shader shader;
-        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, errors));
+        shader.init(device, VK_SHADER_STAGE_COMPUTE_BIT, compilePassShader(graph.compiledPasses[info.passId], VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath, info.shaderDefines, info.shaderConformances, errors));
         ownedComputePipelines[id] = initComputePipeline(shader, layoutsOf(info.passId));
         shader.destroy(device);
     }
@@ -269,7 +269,7 @@ std::vector<std::string> VkSmol::initPipelines() {
         std::vector<const Shader*> shaderPointers;
         for (size_t i = 0; i < info.shaderPaths.size(); ++i) {
             const auto& [stage, path] = info.shaderPaths[i];
-            shaders[i].init(device, stage, compilePassShader(graph.compiledPasses[info.passId], stage, path, info.shaderDefines, errors));
+            shaders[i].init(device, stage, compilePassShader(graph.compiledPasses[info.passId], stage, path, info.shaderDefines, info.shaderConformances, errors));
             shaderPointers.push_back(&shaders[i]);
         }
         ownedGraphicsPipelines[id] = initGraphicsPipeline(vi, shaderPointers, layoutsOf(info.passId));

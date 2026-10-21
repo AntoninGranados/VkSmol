@@ -16,6 +16,7 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -83,7 +84,8 @@ public:
     bool isHeadless() const { return platform->isHeadless(); }
 
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
-    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {});
+    ShaderLocation getShaderLocation(const std::string& shaderPath, const std::string& parameterName, const ShaderDefines& defines = {}, const ShaderConformances& conformances = {});
+    std::vector<ShaderStruct> getShaderStructs(const std::string& shaderPath, const std::string& interfaceName);
 
     void setGraph(RenderGraphBuilder& builder);
     [[nodiscard]] std::vector<std::string> initGraph(std::string pipelineCachePath = {});
@@ -272,10 +274,10 @@ private:
         std::string error;
         bool checked = false;
     };
-    std::map<std::pair<std::string, ShaderDefines>, CompiledShader> compiledShaders;
+    std::map<std::tuple<std::string, ShaderDefines, ShaderConformances>, CompiledShader> compiledShaders;
     std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
-    const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines);
-    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, std::vector<std::string>& errors);
+    const CompiledShader& compileShader(const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances);
+    const std::vector<uint32_t>& compilePassShader(const CompiledPass& pass, VkShaderStageFlagBits stage, const std::string& path, const ShaderDefines& defines, const ShaderConformances& conformances, std::vector<std::string>& errors);
 
     // Graph state
     CompiledRenderGraph graph;

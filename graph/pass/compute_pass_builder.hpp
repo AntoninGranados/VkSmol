@@ -12,7 +12,7 @@ public:
     void readBuffer (ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
     void writeBuffer(ShaderLocation location, BufferHandle buffer,      BufferUsageType usage);
 
-    ComputePipelineHandle setPipeline(std::string shaderPath, ShaderDefines shaderDefines = {});
+    ComputePipelineHandle setPipeline(std::string shaderPath, ShaderDefines shaderDefines = {}, ShaderConformances shaderConformances = {});
 
 private:
     ComputePassBuilder(PassHandle handle, RenderGraphBuilder* graph)

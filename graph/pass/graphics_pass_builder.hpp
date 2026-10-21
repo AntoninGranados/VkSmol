@@ -16,7 +16,7 @@ public:
     void bindVertexBuffer(BufferHandle buffer);
     void bindIndexBuffer (BufferHandle buffer);
 
-    GraphicsPipelineHandle setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines = {});
+    GraphicsPipelineHandle setPipeline(VkPipelineVertexInputStateCreateInfo vi, std::vector<std::pair<VkShaderStageFlagBits, std::string>> shaderPaths, ShaderDefines shaderDefines = {}, ShaderConformances shaderConformances = {});
 
 private:
     GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)
