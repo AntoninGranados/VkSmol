@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
 project(VkSmol LANGUAGES CXX)
 
@@ -49,8 +49,6 @@ set(SLANG_ENABLE_RECORD_REPLAY OFF CACHE BOOL "" FORCE)
 set(SLANG_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(SLANG_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SLANG_ENABLE_DXIL OFF CACHE BOOL "" FORCE)
-macro(install)
-endmacro()
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/external/slang" slang EXCLUDE_FROM_ALL)
 
 set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
@@ -79,10 +77,6 @@ target_include_directories(VkSmol PUBLIC
   "${CMAKE_CURRENT_BINARY_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
-
-if(DEFINED VKSMOL_INCLUDE_DIR)
-  target_include_directories(VkSmol PUBLIC "${VKSMOL_INCLUDE_DIR}")
-endif()
 
 target_link_libraries(VkSmol PUBLIC
   ${VKSMOL_GLFW_TARGET}
