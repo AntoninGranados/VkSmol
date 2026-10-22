@@ -19,6 +19,7 @@ void CommandBuffer::alloc(const LogicalDevice& device, const CommandPool& pool) 
 
 void CommandBuffer::free(const LogicalDevice& device, const CommandPool& pool) {
     vkFreeCommandBuffers(device.get(), pool.get(), 1, &rawHandle());
+    resetHandle();
 }
 
 void CommandBuffer::beginRecording(VkCommandBufferUsageFlagBits flags) {

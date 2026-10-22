@@ -19,11 +19,30 @@ RenderGraph::RenderGraph(Engine& engine)
     dynamicRenderer.init(logicalDevice);
 }
 
-RenderGraph::~RenderGraph() {
+RenderGraph::~RenderGraph() { release(); }
+
+void RenderGraph::reset() {
+    release();
+    builder = {};
+    graph = {};
+    baked = false;
+    ownedImages.clear();
+    ownedBuffers.clear();
+    relativeImages.clear();
+    presentedImage.reset();
+    acquireWaitStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    recordedSlots = {};
+    numTimestamps = 0;
+    cachedTimestamps.clear();
+}
+
+void RenderGraph::release() {
     device.waitIdle();
     for (const Fence& fence : fences) engine.unregisterFence(fence);
-    if (timestampPool != VK_NULL_HANDLE)
+    if (timestampPool != VK_NULL_HANDLE) {
         vkDestroyQueryPool(logicalDevice.get(), timestampPool, nullptr);
+        timestampPool = VK_NULL_HANDLE;
+    }
     if (baked) {
         destroySync();
         pipelines.destroy();

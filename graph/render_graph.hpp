@@ -58,6 +58,7 @@ public:
 
     void bake(std::string pipelineCachePath = {});
     void execute();
+    void reset();
 
     double getTimestampMs(const std::string& passName) const;
     std::string dump() const;
@@ -94,6 +95,7 @@ private:
 
     VkExtent2D relativeExtent(SwapchainRelative size) const;
     void resizeRelativeImages();
+    void release();
     void initSync();
     void destroySync();
     void initTimestamps();
