@@ -5,10 +5,7 @@
 #include "./descriptor_set_group.hpp"
 
 #include "../../device/logical_device.hpp"
-#include "../../memory/buffer.hpp"
 #include "../../command/command_buffer.hpp"
-#include "../../image/image_view.hpp"
-#include "../../image/sampler.hpp"
 #include "../../utils.hpp"
 
 namespace VkSmol {
@@ -44,9 +41,6 @@ void DescriptorSet::free(const LogicalDevice& device, DescriptorSetGroup& alloca
     allocation.sets.clear();
 }
 
-void DescriptorSet::linkUniformBuffer(const Buffer& buffer, uint32_t binding) {
-    linkUniformBuffer(buffer.get(), buffer.getSize(), binding);
-}
 void DescriptorSet::linkUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding) {
     VkDescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer;
@@ -55,9 +49,6 @@ void DescriptorSet::linkUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32
     bufferInfos.push_back({ bufferInfo, binding });
 }
 
-void DescriptorSet::linkStorageBuffer(const Buffer& buffer, uint32_t binding) {
-    linkStorageBuffer(buffer.get(), buffer.getSize(), binding);
-}
 void DescriptorSet::linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding) {
     VkDescriptorBufferInfo storageInfo{};
     storageInfo.buffer = buffer;
@@ -66,9 +57,6 @@ void DescriptorSet::linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32
     storageInfos.push_back({ storageInfo, binding });
 }
 
-void DescriptorSet::linkStorageImage(const ImageView& view, uint32_t binding) {
-    linkStorageImage(view.get(), binding);
-}
 void DescriptorSet::linkStorageImage(VkImageView view, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = VK_NULL_HANDLE;
@@ -77,9 +65,6 @@ void DescriptorSet::linkStorageImage(VkImageView view, uint32_t binding) {
     storageImageInfos.push_back({ imageInfo, binding });
 }
 
-void DescriptorSet::linkCombinedImageSampler(const ImageView& view, const Sampler& sampler, uint32_t binding) {
-    linkCombinedImageSampler(view.get(), sampler.get(), binding);
-}
 void DescriptorSet::linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler;

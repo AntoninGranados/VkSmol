@@ -2,7 +2,6 @@
 
 #include "../graph_utils.hpp"
 #include "../builder_resource.hpp"
-#include "../render_graph_builder.hpp"
 
 namespace VkSmol {
 

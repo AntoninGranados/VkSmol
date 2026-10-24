@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "../graph/compiled_resource.hpp"
 #include "../graph/graph_utils.hpp"
 
 namespace VkSmol {

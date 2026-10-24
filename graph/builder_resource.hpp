@@ -198,6 +198,7 @@ struct NamedBinding {
 };
 
 struct PassInfo {
+    uint32_t id;
     std::string name;
     PassType type;
     std::vector<ImageAccess>           imageAccesses      = {};
@@ -205,7 +206,14 @@ struct PassInfo {
     std::vector<DescriptorBindingDecl> descriptorBindings = {};
     std::vector<NamedBinding>          namedBindings      = {};
     VkIndexType                        indexType          = VK_INDEX_TYPE_UINT32;
+    std::optional<uint32_t> pipelineId = {};
     std::function<void(PassContext&)>  execute;
+};
+
+struct GraphDeclaration {
+    std::vector<PassInfo> passes;
+    std::vector<ComputePipelineInfo> computePipelines;
+    std::vector<GraphicsPipelineInfo> graphicsPipelines;
 };
 
 }

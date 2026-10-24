@@ -20,7 +20,7 @@ PassPipelines::PassPipelines(Device& device, ResourceRegistry& resources)
     : device(device), logicalDevice(device.getLogicalDevice()), resources(resources) {}
 
 void PassPipelines::init(
-    const CompiledRenderGraph& graph, const PassDescriptors& descriptors, const std::string& cachePath
+    const GraphDeclaration& graph, const PassDescriptors& descriptors, const std::string& cachePath
 ) {
     cache.init(logicalDevice, cachePath);
     try {
@@ -42,19 +42,19 @@ void PassPipelines::destroy() {
     cache.destroy(logicalDevice);
 }
 
-void PassPipelines::bind(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
+void PassPipelines::bind(const CommandBuffer& commandBuffer, const PassInfo& pass) {
     if (pass.type == PassType::Compute)
         computes.at(*pass.pipelineId).pipeline.bind(commandBuffer);
     else
         graphics.at(*pass.pipelineId).pipeline.bind(commandBuffer);
 }
 
-VkPipelineLayout PassPipelines::getLayout(const CompiledPass& pass) {
+VkPipelineLayout PassPipelines::getLayout(const PassInfo& pass) {
     if (pass.type == PassType::Compute) return computes.at(*pass.pipelineId).pipeline.getLayout();
     return graphics.at(*pass.pipelineId).pipeline.getLayout();
 }
 
-void PassPipelines::setRenderArea(const CommandBuffer& commandBuffer, const CompiledPass& pass, VkExtent2D extent) {
+void PassPipelines::setRenderArea(const CommandBuffer& commandBuffer, const PassInfo& pass, VkExtent2D extent) {
     GraphicsPipeline& pipeline = graphics.at(*pass.pipelineId).pipeline;
     pipeline.setViewport(
         commandBuffer,
@@ -64,17 +64,17 @@ void PassPipelines::setRenderArea(const CommandBuffer& commandBuffer, const Comp
 }
 
 void PassPipelines::dispatch(
-    const CommandBuffer& commandBuffer, const CompiledPass& pass, uint32_t x, uint32_t y, uint32_t z
+    const CommandBuffer& commandBuffer, const PassInfo& pass, uint32_t x, uint32_t y, uint32_t z
 ) {
     computes.at(*pass.pipelineId).pipeline.dispatch(commandBuffer, x, y, z);
 }
 
-VkExtent3D PassPipelines::getThreadGroupSize(const CompiledPass& pass) const {
+VkExtent3D PassPipelines::getThreadGroupSize(const PassInfo& pass) const {
     return computes.at(*pass.pipelineId).threadGroupSize;
 }
 
 void PassPipelines::pushConstants(
-    const CommandBuffer& commandBuffer, const CompiledPass& pass, const void* data, uint32_t size
+    const CommandBuffer& commandBuffer, const PassInfo& pass, const void* data, uint32_t size
 ) {
     if (!pass.pipelineId)
         throw std::runtime_error(std::format("The pass [{}] has no pipeline to push constants to", pass.name));
@@ -94,10 +94,10 @@ void PassPipelines::pushConstants(
     vkCmdPushConstants(commandBuffer.get(), getLayout(pass), stages, 0, size, data);
 }
 
-void PassPipelines::createComputePipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors) {
+void PassPipelines::createComputePipelines(const GraphDeclaration& graph, const PassDescriptors& descriptors) {
     for (uint32_t id = 0; id < graph.computePipelines.size(); ++id) {
         const ComputePipelineInfo& info = graph.computePipelines[id];
-        const CompiledPass& pass = graph.compiledPasses[info.passId];
+        const PassInfo& pass = graph.passes[info.passId];
         const ShaderCompilation& compilation = compileProgram(
             pass, {{VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath}}, info.shaderDefines, info.shaderConformances
         );
@@ -115,10 +115,10 @@ void PassPipelines::createComputePipelines(const CompiledRenderGraph& graph, con
     }
 }
 
-void PassPipelines::createGraphicsPipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors) {
+void PassPipelines::createGraphicsPipelines(const GraphDeclaration& graph, const PassDescriptors& descriptors) {
     for (uint32_t id = 0; id < graph.graphicsPipelines.size(); ++id) {
         const GraphicsPipelineInfo& info = graph.graphicsPipelines[id];
-        const CompiledPass& pass = graph.compiledPasses[info.passId];
+        const PassInfo& pass = graph.passes[info.passId];
         const bool hasVertexInput = !info.attributeDescriptions.empty();
         const VkPipelineVertexInputStateCreateInfo vertexInput{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -165,7 +165,7 @@ void PassPipelines::createGraphicsPipelines(const CompiledRenderGraph& graph, co
 }
 
 const ShaderCompilation& PassPipelines::compileProgram(
-    const CompiledPass& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
+    const PassInfo& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
     const ShaderDefines& defines, const ShaderConformances& conformances
 ) {
     std::vector<std::string> paths;

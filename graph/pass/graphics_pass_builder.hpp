@@ -9,7 +9,7 @@
 
 namespace VkSmol {
 
-class RenderGraphBuilder;
+class RenderGraph;
 
 class GraphicsPassBuilder: public PassBuilder<GraphicsPassBuilder> {
 public:
@@ -30,10 +30,10 @@ public:
     GraphicsPassBuilder& readOnlyDepthAttachment(ImageRange image);
 
 private:
-    GraphicsPassBuilder(PassHandle handle, RenderGraphBuilder* graph)
+    GraphicsPassBuilder(PassHandle handle, GraphDeclaration* graph)
         : PassBuilder(handle, graph) {}
 
-    friend class RenderGraphBuilder;
+    friend class RenderGraph;
 };
 
 }

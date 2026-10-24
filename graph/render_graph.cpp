@@ -15,16 +15,13 @@ namespace VkSmol {
 
 RenderGraph::RenderGraph(Engine& engine)
     : engine(engine), device(engine.getDevice()), logicalDevice(engine.getDevice().getLogicalDevice()),
-      descriptors(device, engine.getResources()), pipelines(device, engine.getResources()) {
-    dynamicRenderer.init(logicalDevice);
-}
+      descriptors(device, engine.getResources()), pipelines(device, engine.getResources()) {}
 
 RenderGraph::~RenderGraph() { release(); }
 
 void RenderGraph::reset() {
     release();
-    builder = {};
-    graph = {};
+    declaration = {};
     baked = false;
     ownedImages.clear();
     ownedBuffers.clear();
@@ -94,25 +91,32 @@ BufferHandle RenderGraph::createBuffer(std::string name, size_t size) {
     return ownedBuffers.emplace_back(engine.createBuffer(std::move(name), size));
 }
 
-ComputePassBuilder RenderGraph::addComputePass(std::string name) {
+PassHandle RenderGraph::addPass(std::string name, PassType type) {
     assert(!baked);
-    return builder.addComputePass(std::move(name));
+    const PassHandle handle = {.id = static_cast<uint32_t>(declaration.passes.size())};
+    declaration.passes.push_back({.id = handle.id, .name = std::move(name), .type = type});
+    return handle;
+}
+
+ComputePassBuilder RenderGraph::addComputePass(std::string name) {
+    return ComputePassBuilder(addPass(std::move(name), PassType::Compute), &declaration);
 }
 
 GraphicsPassBuilder RenderGraph::addGraphicsPass(std::string name) {
-    assert(!baked);
-    return builder.addGraphicsPass(std::move(name));
+    return GraphicsPassBuilder(addPass(std::move(name), PassType::Graphics), &declaration);
 }
 
 TransferPassBuilder RenderGraph::addTransferPass(std::string name) {
-    assert(!baked);
-    return builder.addTransferPass(std::move(name));
+    return TransferPassBuilder(addPass(std::move(name), PassType::Transfer), &declaration);
 }
 
 void RenderGraph::present(ImageHandle image) {
     assert(!baked && !engine.isHeadless() && image.id == engine.getSwapchainImage().id);
     presentedImage = image;
-    builder.addPresentPass(image);
+    const PassHandle handle = addPass("Present", PassType::Present);
+    declaration.passes[handle.id].imageAccesses.push_back(
+        {.image = image, .info = {.usage = ImageUsageType::Present, .access = AccessType::Read}}
+    );
 }
 
 // ——— Bake ————————————————————————————————————————————————————————————————————
@@ -122,19 +126,20 @@ void RenderGraph::bake(std::string pipelineCachePath) {
     std::vector<std::string> errors;
 
     resolveBindings(
-        builder.passes, builder.computePipelines, builder.graphicsPipelines, device, engine.getResources(), errors
+        declaration.passes, declaration.computePipelines, declaration.graphicsPipelines, device, engine.getResources(),
+        errors
     );
-    checkImageAccesses(builder.passes, engine.getResources(), errors);
-    if (errors.empty()) checkAttachments(builder.passes, builder.graphicsPipelines, engine.getResources(), errors);
+    checkImageAccesses(declaration.passes, engine.getResources(), errors);
+    if (errors.empty())
+        checkAttachments(declaration.passes, declaration.graphicsPipelines, engine.getResources(), errors);
     if (!errors.empty()) {
         std::string message = errors.front();
         for (size_t i = 1; i < errors.size(); ++i) message += "\n" + errors[i];
         throw std::runtime_error(message);
     }
-    graph = builder.compile();
 
     if (presentedImage) {
-        for (const CompiledPass& pass : graph.compiledPasses) {
+        for (const PassInfo& pass : declaration.passes) {
             const auto access = std::ranges::find_if(pass.imageAccesses, [&](const ImageAccess& a) { return a.image.id == presentedImage->id; });
             if (access == pass.imageAccesses.end()) continue;
             acquireWaitStage = imageAccessToVk(access->info).stage;
@@ -142,8 +147,8 @@ void RenderGraph::bake(std::string pipelineCachePath) {
         }
     }
 
-    descriptors.init(graph);
-    pipelines.init(graph, descriptors, pipelineCachePath);
+    descriptors.init(declaration);
+    pipelines.init(declaration, descriptors, pipelineCachePath);
     initSync();
     initTimestamps();
 
@@ -173,7 +178,7 @@ void RenderGraph::initTimestamps() {
     vkGetPhysicalDeviceProperties(device.getPhysicalDevice().get(), &props);
     timestampPeriod = props.limits.timestampPeriod;
 
-    numTimestamps = static_cast<uint32_t>(graph.compiledPasses.size());
+    numTimestamps = static_cast<uint32_t>(declaration.passes.size());
     if (numTimestamps == 0) return;
 
     VkQueryPoolCreateInfo info{};
@@ -201,9 +206,9 @@ void RenderGraph::readTimestamps() {
 }
 
 double RenderGraph::getTimestampMs(const std::string& passName) const {
-    for (const CompiledPass& pass : graph.compiledPasses)
-        if (pass.name == passName && pass.pass.id < cachedTimestamps.size())
-            return cachedTimestamps[pass.pass.id];
+    for (const PassInfo& pass : declaration.passes)
+        if (pass.name == passName && pass.id < cachedTimestamps.size())
+            return cachedTimestamps[pass.id];
     return -1.0;
 }
 
@@ -230,7 +235,7 @@ void RenderGraph::execute() {
     commandBuffer.reset();
     commandBuffer.beginRecording();
     engine.pendingTransfers.flush(commandBuffer);
-    for (const CompiledPass& pass : graph.compiledPasses)
+    for (const PassInfo& pass : declaration.passes)
         recordPass(commandBuffer, pass);
     commandBuffer.endRecording();
     recordedSlots[frame] = true;
@@ -248,9 +253,8 @@ void RenderGraph::execute() {
     if (presentedImage) engine.presentImage(*imageIndex);
 }
 
-void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
-    const PassInfo& info = builder.passes[pass.pass.id];
-    const uint32_t base = (frame * numTimestamps + pass.pass.id) * 2;
+void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const PassInfo& pass) {
+    const uint32_t base = (frame * numTimestamps + pass.id) * 2;
 
     vkCmdResetQueryPool(commandBuffer.get(), timestampPool, base, 2);
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
@@ -263,15 +267,15 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
                 descriptors.bind(commandBuffer, pass, frame, pipelines.getLayout(pass));
             }
             PassContext context(*this, commandBuffer, pass, {});
-            if (info.execute) info.execute(context);
+            if (pass.execute) pass.execute(context);
             break;
         }
         case PassType::Graphics:
-            recordGraphicsPass(commandBuffer, pass, info);
+            recordGraphicsPass(commandBuffer, pass);
             break;
         case PassType::Transfer: {
             PassContext context(*this, commandBuffer, pass, {});
-            if (info.execute) info.execute(context);
+            if (pass.execute) pass.execute(context);
             break;
         }
         case PassType::Present:
@@ -281,9 +285,7 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const CompiledP
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
 }
 
-void RenderGraph::recordGraphicsPass(
-    const CommandBuffer& commandBuffer, const CompiledPass& pass, const PassInfo& info
-) {
+void RenderGraph::recordGraphicsPass(const CommandBuffer& commandBuffer, const PassInfo& pass) {
     ResourceRegistry& resources = engine.getResources();
     const std::vector<ImageAccess> colors = findColorAttachments(pass.imageAccesses);
     const std::optional<ImageAccess> depth = findDepthAttachment(pass.imageAccesses);
@@ -315,7 +317,15 @@ void RenderGraph::recordGraphicsPass(
     for (const ImageAccess& access : colors) colorInfos.push_back(attach(access));
     const std::optional<VkRenderingAttachmentInfo> depthInfo = depth ? std::optional(attach(*depth)) : std::nullopt;
     if (!extent) throw std::runtime_error(std::format("The graphics pass [{}] has no attachment", pass.name));
-    dynamicRenderer.begin(commandBuffer, colorInfos, depthInfo ? &*depthInfo : nullptr, VkRect2D{{}, *extent});
+    const VkRenderingInfo renderingInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = VkRect2D{{}, *extent},
+        .layerCount = 1,
+        .colorAttachmentCount = static_cast<uint32_t>(colorInfos.size()),
+        .pColorAttachments = colorInfos.data(),
+        .pDepthAttachment = depthInfo ? &*depthInfo : nullptr,
+    };
+    logicalDevice.functions().cmdBeginRendering(commandBuffer.get(), &renderingInfo);
 
     if (pass.pipelineId) {
         pipelines.bind(commandBuffer, pass);
@@ -327,7 +337,7 @@ void RenderGraph::recordGraphicsPass(
             const VkBuffer buffer = resources.getBuffer(access.buffer).buffer;
             if (access.info.usage == BufferUsageType::Vertex) vertexBuffers.push_back(buffer);
             if (access.info.usage == BufferUsageType::Index)
-                vkCmdBindIndexBuffer(commandBuffer.get(), buffer, 0, info.indexType);
+                vkCmdBindIndexBuffer(commandBuffer.get(), buffer, 0, pass.indexType);
         }
         if (!vertexBuffers.empty()) {
             const std::vector<VkDeviceSize> offsets(vertexBuffers.size(), 0);
@@ -338,12 +348,12 @@ void RenderGraph::recordGraphicsPass(
         }
     }
     PassContext context(*this, commandBuffer, pass, *extent);
-    if (info.execute) info.execute(context);
+    if (pass.execute) pass.execute(context);
 
-    dynamicRenderer.end(commandBuffer);
+    logicalDevice.functions().cmdEndRendering(commandBuffer.get());
 }
 
-void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass) {
+void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const PassInfo& pass) {
     ResourceRegistry& resources = engine.getResources();
     for (const ImageAccess& access : pass.imageAccesses)
         resources.transitionImage(commandBuffer, ImageRange(access.image, access.subresources), access.info);
@@ -351,5 +361,5 @@ void RenderGraph::emitBarriers(const CommandBuffer& commandBuffer, const Compile
         resources.transitionBuffer(commandBuffer, access.buffer, access.info);
 }
 
-std::string RenderGraph::dump() const { return dumpGraph(graph, engine); }
+std::string RenderGraph::dump() const { return dumpGraph(declaration, engine); }
 }

@@ -1,12 +1,9 @@
 #include "pass_descriptors.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <format>
 #include <memory>
-#include <type_traits>
 #include <utility>
-#include <variant>
 
 #include "../command/command_buffer.hpp"
 #include "../device/device.hpp"
@@ -18,10 +15,10 @@ namespace VkSmol {
 PassDescriptors::PassDescriptors(Device& device, ResourceRegistry& resources)
     : device(device), logicalDevice(device.getLogicalDevice()), resources(resources) {}
 
-void PassDescriptors::init(const CompiledRenderGraph& graph) {
-    for (const CompiledPass& pass : graph.compiledPasses) {
+void PassDescriptors::init(const GraphDeclaration& graph) {
+    for (const PassInfo& pass : graph.passes) {
         if (pass.descriptorBindings.empty()) continue;
-        const uint32_t passId = pass.pass.id;
+        const uint32_t passId = pass.id;
 
         std::vector<DescriptorBindingDecl> decls = pass.descriptorBindings;
         std::ranges::sort(decls, [](const DescriptorBindingDecl& a, const DescriptorBindingDecl& b) {
@@ -66,13 +63,13 @@ std::vector<const DescriptorSetLayout*> PassDescriptors::getLayouts(uint32_t pas
 }
 
 void PassDescriptors::bind(
-    const CommandBuffer& commandBuffer, const CompiledPass& pass, uint32_t frame, VkPipelineLayout layout
+    const CommandBuffer& commandBuffer, const PassInfo& pass, uint32_t frame, VkPipelineLayout layout
 ) {
-    const auto it = groups.find(pass.pass.id);
+    const auto it = groups.find(pass.id);
     if (it == groups.end()) return;
 
     std::vector<uint64_t> resolved = resolve(pass);
-    std::vector<uint64_t>& current = written[pass.pass.id * MAX_FRAME_IN_FLIGHT + frame];
+    std::vector<uint64_t>& current = written[pass.id * MAX_FRAME_IN_FLIGHT + frame];
     if (current != resolved) {
         update(pass, frame);
         current = std::move(resolved);
@@ -103,7 +100,7 @@ void PassDescriptors::destroyGroup(DescriptorSetGroup& group) {
     group = {};
 }
 
-std::vector<uint64_t> PassDescriptors::resolve(const CompiledPass& pass) {
+std::vector<uint64_t> PassDescriptors::resolve(const PassInfo& pass) {
     std::vector<uint64_t> resolved;
     for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
         if (decl.isImage) {
@@ -121,59 +118,32 @@ std::vector<uint64_t> PassDescriptors::resolve(const CompiledPass& pass) {
     return resolved;
 }
 
-void PassDescriptors::update(const CompiledPass& pass, uint32_t frame) {
-    std::vector<DescriptorSetGroup>& passGroups = groups.at(pass.pass.id);
-    const std::vector<DescriptorSetLayout>& passLayouts = layouts.at(pass.pass.id);
-    for (uint32_t set = 0; set < passLayouts.size(); ++set) {
+void PassDescriptors::update(const PassInfo& pass, uint32_t frame) {
+    std::vector<DescriptorSetGroup>& passGroups = groups.at(pass.id);
+    for (uint32_t set = 0; set < passGroups.size(); ++set) {
         if (!passGroups[set].isValid()) continue;
 
-        DescriptorWriter writer(passLayouts[set]);
+        DescriptorSet& descriptorSet = passGroups[set].at(frame);
+        descriptorSet.clear();
         for (const DescriptorBindingDecl& decl : pass.descriptorBindings) {
             if (decl.set != set) continue;
             if (decl.isImage) {
                 const ImageHandle image = {.id = decl.handleId};
                 const VkImageView view = resources.getImageView({image, decl.subresources}, decl.viewType);
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    writer.combinedImageSampler(decl.binding, view, resources.getImage(image).sampler);
+                    descriptorSet.linkCombinedImageSampler(view, resources.getImage(image).sampler, decl.binding);
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                    writer.storageImage(decl.binding, view);
+                    descriptorSet.linkStorageImage(view, decl.binding);
             } else {
                 const BufferResource& buffer = resources.getBuffer({.id = decl.handleId});
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    writer.uniform(decl.binding, buffer.buffer, buffer.size);
+                    descriptorSet.linkUniformBuffer(buffer.buffer, buffer.size, decl.binding);
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    writer.storage(decl.binding, buffer.buffer, buffer.size);
+                    descriptorSet.linkStorageBuffer(buffer.buffer, buffer.size, decl.binding);
             }
         }
-        write(passGroups[set], frame, writer);
+        descriptorSet.update(logicalDevice);
     }
-}
-
-void PassDescriptors::write(DescriptorSetGroup& group, uint32_t frame, const DescriptorWriter& writer) {
-    DescriptorSet& set = group.at(frame);
-    set.clear();
-    for (const DescriptorWrite& entry : writer.getWrites()) {
-        std::visit(
-            [&](const auto& payload) {
-                using T = std::decay_t<decltype(payload)>;
-                if constexpr (std::is_same_v<T, UniformBufferPayload>) {
-                    assert(payload.buffer);
-                    set.linkUniformBuffer(payload.buffer, payload.size, entry.binding);
-                } else if constexpr (std::is_same_v<T, StorageBufferPayload>) {
-                    assert(payload.buffer);
-                    set.linkStorageBuffer(payload.buffer, payload.size, entry.binding);
-                } else if constexpr (std::is_same_v<T, CombinedImageSamplerPayload>) {
-                    assert(payload.view && payload.sampler);
-                    set.linkCombinedImageSampler(payload.view, payload.sampler, entry.binding);
-                } else if constexpr (std::is_same_v<T, StorageImagePayload>) {
-                    assert(payload.view);
-                    set.linkStorageImage(payload.view, entry.binding);
-                }
-            },
-            entry.payload
-        );
-    }
-    set.update(logicalDevice);
 }
 
 } // namespace VkSmol

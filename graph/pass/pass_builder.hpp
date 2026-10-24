@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "../builder_resource.hpp"
-#include "../render_graph_builder.hpp"
 
 namespace VkSmol {
 
@@ -39,9 +38,9 @@ public:
 
 protected:
     PassHandle handle;
-    RenderGraphBuilder* graph = nullptr;
+    GraphDeclaration* graph = nullptr;
 
-    PassBuilder(PassHandle handle, RenderGraphBuilder* graph): handle(handle), graph(graph) {}
+    PassBuilder(PassHandle handle, GraphDeclaration* graph): handle(handle), graph(graph) {}
 
     Derived& access(ImageRange image, ImageUsageType usage, AccessType access) {
         graph->passes[handle.id].imageAccesses.push_back(

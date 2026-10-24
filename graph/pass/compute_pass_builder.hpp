@@ -5,7 +5,7 @@
 
 namespace VkSmol {
 
-class RenderGraphBuilder;
+class RenderGraph;
 
 class ComputePassBuilder: public PassBuilder<ComputePassBuilder> {
 public:
@@ -13,10 +13,10 @@ public:
     pipeline(std::string shaderPath, ShaderDefines shaderDefines = {}, ShaderConformances shaderConformances = {});
 
 private:
-    ComputePassBuilder(PassHandle handle, RenderGraphBuilder* graph)
+    ComputePassBuilder(PassHandle handle, GraphDeclaration* graph)
         : PassBuilder(handle, graph) {}
 
-    friend class RenderGraphBuilder;
+    friend class RenderGraph;
 };
 
 }

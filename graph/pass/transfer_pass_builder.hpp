@@ -13,9 +13,9 @@ public:
     TransferPassBuilder& copyTo(BufferHandle buffer);
 
 private:
-    TransferPassBuilder(PassHandle handle, RenderGraphBuilder* graph): PassBuilder(handle, graph) {}
+    TransferPassBuilder(PassHandle handle, GraphDeclaration* graph): PassBuilder(handle, graph) {}
 
-    friend class RenderGraphBuilder;
+    friend class RenderGraph;
 };
 
 }

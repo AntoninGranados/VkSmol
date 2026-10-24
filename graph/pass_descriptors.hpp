@@ -9,8 +9,7 @@
 
 #include "../render/descriptor/descriptor_set_group.hpp"
 #include "../render/descriptor/descriptor_set_layout.hpp"
-#include "../render/descriptor/descriptor_writer.hpp"
-#include "compiled_resource.hpp"
+#include "builder_resource.hpp"
 
 namespace VkSmol {
 
@@ -23,11 +22,11 @@ class PassDescriptors {
 public:
     PassDescriptors(Device& device, ResourceRegistry& resources);
 
-    void init(const CompiledRenderGraph& graph);
+    void init(const GraphDeclaration& graph);
     void destroy();
 
     std::vector<const DescriptorSetLayout*> getLayouts(uint32_t passId) const;
-    void bind(const CommandBuffer& commandBuffer, const CompiledPass& pass, uint32_t frame, VkPipelineLayout layout);
+    void bind(const CommandBuffer& commandBuffer, const PassInfo& pass, uint32_t frame, VkPipelineLayout layout);
 
 private:
     Device& device;
@@ -40,9 +39,8 @@ private:
 
     DescriptorSetGroup createGroup(DescriptorSetLayout& layout, std::string name);
     void destroyGroup(DescriptorSetGroup& group);
-    std::vector<uint64_t> resolve(const CompiledPass& pass);
-    void update(const CompiledPass& pass, uint32_t frame);
-    void write(DescriptorSetGroup& group, uint32_t frame, const DescriptorWriter& writer);
+    std::vector<uint64_t> resolve(const PassInfo& pass);
+    void update(const PassInfo& pass, uint32_t frame);
 };
 
 } // namespace VkSmol

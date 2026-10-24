@@ -18,11 +18,18 @@ enum class WriteMode : uint16_t;
 enum class AttachmentLoad : uint16_t;
 struct ImageAccessInfo;
 struct BufferAccessInfo;
-struct VulkanImageState;
-struct VulkanBufferState;
 
-struct CompiledPass;
-struct CompiledRenderGraph;
+struct VulkanImageState {
+    VkImageLayout layout;
+    VkAccessFlags2 access;
+    VkPipelineStageFlags2 stage;
+};
+
+struct VulkanBufferState {
+    VkAccessFlags2 access;
+    VkPipelineStageFlags2 stage;
+};
+
 class Engine;
 
 std::string accessTypeToStr(AccessType access);
@@ -42,7 +49,7 @@ VkDescriptorType   imageUsageTypeToDescriptorType(ImageUsageType usage);
 std::vector<ImageAccess> findColorAttachments(const std::vector<ImageAccess>& accesses);
 std::optional<ImageAccess> findDepthAttachment(const std::vector<ImageAccess>& accesses);
 
-std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine);
+std::string dumpGraph(const GraphDeclaration& graph, const Engine& engine);
 
 void checkUsageValidForAccess(ImageUsageType usage, AccessType access);
 void checkImageAccessInfoValid(const ImageAccessInfo& info);

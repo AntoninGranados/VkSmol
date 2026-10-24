@@ -4,7 +4,6 @@
 #include <format>
 #include <algorithm>
 
-#include "compiled_resource.hpp"
 #include "builder_resource.hpp"
 #include "../engine.hpp"
 
@@ -295,14 +294,14 @@ std::string descriptorTypeToStr(VkDescriptorType type) {
 
 } // namespace
 
-std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine) {
+std::string dumpGraph(const GraphDeclaration& graph, const Engine& engine) {
     const auto imageName  = [&](uint32_t id) { return engine.getImageName({ .id = id }); };
     const auto bufferName = [&](uint32_t id) { return engine.getBufferName({ .id = id }); };
 
-    std::string out = std::format("Passes ({}):\n", compiled.compiledPasses.size());
-    for (const CompiledPass& pass : compiled.compiledPasses) {
+    std::string out = std::format("Passes ({}):\n", graph.passes.size());
+    for (const PassInfo& pass : graph.passes) {
         out += std::format("  [{}] {}  {}\n",
-            pass.pass.id, pass.name, passTypeToStr(pass.type));
+            pass.id, pass.name, passTypeToStr(pass.type));
 
         if (!pass.descriptorBindings.empty()) {
             auto decls = pass.descriptorBindings;
@@ -342,9 +341,9 @@ std::string dumpGraph(const CompiledRenderGraph& compiled, const Engine& engine)
 
         if (pass.pipelineId) {
             if (pass.type == PassType::Compute)
-                out += std::format("      Pipeline:   {}\n", compiled.computePipelines[*pass.pipelineId].name);
+                out += std::format("      Pipeline:   {}\n", graph.computePipelines[*pass.pipelineId].name);
             else if (pass.type == PassType::Graphics)
-                out += std::format("      Pipeline:   {}\n", compiled.graphicsPipelines[*pass.pipelineId].name);
+                out += std::format("      Pipeline:   {}\n", graph.graphicsPipelines[*pass.pipelineId].name);
         }
 
         out += '\n';

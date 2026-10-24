@@ -9,17 +9,14 @@
 #include <vector>
 
 #include "builder_resource.hpp"
-#include "compiled_resource.hpp"
 #include "pass/compute_pass_builder.hpp"
 #include "pass/graphics_pass_builder.hpp"
 #include "pass/transfer_pass_builder.hpp"
 #include "pass_context.hpp"
 #include "pass_descriptors.hpp"
 #include "pass_pipelines.hpp"
-#include "render_graph_builder.hpp"
 
 #include "../command/command_buffer.hpp"
-#include "../render/dynamic_renderer.hpp"
 #include "../sync/fence.hpp"
 #include "../sync/semaphore.hpp"
 #include "../utils.hpp"
@@ -68,8 +65,7 @@ private:
     Device& device;
     const LogicalDevice& logicalDevice;
 
-    RenderGraphBuilder builder;
-    CompiledRenderGraph graph;
+    GraphDeclaration declaration;
     bool baked = false;
 
     std::vector<ImageHandle>  ownedImages;
@@ -84,7 +80,6 @@ private:
     std::array<Fence, MAX_FRAME_IN_FLIGHT> fences;
     std::array<bool, MAX_FRAME_IN_FLIGHT> recordedSlots = {};
 
-    DynamicRenderer dynamicRenderer;
     PassDescriptors descriptors;
     PassPipelines pipelines;
 
@@ -93,6 +88,7 @@ private:
     float                timestampPeriod  = 1.0f;
     std::vector<double>  cachedTimestamps;
 
+    PassHandle addPass(std::string name, PassType type);
     VkExtent2D relativeExtent(SwapchainRelative size) const;
     void resizeRelativeImages();
     void release();
@@ -101,9 +97,9 @@ private:
     void initTimestamps();
     void readTimestamps();
 
-    void recordPass(const CommandBuffer& commandBuffer, const CompiledPass& pass);
-    void recordGraphicsPass(const CommandBuffer& commandBuffer, const CompiledPass& pass, const PassInfo& info);
-    void emitBarriers(const CommandBuffer& commandBuffer, const CompiledPass& pass);
+    void recordPass(const CommandBuffer& commandBuffer, const PassInfo& pass);
+    void recordGraphicsPass(const CommandBuffer& commandBuffer, const PassInfo& pass);
+    void emitBarriers(const CommandBuffer& commandBuffer, const PassInfo& pass);
 
     friend class PassContext;
 };

@@ -1,7 +1,6 @@
 #include "graphics_pass_builder.hpp"
 
 #include "../graph_utils.hpp"
-#include "../render_graph_builder.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -30,6 +29,7 @@ GraphicsPassBuilder& GraphicsPassBuilder::pipeline(
     info.shaderConformances = std::move(shaderConformances);
     info.state              = std::move(state);
     info.passId             = handle.id;
+    graph->passes[handle.id].pipelineId = static_cast<uint32_t>(graph->graphicsPipelines.size());
     graph->graphicsPipelines.push_back(std::move(info));
     return *this;
 }

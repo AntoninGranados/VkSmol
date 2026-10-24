@@ -13,7 +13,6 @@ namespace VkSmol {
 class RenderGraph;
 class CommandBuffer;
 class ResourceRegistry;
-struct CompiledPass;
 
 class PassContext {
 public:
@@ -50,7 +49,7 @@ public:
     VkBuffer getBuffer(BufferHandle handle) const;
 
 private:
-    PassContext(RenderGraph& graph, const CommandBuffer& commandBuffer, const CompiledPass& pass, VkExtent2D extent)
+    PassContext(RenderGraph& graph, const CommandBuffer& commandBuffer, const PassInfo& pass, VkExtent2D extent)
         : graph(graph), commandBuffer(commandBuffer), pass(pass), extent(extent) {}
 
     ResourceRegistry& resources() const;
@@ -61,7 +60,7 @@ private:
 
     RenderGraph& graph;
     const CommandBuffer& commandBuffer;
-    const CompiledPass& pass;
+    const PassInfo& pass;
     VkExtent2D extent;
 
     friend class RenderGraph;

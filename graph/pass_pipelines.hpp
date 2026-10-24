@@ -11,7 +11,7 @@
 #include "../render/pipeline/graphics_pipeline.hpp"
 #include "../render/pipeline/pipeline_cache.hpp"
 #include "../render/shader.hpp"
-#include "compiled_resource.hpp"
+#include "builder_resource.hpp"
 
 namespace VkSmol {
 
@@ -25,15 +25,15 @@ class PassPipelines {
 public:
     PassPipelines(Device& device, ResourceRegistry& resources);
 
-    void init(const CompiledRenderGraph& graph, const PassDescriptors& descriptors, const std::string& cachePath);
+    void init(const GraphDeclaration& graph, const PassDescriptors& descriptors, const std::string& cachePath);
     void destroy();
 
-    void bind(const CommandBuffer& commandBuffer, const CompiledPass& pass);
-    VkPipelineLayout getLayout(const CompiledPass& pass);
-    void setRenderArea(const CommandBuffer& commandBuffer, const CompiledPass& pass, VkExtent2D extent);
-    void dispatch(const CommandBuffer& commandBuffer, const CompiledPass& pass, uint32_t x, uint32_t y, uint32_t z);
-    VkExtent3D getThreadGroupSize(const CompiledPass& pass) const;
-    void pushConstants(const CommandBuffer& commandBuffer, const CompiledPass& pass, const void* data, uint32_t size);
+    void bind(const CommandBuffer& commandBuffer, const PassInfo& pass);
+    VkPipelineLayout getLayout(const PassInfo& pass);
+    void setRenderArea(const CommandBuffer& commandBuffer, const PassInfo& pass, VkExtent2D extent);
+    void dispatch(const CommandBuffer& commandBuffer, const PassInfo& pass, uint32_t x, uint32_t y, uint32_t z);
+    VkExtent3D getThreadGroupSize(const PassInfo& pass) const;
+    void pushConstants(const CommandBuffer& commandBuffer, const PassInfo& pass, const void* data, uint32_t size);
 
 private:
     struct Compute {
@@ -56,10 +56,10 @@ private:
     std::unordered_map<uint32_t, Compute> computes;
     std::unordered_map<uint32_t, Graphics> graphics;
 
-    void createComputePipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors);
-    void createGraphicsPipelines(const CompiledRenderGraph& graph, const PassDescriptors& descriptors);
+    void createComputePipelines(const GraphDeclaration& graph, const PassDescriptors& descriptors);
+    void createGraphicsPipelines(const GraphDeclaration& graph, const PassDescriptors& descriptors);
     const ShaderCompilation& compileProgram(
-        const CompiledPass& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
+        const PassInfo& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
         const ShaderDefines& defines, const ShaderConformances& conformances
     );
 };
