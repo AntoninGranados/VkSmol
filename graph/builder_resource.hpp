@@ -163,9 +163,6 @@ struct DescriptorBindingDecl {
 // Pipeline
 // ================
 
-struct ComputePipelineHandle  { uint32_t id = InvalidHandle; };
-struct GraphicsPipelineHandle { uint32_t id = InvalidHandle; };
-
 struct ComputePipelineInfo {
     std::string name;
     std::string shaderPath;

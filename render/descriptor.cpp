@@ -1,14 +1,87 @@
-#include "descriptor_set.hpp"
+#include "descriptor.hpp"
 
-#include "./descriptor_set_layout.hpp"
-#include "./descriptor_pool.hpp"
-#include "./descriptor_set_group.hpp"
+#include <sstream>
+#include <stdexcept>
 
-#include "../../device/logical_device.hpp"
-#include "../../command/command_buffer.hpp"
-#include "../../utils.hpp"
+#include "../command/command_buffer.hpp"
+#include "../device/logical_device.hpp"
+#include "../utils.hpp"
 
 namespace VkSmol {
+
+DescriptorPool::DescriptorPool(DescriptorPool&& other) noexcept
+    : descriptorPool(other.descriptorPool),
+    poolSizes(std::move(other.poolSizes)) {
+    other.descriptorPool = VK_NULL_HANDLE;
+}
+
+DescriptorPool& DescriptorPool::operator=(DescriptorPool&& other) noexcept {
+    if (this == &other) return *this;
+
+    descriptorPool = other.descriptorPool;
+    poolSizes = std::move(other.poolSizes);
+
+    other.descriptorPool = VK_NULL_HANDLE;
+
+    return *this;
+}
+
+void DescriptorPool::init(const LogicalDevice& device, uint32_t maxSets) {
+    VkDescriptorPoolCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    createInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    createInfo.pPoolSizes = poolSizes.data();
+    createInfo.maxSets = maxSets;
+    createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+    vkCheck(vkCreateDescriptorPool(device.get(), &createInfo, nullptr, &descriptorPool), "Failed to create descriptor pool");
+}
+
+void DescriptorPool::destroy(const LogicalDevice& device) {
+    poolSizes.clear();
+    vkDestroyDescriptorPool(device.get(), descriptorPool, nullptr);
+    descriptorPool = VK_NULL_HANDLE;
+}
+
+
+void DescriptorPool::addPoolSize(VkDescriptorType descriptorType, uint32_t descriptorCount) {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = descriptorType;
+    poolSize.descriptorCount = descriptorCount;
+
+    poolSizes.emplace_back(poolSize);
+}
+
+void DescriptorSetLayout::init(const LogicalDevice& device) {
+    VkDescriptorSetLayoutCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    createInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    createInfo.pBindings = bindings.data();
+
+    vkCheck(vkCreateDescriptorSetLayout(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create descriptor set layout");
+}
+
+void DescriptorSetLayout::destroy(const LogicalDevice& device) {
+    vkDestroyDescriptorSetLayout(device.get(), rawHandle(), nullptr);
+}
+
+void DescriptorSetLayout::addBinding(VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount) {
+    VkDescriptorSetLayoutBinding layoutBinding{};
+    layoutBinding.binding = static_cast<uint32_t>(bindings.size());
+    layoutBinding.stageFlags = shaderStage;
+    layoutBinding.descriptorType = descriptorType;
+    layoutBinding.descriptorCount = descriptorCount;
+    bindings.push_back(layoutBinding);
+}
+
+void DescriptorSetLayout::addBinding(uint32_t bindingIndex, VkShaderStageFlags shaderStage, VkDescriptorType descriptorType, uint32_t descriptorCount) {
+    VkDescriptorSetLayoutBinding layoutBinding{};
+    layoutBinding.binding = bindingIndex;
+    layoutBinding.stageFlags = shaderStage;
+    layoutBinding.descriptorType = descriptorType;
+    layoutBinding.descriptorCount = descriptorCount;
+    bindings.push_back(layoutBinding);
+}
 
 void DescriptorSet::alloc(const LogicalDevice& device, const DescriptorPool& descriptorPool, const DescriptorSetLayout& descriptorSetLayout) {
     VkDescriptorSetLayout vkDescriptorSetLayout = descriptorSetLayout.get();
@@ -138,6 +211,21 @@ void DescriptorSet::clear() {
     imageInfos.clear();
     storageImageInfos.clear();
     descriptorWrites.clear();
+}
+
+void DescriptorSetGroup::destroy(const LogicalDevice& device) {
+    DescriptorSet::free(device, *this);
+    pool.destroy(device);
+}
+
+DescriptorSet& DescriptorSetGroup::at(uint32_t frameIndex) {
+    if (frameIndex >= sets.size()) {
+        std::ostringstream message;
+        message << "DescriptorSetGroup: frame index " << frameIndex
+                << " is out of range for " << sets.size() << " descriptor sets";
+        throw std::out_of_range(message.str());
+    }
+    return sets[frameIndex];
 }
 
 }

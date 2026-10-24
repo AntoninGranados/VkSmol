@@ -11,7 +11,6 @@
 #include "../image/image.hpp"
 #include "../image/image_subresource.hpp"
 #include "../image/image_view_cache.hpp"
-#include "../image/sampler.hpp"
 #include "../memory/buffer.hpp"
 #include "../track/resource_state.hpp"
 
@@ -27,7 +26,6 @@ struct ImageResource {
     ImageSubresourceLayout layout;
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
-    VkSampler sampler = VK_NULL_HANDLE;
     ImageState state;
     bool imported = false;
     Image ownedImage;

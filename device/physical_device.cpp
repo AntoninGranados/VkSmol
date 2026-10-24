@@ -7,9 +7,7 @@
 
 namespace VkSmol {
 
-PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) {
-    rawHandle() = physicalDevice;
-}
+PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice) : physicalDevice(physicalDevice) {}
 PhysicalDevice::PhysicalDevice() {}
 
 void PhysicalDevice::init(const Instance& instance) {
@@ -34,7 +32,7 @@ void PhysicalDevice::init(const Instance& instance, std::function<int(const Phys
     
     // Select the highest ranked GPU
     if (candidates.rbegin()->first > 0)
-        rawHandle() = candidates.rbegin()->second;
+        physicalDevice = candidates.rbegin()->second;
     else
         throw std::runtime_error("Failed to locate a suitable GPU");
 }

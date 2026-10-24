@@ -38,6 +38,17 @@ Device::Device(
     queueFamilies = findQueueFamilies(physicalDevice, headless ? nullptr : &surface);
 
     logicalDevice.init(physicalDevice, queueFamilies.getIndices(headless), requested);
+    if (instance.hasDebugUtils()) {
+        setDebugUtilsObjectName = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+            vkGetInstanceProcAddr(instance.get(), "vkSetDebugUtilsObjectNameEXT")
+        );
+        cmdBeginDebugUtilsLabel = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(instance.get(), "vkCmdBeginDebugUtilsLabelEXT")
+        );
+        cmdEndDebugUtilsLabel = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(instance.get(), "vkCmdEndDebugUtilsLabelEXT")
+        );
+    }
 
     graphicsQueue.init(logicalDevice, queueFamilies.graphicsFamily.value());
     transferQueue.init(logicalDevice, queueFamilies.transferFamily.value());
@@ -109,25 +120,22 @@ void Device::immediateSubmit(const std::function<void(const CommandBuffer&)>& re
 
 // ——— Buffers ————————————————————————————————————————————————————————————————
 
-Buffer Device::createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags, std::string name) {
+Buffer Device::createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags) {
     Buffer buf;
-    buf.setResourceName(name.empty() ? "Buffer" : std::move(name));
-
-    if (flags & BufferAllocMapped) {
-        buf.init(logicalDevice, usage, size, true);
-        buf.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    } else {
-        buf.init(logicalDevice, usage, size);
-        buf.alloc(logicalDevice, physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    }
-
+    if (flags & BufferAllocMapped)
+        buf.init(
+            logicalDevice, physicalDevice, usage, size,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true
+        );
+    else
+        buf.init(logicalDevice, physicalDevice, usage, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     return buf;
 }
 
 void Device::destroyBuffer(Buffer& buffer) {
     if (!buffer.get()) return;
     auto retired = std::make_shared<Buffer>(std::move(buffer));
-    retire([retired](const LogicalDevice& d) { retired->free(d); retired->destroy(d); });
+    retire([retired](const LogicalDevice& d) { retired->destroy(d); });
     buffer = Buffer{};
 }
 
@@ -135,27 +143,22 @@ void Device::destroyBuffer(Buffer& buffer) {
 
 Image Device::createImage(
     uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format, VkImageUsageFlags usage,
-    VkMemoryPropertyFlags properties, std::string name
+    VkMemoryPropertyFlags properties
 ) {
     Image img;
-    img.setResourceName(name.empty() ? "Image" : std::move(name));
-    img.init(logicalDevice, width, height, format, usage, mipLevels, arrayLayers);
-    img.alloc(logicalDevice, physicalDevice, properties);
+    img.init(logicalDevice, physicalDevice, width, height, format, usage, properties, mipLevels, arrayLayers);
     return img;
 }
 
 void Device::destroyImage(Image& image) {
     if (!image.get()) return;
     auto retired = std::make_shared<Image>(std::move(image));
-    retire([retired](const LogicalDevice& d) { retired->free(d); retired->destroy(d); });
+    retire([retired](const LogicalDevice& d) { retired->destroy(d); });
     image = Image{};
 }
 
-ImageView
-Device::createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range, std::string name) {
-    if (name.empty() && !image.getResourceName().empty()) name = image.getResourceName() + "View";
+ImageView Device::createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range) {
     ImageView view;
-    view.setResourceName(name.empty() ? "ImageView" : std::move(name));
     view.init(logicalDevice, image, type, range);
     return view;
 }
@@ -167,9 +170,8 @@ void Device::destroyImageView(ImageView& view) {
     view = ImageView{};
 }
 
-Sampler Device::createSampler(std::string name) {
+Sampler Device::createSampler() {
     Sampler smp;
-    smp.setResourceName(name.empty() ? "Sampler" : std::move(name));
     smp.init(logicalDevice, physicalDevice, features.samplerAnisotropy);
     return smp;
 }
@@ -179,6 +181,27 @@ void Device::destroySampler(Sampler& sampler) {
     auto retired = std::make_shared<Sampler>(std::move(sampler));
     retire([retired](const LogicalDevice& d) { retired->destroy(d); });
     sampler = Sampler{};
+}
+
+void Device::setObjectName(VkObjectType type, uint64_t handle, const std::string& name) const {
+    if (!setDebugUtilsObjectName || handle == 0) return;
+    const VkDebugUtilsObjectNameInfoEXT info{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = type,
+        .objectHandle = handle,
+        .pObjectName = name.c_str(),
+    };
+    setDebugUtilsObjectName(logicalDevice.get(), &info);
+}
+
+void Device::beginDebugLabel(const CommandBuffer& commandBuffer, const std::string& name) const {
+    if (!cmdBeginDebugUtilsLabel) return;
+    const VkDebugUtilsLabelEXT label{.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = name.c_str()};
+    cmdBeginDebugUtilsLabel(commandBuffer.get(), &label);
+}
+
+void Device::endDebugLabel(const CommandBuffer& commandBuffer) const {
+    if (cmdEndDebugUtilsLabel) cmdEndDebugUtilsLabel(commandBuffer.get());
 }
 
 // ——— Synchronization ————————————————————————————————————————————————————————

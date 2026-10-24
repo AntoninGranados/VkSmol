@@ -2,8 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include "../base/tracked_resource.hpp"
-
 namespace VkSmol {
 
 class PhysicalDevice;
@@ -14,7 +12,7 @@ enum BufferAllocFlagBits : BufferAllocFlags {
     BufferAllocMapped = 1 << 0,
 };
 
-class Buffer: public TrackedResource {
+class Buffer {
 public:
     Buffer() = default;
     Buffer(const Buffer&) = delete;
@@ -22,23 +20,21 @@ public:
     Buffer(Buffer&& other);
     Buffer& operator=(Buffer&& other);
 
-    // TODO: maybe combine init/alloc and destroye/free ?
     void init(
         const LogicalDevice& device,
+        PhysicalDevice physicalDevice,
         VkBufferUsageFlags usage,
         size_t size,
+        VkMemoryPropertyFlags properties,
         bool persistentMapping = false
     );
-
-    void alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
-    void free(const LogicalDevice& device);
     void destroy(const LogicalDevice& device);
 
     VkBuffer& get() { return buffer; };
     const VkBuffer& get() const { return buffer; };
     size_t getSize() const { return size; };
     VkBufferUsageFlags getUsage() const { return usage; };
-    
+
     void write(const LogicalDevice& device, const void* data, size_t bytes, size_t offset = 0);
     void read(const LogicalDevice& device, void* out, size_t bytes, size_t offset = 0);
 

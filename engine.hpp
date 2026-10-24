@@ -26,8 +26,7 @@
 
 #include "./resource/resource_registry.hpp"
 
-#include "./sync/fence.hpp"
-#include "./sync/semaphore.hpp"
+#include "./sync/sync.hpp"
 
 #include "./utils.hpp"
 

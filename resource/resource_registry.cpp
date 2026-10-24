@@ -86,8 +86,8 @@ ImageHandle ResourceRegistry::importImage(
         .imported = true,
     };
     image.state.reset(image.layout, currentAccess);
-    image.ownedSampler = device.createSampler(image.name + "Sampler");
-    image.sampler = image.ownedSampler.get();
+    image.ownedSampler = device.createSampler();
+    device.setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image.image), image.name);
     return insertImage(std::move(image));
 }
 
@@ -130,6 +130,7 @@ BufferHandle ResourceRegistry::createBuffer(std::string name, size_t size) {
 }
 
 BufferHandle ResourceRegistry::importBuffer(std::string name, VkBuffer handle, size_t size) {
+    device.setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(handle), name);
     return insertBuffer({.name = std::move(name), .size = size, .buffer = handle, .imported = true});
 }
 
@@ -180,6 +181,14 @@ VkImageView ResourceRegistry::getImageView(ImageRange range, std::optional<VkIma
     const ImageSubresourceRange subresources = resolve(range);
     const VkImageViewType viewType =
         type.value_or(subresources.layerCount > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
+    if (viewType != VK_IMAGE_VIEW_TYPE_2D && viewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY)
+        throw std::runtime_error(std::format("The image [{}] only supports 2D and 2D array views", image.name));
+    if (viewType == VK_IMAGE_VIEW_TYPE_2D && subresources.layerCount != 1)
+        throw std::runtime_error(
+            std::format(
+                "A 2D view of the image [{}] needs a single layer, got [{}]", image.name, subresources.toString()
+            )
+        );
     if (!image.imported) return image.ownedViews.getOrCreate(device, image.ownedImage, viewType, subresources);
 
     if (viewType != VK_IMAGE_VIEW_TYPE_2D)
@@ -249,13 +258,13 @@ void ResourceRegistry::allocateImage(ImageResource& image) {
     const VkImageUsageFlags usage = supportedImageUsage(device.getPhysicalDevice(), image.format);
     image.ownedImage = device.createImage(
         image.width, image.height, image.layout.mipCount, image.layout.layerCount, image.format, usage,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image.name
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
-    if (!image.ownedSampler.isValid()) image.ownedSampler = device.createSampler(image.name + "Sampler");
+    if (!image.ownedSampler.isValid()) image.ownedSampler = device.createSampler();
 
     image.image = image.ownedImage.get();
-    image.sampler = image.ownedSampler.get();
     image.state.reset(image.layout);
+    device.setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image.image), image.name);
 }
 
 void ResourceRegistry::releaseImage(ImageResource& image) {
@@ -266,9 +275,10 @@ void ResourceRegistry::releaseImage(ImageResource& image) {
 }
 
 void ResourceRegistry::allocateBuffer(BufferResource& buffer) {
-    buffer.ownedBuffer = device.createBuffer(kBufferUsage, buffer.size, 0, buffer.name);
+    buffer.ownedBuffer = device.createBuffer(kBufferUsage, buffer.size);
     buffer.buffer = buffer.ownedBuffer.get();
     buffer.state.reset();
+    device.setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer.buffer), buffer.name);
 }
 
 void ResourceRegistry::releaseBuffer(BufferResource& buffer) {

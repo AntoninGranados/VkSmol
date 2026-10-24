@@ -17,8 +17,7 @@
 #include "pass_pipelines.hpp"
 
 #include "../command/command_buffer.hpp"
-#include "../sync/fence.hpp"
-#include "../sync/semaphore.hpp"
+#include "../sync/sync.hpp"
 #include "../utils.hpp"
 
 namespace VkSmol {

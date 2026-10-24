@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "image_subresource.hpp"
-#include "image_view.hpp"
+#include "image.hpp"
 
 namespace VkSmol {
 

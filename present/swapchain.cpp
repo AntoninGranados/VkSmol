@@ -7,7 +7,7 @@
 
 #include "surface.hpp"
 #include "../device/device.hpp"
-#include "../sync/semaphore.hpp"
+#include "../sync/sync.hpp"
 #include "../utils.hpp"
 
 namespace VkSmol {

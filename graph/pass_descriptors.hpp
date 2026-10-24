@@ -3,12 +3,10 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
-#include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "../render/descriptor/descriptor_set_group.hpp"
-#include "../render/descriptor/descriptor_set_layout.hpp"
+#include "../render/descriptor.hpp"
 #include "builder_resource.hpp"
 
 namespace VkSmol {
@@ -37,7 +35,7 @@ private:
     std::unordered_map<uint32_t, std::vector<DescriptorSetGroup>> groups;
     std::unordered_map<uint32_t, std::vector<uint64_t>> written;
 
-    DescriptorSetGroup createGroup(DescriptorSetLayout& layout, std::string name);
+    DescriptorSetGroup createGroup(DescriptorSetLayout& layout);
     void destroyGroup(DescriptorSetGroup& group);
     std::vector<uint64_t> resolve(const PassInfo& pass);
     void update(const PassInfo& pass, uint32_t frame);

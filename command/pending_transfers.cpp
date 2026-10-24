@@ -71,7 +71,7 @@ void PendingTransfers::flush(const CommandBuffer& commandBuffer) {
     }
     Buffer staging;
     if (stagingSize > 0)
-        staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped, "Staging");
+        staging = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingSize, BufferAllocMapped);
 
     TransferCommands commands(resources, commandBuffer);
     size_t stagingOffset = 0;

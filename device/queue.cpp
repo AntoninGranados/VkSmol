@@ -5,8 +5,7 @@
 #include "./logical_device.hpp"
 #include "../present/swapchain.hpp"
 #include "../command/command_buffer.hpp"
-#include "../sync/semaphore.hpp"
-#include "../sync/fence.hpp"
+#include "../sync/sync.hpp"
 #include "../utils.hpp"
 
 namespace VkSmol {
@@ -43,7 +42,7 @@ QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const
 }
 
 void Queue::init(const LogicalDevice& device, uint32_t queueFamilyIndex) {
-    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &rawHandle());
+    vkGetDeviceQueue(device.get(), queueFamilyIndex, 0, &queue);
     queueSubmit2 = device.functions().queueSubmit2;
 }
 
@@ -95,7 +94,7 @@ void Queue::submit(
         .pSignalSemaphoreInfos    = signals.data(),
     };
 
-    vkCheck(queueSubmit2(rawHandle(), 1, &submitInfo, fence), "Failed to submit queue");
+    vkCheck(queueSubmit2(queue, 1, &submitInfo, fence), "Failed to submit queue");
 }
 
 bool Queue::present(
@@ -119,7 +118,7 @@ bool Queue::present(
     presentInfo.pSwapchains = vkSwapchain.data();
     presentInfo.pImageIndices = frameIndices.data();
 
-    VkResult result = vkQueuePresentKHR(rawHandle(), &presentInfo);
+    VkResult result = vkQueuePresentKHR(queue, &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         return true;
     else if (result != VK_SUCCESS)
@@ -129,7 +128,7 @@ bool Queue::present(
 }
 
 void Queue::wait() {
-    vkQueueWaitIdle(rawHandle());
+    vkQueueWaitIdle(queue);
 }
 
 }

@@ -7,7 +7,6 @@
 #include <cstdint>
 
 #include "../image/image.hpp"
-#include "../image/image_view.hpp"
 
 namespace VkSmol {
 

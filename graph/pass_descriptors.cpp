@@ -1,7 +1,6 @@
 #include "pass_descriptors.hpp"
 
 #include <algorithm>
-#include <format>
 #include <memory>
 #include <utility>
 
@@ -38,7 +37,7 @@ void PassDescriptors::init(const GraphDeclaration& graph) {
         for (uint32_t set = 0; set < setCount; ++set) {
             passLayouts[set].init(logicalDevice);
             if (!passLayouts[set].getBindings().empty())
-                passGroups[set] = createGroup(passLayouts[set], std::format("{}Descriptors{}", pass.name, set));
+                passGroups[set] = createGroup(passLayouts[set]);
         }
     }
 }
@@ -81,16 +80,13 @@ void PassDescriptors::bind(
         if (it->second[set].isValid()) it->second[set].at(frame).bind(commandBuffer, layout, bindPoint, set);
 }
 
-DescriptorSetGroup PassDescriptors::createGroup(DescriptorSetLayout& layout, std::string name) {
+DescriptorSetGroup PassDescriptors::createGroup(DescriptorSetLayout& layout) {
     DescriptorPool pool;
     for (const auto& binding : layout.getBindings()) pool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
     pool.init(logicalDevice, MAX_FRAME_IN_FLIGHT);
 
     std::vector<DescriptorSet> sets(MAX_FRAME_IN_FLIGHT);
-    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; ++i) {
-        sets[i].alloc(logicalDevice, pool, layout);
-        sets[i].setResourceName(name + '[' + std::to_string(i) + ']');
-    }
+    for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; ++i) sets[i].alloc(logicalDevice, pool, layout);
     return DescriptorSetGroup(std::move(pool), std::move(sets));
 }
 
@@ -108,7 +104,7 @@ std::vector<uint64_t> PassDescriptors::resolve(const PassInfo& pass) {
             resolved.push_back(
                 reinterpret_cast<uint64_t>(resources.getImageView({image, decl.subresources}, decl.viewType))
             );
-            resolved.push_back(reinterpret_cast<uint64_t>(resources.getImage(image).sampler));
+            resolved.push_back(reinterpret_cast<uint64_t>(resources.getImage(image).ownedSampler.get()));
         } else {
             const BufferResource& buffer = resources.getBuffer({.id = decl.handleId});
             resolved.push_back(reinterpret_cast<uint64_t>(buffer.buffer));
@@ -131,7 +127,9 @@ void PassDescriptors::update(const PassInfo& pass, uint32_t frame) {
                 const ImageHandle image = {.id = decl.handleId};
                 const VkImageView view = resources.getImageView({image, decl.subresources}, decl.viewType);
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    descriptorSet.linkCombinedImageSampler(view, resources.getImage(image).sampler, decl.binding);
+                    descriptorSet.linkCombinedImageSampler(
+                        view, resources.getImage(image).ownedSampler.get(), decl.binding
+                    );
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                     descriptorSet.linkStorageImage(view, decl.binding);
             } else {

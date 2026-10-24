@@ -258,6 +258,7 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const PassInfo&
 
     vkCmdResetQueryPool(commandBuffer.get(), timestampPool, base, 2);
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestampPool, base);
+    device.beginDebugLabel(commandBuffer, pass.name);
     emitBarriers(commandBuffer, pass);
 
     switch (pass.type) {
@@ -282,6 +283,7 @@ void RenderGraph::recordPass(const CommandBuffer& commandBuffer, const PassInfo&
             break;
     }
 
+    device.endDebugLabel(commandBuffer);
     logicalDevice.functions().cmdWriteTimestamp2(commandBuffer.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestampPool, base + 1);
 }
 

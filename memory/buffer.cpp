@@ -1,5 +1,7 @@
 #include "buffer.hpp"
 
+#include <cstring>
+
 #include "../device/physical_device.hpp"
 #include "../device/logical_device.hpp"
 #include "../utils.hpp"
@@ -7,8 +9,7 @@
 namespace VkSmol {
 
 Buffer::Buffer(Buffer&& other)
-    : TrackedResource(std::move(other)),
-      persistentMapping(other.persistentMapping),
+    : persistentMapping(other.persistentMapping),
       buffer(other.buffer),
       bufferMemory(other.bufferMemory),
       usage(other.usage),
@@ -29,8 +30,6 @@ Buffer& Buffer::operator=(Buffer&& other) {
         throw std::runtime_error("Buffer move assignment requires an empty destination");
     }
 
-    TrackedResource::operator=(std::move(other));
-
     persistentMapping = other.persistentMapping;
     buffer = other.buffer;
     bufferMemory = other.bufferMemory;
@@ -50,8 +49,10 @@ Buffer& Buffer::operator=(Buffer&& other) {
 
 void Buffer::init(
     const LogicalDevice& device,
+    PhysicalDevice physicalDevice,
     VkBufferUsageFlags usage_,
     size_t size_,
+    VkMemoryPropertyFlags properties,
     bool persistentMapping_
 ) {
     usage = usage_;
@@ -65,9 +66,7 @@ void Buffer::init(
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;     //! Can only be used in one queue
 
     vkCheck(vkCreateBuffer(device.get(), &createInfo, nullptr, &buffer), "Failed to create buffer");
-}
 
-void Buffer::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device.get(), buffer, &memRequirements);
 
@@ -88,8 +87,7 @@ void Buffer::alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, V
         vkMapMemory(device.get(), bufferMemory, 0, size, 0, &bufferMapped);
 }
 
-
-void Buffer::free(const LogicalDevice& device) {
+void Buffer::destroy(const LogicalDevice& device) {
     if (persistentMapping && bufferMapped != nullptr) {
         vkUnmapMemory(device.get(), bufferMemory);
     }
@@ -98,9 +96,7 @@ void Buffer::free(const LogicalDevice& device) {
     }
     bufferMemory = VK_NULL_HANDLE;
     bufferMapped = nullptr;
-}
 
-void Buffer::destroy(const LogicalDevice& device) {
     if (buffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device.get(), buffer, nullptr);
     }

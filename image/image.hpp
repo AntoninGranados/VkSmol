@@ -2,14 +2,14 @@
 
 #include <vulkan/vulkan.h>
 
-#include "../base/tracked_resource.hpp"
+#include "../base/unique_handle.hpp"
 
 namespace VkSmol {
 
 class LogicalDevice;
 class PhysicalDevice;
 
-class Image: public TrackedResource {
+class Image {
 public:
     Image() = default;
     Image(const Image&) = delete;
@@ -18,12 +18,10 @@ public:
     Image& operator=(Image&& other);
 
     void init(
-        const LogicalDevice& device, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-        uint32_t mipLevels = 1, uint32_t arrayLayers = 1
+        const LogicalDevice& device, PhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format,
+        VkImageUsageFlags usage, VkMemoryPropertyFlags properties, uint32_t mipLevels = 1, uint32_t arrayLayers = 1
     );
     void initExternal(VkImage handle, VkFormat fmt, uint32_t w, uint32_t h);
-    void alloc(const LogicalDevice& device, PhysicalDevice physicalDevice, VkMemoryPropertyFlags properties);
-    void free(const LogicalDevice& device);
     void destroy(const LogicalDevice& device);
 
     VkImage& get() { return image; }
@@ -42,6 +40,20 @@ private:
     uint32_t width = 0, height = 0;
     uint32_t mipLevels = 1, arrayLayers = 1;
     bool owned = true;
+};
+
+class ImageView: public UniqueHandle<VkImageView, VK_NULL_HANDLE> {
+public:
+    void init(const LogicalDevice& device, const Image& image);
+    void
+    init(const LogicalDevice& device, const Image& image, VkImageViewType type, const VkImageSubresourceRange& range);
+    void destroy(const LogicalDevice& device);
+};
+
+class Sampler: public UniqueHandle<VkSampler, VK_NULL_HANDLE> {
+public:
+    void init(const LogicalDevice& device, PhysicalDevice physicalDevice, bool anisotropy);
+    void destroy(const LogicalDevice& device);
 };
 
 }

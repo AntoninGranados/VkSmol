@@ -94,7 +94,7 @@ VkImageView Engine::getImageView(ImageRange image, std::optional<VkImageViewType
     return resources.getImageView(image, type);
 }
 
-VkSampler Engine::getSampler(ImageHandle image) const { return resources.getImage(image).sampler; }
+VkSampler Engine::getSampler(ImageHandle image) const { return resources.getImage(image).ownedSampler.get(); }
 
 ImageSubresourceRange Engine::resolveImageRange(ImageRange image) const { return resources.resolve(image); }
 
@@ -106,9 +106,7 @@ void Engine::readImage(ImageRange image, void* out, size_t size) {
     if (size == 0) return;
     checkImageTransfer(resources, image, size);
 
-    Buffer readback = device.createBuffer(
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, resources.getImage(image.image).name + "Readback"
-    );
+    Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped);
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
         pendingTransfers.flush(commandBuffer);
         resources.transitionImage(commandBuffer, image, ImageTransferSource);
@@ -163,9 +161,7 @@ void Engine::readBuffer(BufferHandle buffer, void* out, size_t size, size_t offs
     if (size == 0) return;
     checkBufferTransfer(resources, buffer, offset, size);
 
-    Buffer readback = device.createBuffer(
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped, resources.getBuffer(buffer).name + "Readback"
-    );
+    Buffer readback = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT, size, BufferAllocMapped);
     device.immediateSubmit([&](const CommandBuffer& commandBuffer) {
         pendingTransfers.flush(commandBuffer);
         resources.transitionBuffer(commandBuffer, buffer, BufferTransferSource);

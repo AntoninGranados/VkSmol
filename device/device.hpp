@@ -13,19 +13,15 @@
 #include <vector>
 
 #include "../instance/instance.hpp"
-#include "../instance/debug_messenger.hpp"
 #include "device_features.hpp"
 #include "engine_features.hpp"
 #include "physical_device.hpp"
 #include "logical_device.hpp"
 #include "queue.hpp"
-#include "../command/command_pool.hpp"
 #include "../command/command_buffer.hpp"
 #include "../present/surface.hpp"
 #include "../memory/buffer.hpp"
 #include "../image/image.hpp"
-#include "../image/image_view.hpp"
-#include "../image/sampler.hpp"
 #include "../render/shader.hpp"
 #include "../render/shader_file_system.hpp"
 #include "../utils.hpp"
@@ -77,21 +73,24 @@ public:
     void freeCommandBuffer(CommandBuffer& commandBuffer);
     void immediateSubmit(const std::function<void(const CommandBuffer&)>& record);
 
-    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags = 0, std::string name = {});
+    Buffer createBuffer(VkBufferUsageFlags usage, size_t size, BufferAllocFlags flags = 0);
     void destroyBuffer(Buffer& buffer);
 
     Image createImage(
         uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t arrayLayers, VkFormat format,
-        VkImageUsageFlags usage, VkMemoryPropertyFlags properties, std::string name = {}
+        VkImageUsageFlags usage, VkMemoryPropertyFlags properties
     );
     void destroyImage(Image& image);
 
-    ImageView
-    createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range, std::string name = {});
+    ImageView createImageView(Image& image, VkImageViewType type, const VkImageSubresourceRange& range);
     void destroyImageView(ImageView& imageView);
 
-    Sampler createSampler(std::string name = {});
+    Sampler createSampler();
     void destroySampler(Sampler& sampler);
+
+    void setObjectName(VkObjectType type, uint64_t handle, const std::string& name) const;
+    void beginDebugLabel(const CommandBuffer& commandBuffer, const std::string& name) const;
+    void endDebugLabel(const CommandBuffer& commandBuffer) const;
 
     void emitMemoryBarrier(
         const CommandBuffer& commandBuffer,
@@ -112,6 +111,10 @@ private:
     PhysicalDevice physicalDevice;
     Surface        surface;
     LogicalDevice  logicalDevice;
+
+    PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectName = nullptr;
+    PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabel = nullptr;
+    PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabel = nullptr;
 
     QueueFamilyIndices queueFamilies;
     Queue graphicsQueue, transferQueue, presentQueue;

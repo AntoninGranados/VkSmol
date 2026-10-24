@@ -7,7 +7,7 @@
 #include "imgui/imgui.h"
 
 #include "../graph/builder_resource.hpp"
-#include "../render/descriptor/descriptor_pool.hpp"
+#include "../render/descriptor.hpp"
 
 namespace VkSmol {
 

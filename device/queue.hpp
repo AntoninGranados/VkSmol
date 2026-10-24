@@ -6,8 +6,6 @@
 #include <algorithm>
 #include <vector>
 
-#include "../base/borrowed_handle.hpp"
-
 namespace VkSmol {
 
 class Surface;
@@ -43,8 +41,10 @@ struct QueueFamilyIndices {
 
 QueueFamilyIndices findQueueFamilies(const PhysicalDevice& physicalDevice, const Surface* surface);
 
-class Queue: public BorrowedHandle<VkQueue, VK_NULL_HANDLE> {
+class Queue {
 public:
+    VkQueue get() const { return queue; }
+
     void init(const LogicalDevice& device, uint32_t queueFamilyIndex);
 
     // Should be able to generate multiple VkSubmitInfo and submit them
@@ -65,6 +65,7 @@ public:
     void wait();
 
 private:
+    VkQueue queue = VK_NULL_HANDLE;
     PFN_vkQueueSubmit2KHR queueSubmit2 = nullptr;
 
     void submit(const std::vector<const CommandBuffer*>& commandBuffers, VkFence fence,
