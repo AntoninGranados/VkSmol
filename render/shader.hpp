@@ -100,8 +100,8 @@ public:
     VkPipelineShaderStageCreateInfo getShaderStageCreateInfo() const;
 
     static ShaderCompilation compile(
-        const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances,
-        ShaderFileSystem& fileSystem
+        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages, const ShaderDefines& defines,
+        const ShaderConformances& conformances, ShaderFileSystem& fileSystem
     );
     static std::vector<ShaderStruct>
     reflect(const std::string& path, const std::string& interfaceName, ShaderFileSystem& fileSystem);

@@ -159,6 +159,43 @@ public:
         return type;
     }
 
+    Slang::ComPtr<slang::IEntryPoint>
+    findEntryPoint(slang::IModule* module, const std::string& path, VkShaderStageFlagBits stage) {
+        SlangStage slangStage;
+        const char* stageName;
+        switch (stage) {
+        case VK_SHADER_STAGE_VERTEX_BIT:
+            slangStage = SLANG_STAGE_VERTEX;
+            stageName = "vertex";
+            break;
+        case VK_SHADER_STAGE_FRAGMENT_BIT:
+            slangStage = SLANG_STAGE_FRAGMENT;
+            stageName = "fragment";
+            break;
+        case VK_SHADER_STAGE_COMPUTE_BIT:
+            slangStage = SLANG_STAGE_COMPUTE;
+            stageName = "compute";
+            break;
+        default:
+            throw std::runtime_error(
+                std::format("The shader [{}{}{}] is requested for an unsupported stage", MSG_RED_B, path, MSG_RESET)
+            );
+        }
+
+        for (SlangInt32 i = 0; i < module->getDefinedEntryPointCount(); ++i) {
+            Slang::ComPtr<slang::IEntryPoint> entryPoint;
+            if (SLANG_FAILED(module->getDefinedEntryPoint(i, entryPoint.writeRef()))) throw fail(path);
+            slang::ProgramLayout* layout = entryPoint->getLayout(0, diagnostics.writeRef());
+            if (!layout) throw fail(path);
+            if (layout->getEntryPointByIndex(0)->getStage() == slangStage) return entryPoint;
+        }
+        throw std::runtime_error(
+            std::format(
+                "The shader [{}{}{}] has no [shader(\"{}\")] entry point", MSG_RED_B, path, MSG_RESET, stageName
+            )
+        );
+    }
+
     template <typename Reflection> std::vector<ShaderAttribute> reflectAttributes(Reflection* reflection) {
         std::vector<ShaderAttribute> attributes;
         for (unsigned int i = 0; i < reflection->getUserAttributeCount(); i++) {
@@ -291,13 +328,13 @@ static VkImageViewType reflectViewType(slang::TypeLayoutReflection* type) {
 }
 
 ShaderCompilation Shader::compile(
-    const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances,
-    ShaderFileSystem& fileSystem
+    const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages, const ShaderDefines& defines,
+    const ShaderConformances& conformances, ShaderFileSystem& fileSystem
 ) {
     ShaderCompilation compilation;
     std::string programName;
-    for (const std::string& path : paths) programName += (programName.empty() ? "" : ", ") + path;
-    if (paths.empty()) throw std::runtime_error("Cannot compile a shader program without any shader");
+    for (const auto& [stage, path] : stages) programName += (programName.empty() ? "" : ", ") + path;
+    if (stages.empty()) throw std::runtime_error("Cannot compile a shader program without any shader");
 
     SlangContext context(defines, fileSystem, compilation.dependencies);
     Slang::ComPtr<slang::ISession>& session = context.session;
@@ -305,23 +342,20 @@ ShaderCompilation Shader::compile(
     const auto fail = [&] { return context.fail(programName); };
 
     std::vector<slang::IComponentType*> components;
-    std::vector<Slang::ComPtr<slang::IEntryPoint>> entryPoints(paths.size());
-    for (size_t i = 0; i < paths.size(); ++i) {
-        const std::string moduleName = std::format("{}_{}", std::filesystem::path(paths[i]).stem().string(), i);
-        slang::IModule* module = context.loadModule(paths[i], moduleName);
-        if (SLANG_FAILED(module->findEntryPointByName("main", entryPoints[i].writeRef())))
-            throw std::runtime_error(
-                std::format(
-                    "The shader [{}{}{}] has no [shader(...)] entry point named main", MSG_RED_B, paths[i], MSG_RESET
-                )
-            );
-        components.push_back(module);
+    std::vector<Slang::ComPtr<slang::IEntryPoint>> entryPoints(stages.size());
+    for (size_t i = 0; i < stages.size(); ++i) {
+        const auto& [stage, path] = stages[i];
+        const std::string moduleName = std::format("{}_{}", std::filesystem::path(path).stem().string(), i);
+        slang::IModule* module = context.loadModule(path, moduleName);
+        entryPoints[i] = context.findEntryPoint(module, path, stage);
+        if (std::ranges::find(components, static_cast<slang::IComponentType*>(module)) == components.end())
+            components.push_back(module);
     }
     for (const Slang::ComPtr<slang::IEntryPoint>& entryPoint : entryPoints) components.push_back(entryPoint.get());
 
     std::vector<Slang::ComPtr<slang::ITypeConformance>> typeConformances;
     for (const ShaderConformance& conformance : conformances) {
-        const std::string& scopePath = conformance.modulePath.empty() ? paths.front() : conformance.modulePath;
+        const std::string& scopePath = conformance.modulePath.empty() ? stages.front().second : conformance.modulePath;
         slang::IModule* scope = context.loadModule(scopePath, scopePath);
         if (std::ranges::find(components, static_cast<slang::IComponentType*>(scope)) == components.end())
             components.push_back(scope);
@@ -348,8 +382,9 @@ ShaderCompilation Shader::compile(
     if (SLANG_FAILED(program->link(linkedProgram.writeRef(), diagnostics.writeRef()))) throw fail();
 
     slang::ProgramLayout* layout = linkedProgram->getLayout();
-    std::vector<Slang::ComPtr<slang::IMetadata>> metadata(paths.size());
-    for (size_t i = 0; i < paths.size(); ++i) {
+    std::vector<Slang::ComPtr<slang::IMetadata>> metadata(stages.size());
+    for (size_t i = 0; i < stages.size(); ++i) {
+        const auto& [stage, path] = stages[i];
         const SlangInt index = static_cast<SlangInt>(i);
         Slang::ComPtr<slang::IBlob> spirv;
         if (SLANG_FAILED(linkedProgram->getEntryPointCode(index, 0, spirv.writeRef(), diagnostics.writeRef())))
@@ -359,31 +394,12 @@ ShaderCompilation Shader::compile(
             ))
             throw fail();
 
-        VkShaderStageFlagBits stage;
-        switch (layout->getEntryPointByIndex(i)->getStage()) {
-        case SLANG_STAGE_VERTEX:
-            stage = VK_SHADER_STAGE_VERTEX_BIT;
-            break;
-        case SLANG_STAGE_FRAGMENT:
-            stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            break;
-        case SLANG_STAGE_COMPUTE:
-            stage = VK_SHADER_STAGE_COMPUTE_BIT;
-            break;
-        default:
-            throw std::runtime_error(
-                std::format(
-                    "The shader [{}{}{}] does not have a supported stage for the compilation", MSG_RED_B, paths[i],
-                    MSG_RESET
-                )
-            );
-        }
         compilation.stages.push_back({
-            .path = paths[i],
+            .path = path,
             .stage = stage,
             .spirv = optimize(
                 static_cast<const uint32_t*>(spirv->getBufferPointer()), spirv->getBufferSize() / sizeof(uint32_t),
-                paths[i]
+                path
             ),
         });
     }
@@ -429,7 +445,7 @@ ShaderCompilation Shader::compile(
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);
 
-    for (size_t index = 0; index < paths.size(); ++index) {
+    for (size_t index = 0; index < stages.size(); ++index) {
         slang::EntryPointReflection* entryPointLayout = layout->getEntryPointByIndex(index);
         if (compilation.stages[index].stage == VK_SHADER_STAGE_COMPUTE_BIT) {
             SlangUInt size[3];

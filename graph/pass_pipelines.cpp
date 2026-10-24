@@ -168,19 +168,8 @@ const ShaderCompilation& PassPipelines::compileProgram(
     const PassInfo& pass, const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages,
     const ShaderDefines& defines, const ShaderConformances& conformances
 ) {
-    std::vector<std::string> paths;
-    for (const auto& [stage, path] : stages) paths.push_back(path);
-    const Device::CompiledShader& compiled = device.compileShader(paths, defines, conformances);
+    const Device::CompiledShader& compiled = device.compileShader(stages, defines, conformances);
     if (!compiled.error.empty()) std::println(stderr, "{}", compiled.error);
-
-    for (size_t i = 0; i < stages.size(); ++i)
-        if (compiled.compilation.stages[i].stage != stages[i].first)
-            throw std::runtime_error(
-                std::format(
-                    "The shader [{}{}{}] does not have the stage expected by the pass [{}]", MSG_RED_B, paths[i],
-                    MSG_RESET, pass.name
-                )
-            );
 
     for (const ShaderParameter& parameter : compiled.compilation.parameters) {
         if (!parameter.used) continue;

@@ -49,18 +49,21 @@ void resolveBindings(
         PassInfo& pass = passes[passId];
         if (pass.namedBindings.empty()) continue;
 
-        std::vector<std::tuple<std::vector<std::string>, ShaderDefines, ShaderConformances>> programs;
+        std::vector<
+            std::tuple<std::vector<std::pair<VkShaderStageFlagBits, std::string>>, ShaderDefines, ShaderConformances>>
+            programs;
         VkShaderStageFlags stageFlags = 0;
         for (const ComputePipelineInfo& info : computePipelines)
             if (info.passId == passId) {
-                programs.emplace_back(std::vector{info.shaderPath}, info.shaderDefines, info.shaderConformances);
+                programs.emplace_back(
+                    std::vector{std::pair{VK_SHADER_STAGE_COMPUTE_BIT, info.shaderPath}}, info.shaderDefines,
+                    info.shaderConformances
+                );
                 stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
             }
         for (const GraphicsPipelineInfo& info : graphicsPipelines)
             if (info.passId == passId) {
-                std::vector<std::string> paths;
-                for (const auto& [stage, path] : info.shaderPaths) paths.push_back(path);
-                programs.emplace_back(std::move(paths), info.shaderDefines, info.shaderConformances);
+                programs.emplace_back(info.shaderPaths, info.shaderDefines, info.shaderConformances);
                 stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
             }
         if (programs.empty()) {
@@ -70,9 +73,9 @@ void resolveBindings(
 
         std::vector<const ShaderParameter*> parameters;
         try {
-            for (const auto& [paths, defines, conformances] : programs)
+            for (const auto& [stages, defines, conformances] : programs)
                 for (const ShaderParameter& parameter :
-                     device.compileShader(paths, defines, conformances).compilation.parameters)
+                     device.compileShader(stages, defines, conformances).compilation.parameters)
                     parameters.push_back(&parameter);
         } catch (const std::exception& e) {
             errors.push_back(e.what());

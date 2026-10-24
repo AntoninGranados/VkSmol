@@ -62,7 +62,8 @@ public:
 
     void setShaderFileSystem(std::shared_ptr<ShaderFileSystem> fileSystem) { shaderFileSystem = std::move(fileSystem); }
     const CompiledShader& compileShader(
-        const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances
+        const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages, const ShaderDefines& defines,
+        const ShaderConformances& conformances
     );
     std::vector<ShaderStruct> reflectShaderStructs(const std::string& path, const std::string& interfaceName) {
         return Shader::reflect(path, interfaceName, *shaderFileSystem);
@@ -123,7 +124,10 @@ private:
     uint32_t currentRetirementFrame = 0;
     std::array<std::vector<std::function<void(const LogicalDevice&)>>, MAX_FRAME_IN_FLIGHT> retirementQueue;
 
-    std::map<std::tuple<std::vector<std::string>, ShaderDefines, ShaderConformances>, CompiledShader> compiledShaders;
+    std::map<
+        std::tuple<std::vector<std::pair<VkShaderStageFlagBits, std::string>>, ShaderDefines, ShaderConformances>,
+        CompiledShader>
+        compiledShaders;
     std::shared_ptr<ShaderFileSystem> shaderFileSystem = std::make_shared<NativeShaderFileSystem>();
 
     void flushRetired();

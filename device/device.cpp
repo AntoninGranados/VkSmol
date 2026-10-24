@@ -75,9 +75,10 @@ Device::~Device() {
 // ——— Shaders ————————————————————————————————————————————————————————————————
 
 const Device::CompiledShader& Device::compileShader(
-    const std::vector<std::string>& paths, const ShaderDefines& defines, const ShaderConformances& conformances
+    const std::vector<std::pair<VkShaderStageFlagBits, std::string>>& stages, const ShaderDefines& defines,
+    const ShaderConformances& conformances
 ) {
-    CompiledShader& compiled = compiledShaders[{paths, defines, conformances}];
+    CompiledShader& compiled = compiledShaders[{stages, defines, conformances}];
     if (compiled.checked)
         return compiled;
 
@@ -85,7 +86,7 @@ const Device::CompiledShader& Device::compileShader(
     if (compiled.compilation.stages.empty() ||
         !Shader::isUpToDate(compiled.compilation.dependencies, *shaderFileSystem)) {
         try {
-            compiled.compilation = Shader::compile(paths, defines, conformances, *shaderFileSystem);
+            compiled.compilation = Shader::compile(stages, defines, conformances, *shaderFileSystem);
         } catch (const std::exception& e) {
             if (compiled.compilation.stages.empty()) throw;
             compiled.error = e.what();
