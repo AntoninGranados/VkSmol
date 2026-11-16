@@ -157,6 +157,8 @@ struct DescriptorBindingDecl {
     VkImageViewType viewType;
     VkDescriptorType descriptorType;
     VkShaderStageFlags stageFlags;
+    uint32_t element = 0;
+    uint32_t count = 1;
 };
 
 // ================
@@ -192,6 +194,8 @@ struct NamedBinding {
     uint32_t handleId;
     ImageSubresourceRange subresources;
     AccessType access;
+    bool array = false;
+    uint32_t element = 0;
 };
 
 struct PassInfo {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <span>
 #include <string>
 #include <utility>
 
@@ -15,6 +16,19 @@ public:
 
     Derived& read(std::string name, ImageRange image) {
         return bind(std::move(name), true, image.image.id, image.subresources, AccessType::Read);
+    }
+    Derived& read(std::string name, std::span<const ImageHandle> images) {
+        for (uint32_t element = 0; element < images.size(); ++element)
+            graph->passes[handle.id].namedBindings.push_back({
+                .name = name,
+                .isImage = true,
+                .handleId = images[element].id,
+                .subresources = {},
+                .access = AccessType::Read,
+                .array = true,
+                .element = element,
+            });
+        return static_cast<Derived&>(*this);
     }
     Derived& read(std::string name, BufferHandle buffer) {
         return bind(std::move(name), false, buffer.id, {}, AccessType::Read);

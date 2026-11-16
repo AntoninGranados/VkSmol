@@ -55,8 +55,8 @@ public:
 
     void linkUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding);
     void linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding);
-    void linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding);
-    void linkStorageImage(VkImageView view, uint32_t binding);
+    void linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t element = 0);
+    void linkStorageImage(VkImageView view, uint32_t binding, uint32_t element = 0);
     void update(const LogicalDevice& device);
     void bind(const CommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, uint32_t setIndex = 0);
     void clear();
@@ -66,8 +66,14 @@ private:
 
     std::vector<std::pair<VkDescriptorBufferInfo, uint32_t> > bufferInfos;
     std::vector<std::pair<VkDescriptorBufferInfo, uint32_t> > storageInfos;
-    std::vector<std::pair<VkDescriptorImageInfo, uint32_t> > imageInfos;
-    std::vector<std::pair<VkDescriptorImageInfo, uint32_t> > storageImageInfos;
+    struct ImageLink {
+        VkDescriptorImageInfo info;
+        uint32_t binding;
+        uint32_t element;
+    };
+
+    std::vector<ImageLink> imageInfos;
+    std::vector<ImageLink> storageImageInfos;
     std::vector<VkWriteDescriptorSet> descriptorWrites;
 };
 

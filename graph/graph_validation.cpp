@@ -97,6 +97,15 @@ void resolveBindings(
             }
             for (const ShaderParameter* match : matches) {
                 const ShaderParameter& parameter = *match;
+                if (binding.array ? binding.element >= parameter.count : parameter.count > 1) {
+                    errors.push_back(
+                        std::format(
+                            "The pass [{}] binds [{}{}{}] with a count that does not fit the {} descriptors the shader declares",
+                            pass.name, MSG_RED_B, binding.name, MSG_RESET, parameter.count
+                        )
+                    );
+                    continue;
+                }
                 if (binding.access == AccessType::Write && !parameter.writable) {
                     errors.push_back(
                         std::format(
@@ -164,6 +173,8 @@ void resolveBindings(
                     .viewType = parameter.viewType,
                     .descriptorType = parameter.descriptorType,
                     .stageFlags = stageFlags,
+                    .element = binding.element,
+                    .count = parameter.count,
                 });
             }
         }
@@ -171,7 +182,8 @@ void resolveBindings(
         const std::vector<DescriptorBindingDecl>& decls = pass.descriptorBindings;
         for (size_t i = 0; i < decls.size(); ++i)
             for (size_t j = i + 1; j < decls.size(); ++j)
-                if (decls[i].set == decls[j].set && decls[i].binding == decls[j].binding)
+                if (decls[i].set == decls[j].set && decls[i].binding == decls[j].binding &&
+                    decls[i].element == decls[j].element)
                     errors.push_back(
                         std::format(
                             "The pass [{}] binds two resources to set {}, binding {}", pass.name, decls[i].set,

@@ -13,6 +13,7 @@ struct EngineFeatures {
     bool bufferFloatAtomicAdd = false;
     bool sharedFloatAtomicAdd = false;
     bool imageFloatAtomicAdd = false;
+    bool imageArrays = false;
 };
 
 } // namespace VkSmol

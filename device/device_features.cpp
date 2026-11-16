@@ -21,6 +21,8 @@ DeviceFeatureChain::DeviceFeatureChain(const EngineFeatures& requested, bool pre
     atomicFloat.shaderBufferFloat32AtomicAdd = requested.bufferFloatAtomicAdd;
     atomicFloat.shaderSharedFloat32AtomicAdd = requested.sharedFloatAtomicAdd;
     atomicFloat.shaderImageFloat32AtomicAdd = requested.imageFloatAtomicAdd;
+    vulkan12.descriptorBindingPartiallyBound = requested.imageArrays;
+    vulkan12.shaderSampledImageArrayNonUniformIndexing = requested.imageArrays;
     link();
 }
 
@@ -72,6 +74,14 @@ std::vector<std::string> DeviceFeatureChain::findMissing(const DeviceFeatureChai
         "shaderImageFloat32AtomicAdd", atomicFloat.shaderImageFloat32AtomicAdd,
         supported.atomicFloat.shaderImageFloat32AtomicAdd
     );
+    check(
+        "descriptorBindingPartiallyBound", vulkan12.descriptorBindingPartiallyBound,
+        supported.vulkan12.descriptorBindingPartiallyBound
+    );
+    check(
+        "shaderSampledImageArrayNonUniformIndexing", vulkan12.shaderSampledImageArrayNonUniformIndexing,
+        supported.vulkan12.shaderSampledImageArrayNonUniformIndexing
+    );
     return missing;
 }
 
@@ -85,10 +95,12 @@ void DeviceFeatureChain::link() {
     synchronization2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
     shaderDrawParameters.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
     atomicFloat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+    vulkan12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features.pNext = &dynamicRendering;
     dynamicRendering.pNext = &synchronization2;
     synchronization2.pNext = &shaderDrawParameters;
-    shaderDrawParameters.pNext = hasExtension(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME) ? &atomicFloat : nullptr;
+    shaderDrawParameters.pNext = &vulkan12;
+    vulkan12.pNext = hasExtension(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME) ? &atomicFloat : nullptr;
     atomicFloat.pNext = nullptr;
 }
 

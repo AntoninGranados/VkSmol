@@ -72,6 +72,7 @@ struct ShaderParameter {
     VkImageViewType viewType;
     bool             writable;
     bool             used;
+    uint32_t         count = 1;
 };
 
 struct ShaderDependency {

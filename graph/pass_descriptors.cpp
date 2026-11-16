@@ -30,7 +30,8 @@ void PassDescriptors::init(const GraphDeclaration& graph) {
         std::vector<DescriptorSetLayout>& passLayouts = layouts[passId];
         passLayouts = std::vector<DescriptorSetLayout>(setCount);
         for (const DescriptorBindingDecl& decl : decls)
-            passLayouts[decl.set].addBinding(decl.binding, decl.stageFlags, decl.descriptorType);
+            if (decl.element == 0)
+                passLayouts[decl.set].addBinding(decl.binding, decl.stageFlags, decl.descriptorType, decl.count);
 
         std::vector<DescriptorSetGroup>& passGroups = groups[passId];
         passGroups = std::vector<DescriptorSetGroup>(setCount);
@@ -82,7 +83,8 @@ void PassDescriptors::bind(
 
 DescriptorSetGroup PassDescriptors::createGroup(DescriptorSetLayout& layout) {
     DescriptorPool pool;
-    for (const auto& binding : layout.getBindings()) pool.addPoolSize(binding.descriptorType, MAX_FRAME_IN_FLIGHT);
+    for (const auto& binding : layout.getBindings())
+        pool.addPoolSize(binding.descriptorType, binding.descriptorCount * MAX_FRAME_IN_FLIGHT);
     pool.init(logicalDevice, MAX_FRAME_IN_FLIGHT);
 
     std::vector<DescriptorSet> sets(MAX_FRAME_IN_FLIGHT);
@@ -128,10 +130,10 @@ void PassDescriptors::update(const PassInfo& pass, uint32_t frame) {
                 const VkImageView view = resources.getImageView({image, decl.subresources}, decl.viewType);
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     descriptorSet.linkCombinedImageSampler(
-                        view, resources.getImage(image).ownedSampler.get(), decl.binding
+                        view, resources.getImage(image).ownedSampler.get(), decl.binding, decl.element
                     );
                 else if (decl.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                    descriptorSet.linkStorageImage(view, decl.binding);
+                    descriptorSet.linkStorageImage(view, decl.binding, decl.element);
             } else {
                 const BufferResource& buffer = resources.getBuffer({.id = decl.handleId});
                 if (decl.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)

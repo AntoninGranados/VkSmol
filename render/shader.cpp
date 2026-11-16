@@ -428,6 +428,17 @@ ShaderCompilation Shader::compile(
             return;
         }
 
+        uint32_t count = 1;
+        if (type->getKind() == slang::TypeReflection::Kind::Array) {
+            const size_t elementCount = type->getElementCount();
+            if (elementCount == SLANG_UNBOUNDED_SIZE)
+                throw std::runtime_error(
+                    std::format("The parameter [{}{}{}] is an unbounded array, declare its size", MSG_RED_B, name, MSG_RESET)
+                );
+            count = static_cast<uint32_t>(elementCount);
+            type = type->getElementTypeLayout();
+        }
+
         const std::optional<std::pair<VkDescriptorType, bool>> descriptor = reflectDescriptorType(type);
         if (!descriptor) return;
 
@@ -440,7 +451,8 @@ ShaderCompilation Shader::compile(
             used |= stageUsed;
         }
         compilation.parameters.push_back(
-            {name, ShaderLocation(set, binding), descriptor->first, reflectViewType(type), descriptor->second, used}
+            {name, ShaderLocation(set, binding), descriptor->first, reflectViewType(type), descriptor->second, used,
+             count}
         );
     };
     for (unsigned int i = 0; i < layout->getParameterCount(); i++) collectParameters(layout->getParameterByIndex(i), "", 0, 0);

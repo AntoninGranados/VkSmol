@@ -29,6 +29,7 @@ private:
     VkPhysicalDeviceSynchronization2Features synchronization2{};
     VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParameters{};
     VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloat{};
+    VkPhysicalDeviceVulkan12Features vulkan12{};
     std::vector<std::string> extensions;
 
     bool hasExtension(const char* name) const;

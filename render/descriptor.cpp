@@ -58,6 +58,15 @@ void DescriptorSetLayout::init(const LogicalDevice& device) {
     createInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     createInfo.pBindings = bindings.data();
 
+    std::vector<VkDescriptorBindingFlags> bindingFlags;
+    for (const VkDescriptorSetLayoutBinding& binding : bindings)
+        bindingFlags.push_back(binding.descriptorCount > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+    flagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+    flagsInfo.pBindingFlags = bindingFlags.data();
+    createInfo.pNext = &flagsInfo;
+
     vkCheck(vkCreateDescriptorSetLayout(device.get(), &createInfo, nullptr, &rawHandle()), "Failed to create descriptor set layout");
 }
 
@@ -130,20 +139,20 @@ void DescriptorSet::linkStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32
     storageInfos.push_back({ storageInfo, binding });
 }
 
-void DescriptorSet::linkStorageImage(VkImageView view, uint32_t binding) {
+void DescriptorSet::linkStorageImage(VkImageView view, uint32_t binding, uint32_t element) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = VK_NULL_HANDLE;
     imageInfo.imageView = view;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    storageImageInfos.push_back({ imageInfo, binding });
+    storageImageInfos.push_back({ imageInfo, binding, element });
 }
 
-void DescriptorSet::linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding) {
+void DescriptorSet::linkCombinedImageSampler(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t element) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler;
     imageInfo.imageView = view;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfos.push_back({ imageInfo, binding });
+    imageInfos.push_back({ imageInfo, binding, element });
 }
 
 void DescriptorSet::update(const LogicalDevice& device) {
@@ -173,27 +182,27 @@ void DescriptorSet::update(const LogicalDevice& device) {
 
             descriptorWrites.push_back(descriptorWrite);
     }
-    for (const std::pair<VkDescriptorImageInfo, uint32_t>& pair : imageInfos) {
+    for (const ImageLink& link : imageInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = descriptorSet;
-            descriptorWrite.dstBinding = pair.second;
-            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.dstBinding = link.binding;
+            descriptorWrite.dstArrayElement = link.element;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pImageInfo = &pair.first;
+            descriptorWrite.pImageInfo = &link.info;
 
             descriptorWrites.push_back(descriptorWrite);
     }
-    for (const std::pair<VkDescriptorImageInfo, uint32_t>& pair : storageImageInfos) {
+    for (const ImageLink& link : storageImageInfos) {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = descriptorSet;
-            descriptorWrite.dstBinding = pair.second;
-            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.dstBinding = link.binding;
+            descriptorWrite.dstArrayElement = link.element;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pImageInfo = &pair.first;
+            descriptorWrite.pImageInfo = &link.info;
 
             descriptorWrites.push_back(descriptorWrite);
     }
